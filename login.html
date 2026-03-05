@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+
+<head>
+  <meta charset="UTF-8">
+  <title>员工登录 - 叫醒接单系统</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+      font-family: 微软雅黑
+    }
+
+    body {
+      background: #f5f5f5;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      height: 100vh
+    }
+
+    .box {
+      background: white;
+      padding: 30px;
+      border-radius: 12px;
+      width: 320px;
+      box-shadow: 0 0 10px #00000010
+    }
+
+    h2 {
+      text-align: center;
+      margin-bottom: 20px;
+      color: #333
+    }
+
+    input {
+      width: 100%;
+      padding: 10px;
+      margin: 8px 0;
+      border: 1px solid #ddd;
+      border-radius: 6px
+    }
+
+    button {
+      width: 100%;
+      padding: 10px;
+      background: #409eff;
+      color: white;
+      border: none;
+      border-radius: 6px;
+      margin-top: 10px
+    }
+  </style>
+</head>
+
+<body>
+  <div class="box">
+    <h2>员工登录</h2>
+    <input type="text" id="uid" placeholder="员工账号">
+    <input type="password" id="pwd" placeholder="密码">
+    <button onclick="login()">登录</button>
+  </div>
+
+  <script>
+    // 你在这里随便加员工
+    const users = [
+      { id: "staff01", pwd: "123456", name: "员工1" },
+      { id: "staff02", pwd: "123456", name: "员工2" },
+      { id: "admin", pwd: "admin888", name: "老板", role: "admin" }
+    ];
+
+    function login() {
+      let uid = document.getElementById("uid").value;
+      let pwd = document.getElementById("pwd").value;
+      let user = users.find(u => u.id == uid && u.pwd == pwd);
+
+      if (!user) {
+        alert("账号或密码错误");
+        return;
+      }
+
+      // 登录成功，存到本地
+      localStorage.setItem("loginUser", JSON.stringify(user));
+      if (user.id === "admin") {
+        // 如果是老板，跳转到老板后台
+        location.href = "admin.html";
+      } else {
+        // 如果是员工，跳转到提交订单页面
+        location.href = "submit.html";
+      }
+    }
+  </script>
+</body>
+
+</html>

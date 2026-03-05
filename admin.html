@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+
+<head>
+    <meta charset="UTF-8">
+    <title>老板后台 - 叫醒接单系统</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: 微软雅黑
+        }
+
+        body {
+            background: #f5f5f5;
+            padding: 20px
+        }
+
+        .container {
+            max-width: 800px;
+            margin: 0 auto
+        }
+
+        .card {
+            background: #fff;
+            border-radius: 12px;
+            padding: 20px;
+            margin-bottom: 15px
+        }
+
+        h2,
+        h3 {
+            margin-bottom: 10px
+        }
+
+        .stats {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 15px
+        }
+
+        .stat {
+            flex: 1;
+            background: #f8f9fa;
+            padding: 15px;
+            border-radius: 8px;
+            text-align: center
+        }
+
+        .order {
+            padding: 12px;
+            border-bottom: 1px solid #f0f0f0;
+            font-size: 14px
+        }
+
+        .total-price {
+            color: red;
+            font-weight: bold
+        }
+
+        .btn {
+            padding: 10px;
+            background: #409eff;
+            color: white;
+            border: none;
+            border-radius: 6px;
+            width: 100%;
+            margin-top: 10px
+        }
+    </style>
+</head>
+
+<body>
+    <div class="container">
+        <div class="card">
+            <h2>老板后台</h2>
+            <div id="adminName"></div>
+            <button class="btn" onclick="logout()">退出登录</button>
+        </div>
+
+        <div class="card">
+            <div class="stats">
+                <div class="stat">总订单：<span id="allCount">0</span> 单</div>
+                <div class="stat">总薪资：<span id="allMoney">0</span> 元</div>
+            </div>
+        </div>
+
+        <div class="card">
+            <h3>全部员工订单</h3>
+            <div id="allOrders"></div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js"></script>
+    <script>
+        // ====================== 这里改成你自己的 ======================
+        const SUPABASE_URL = "https://yhscpdalrsinigamhiht.supabase.co";
+        const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inloc2NwZGFscnNpbmlnYW1oaWh0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzI2NzcwNzYsImV4cCI6MjA4ODI1MzA3Nn0.dZzfWYbQZog0-FwC5S1aIoJc0yAu4fFmMHtsyLlJh44";
+        // ==============================================================
+
+        const { createClient } = supabase;
+        const db = createClient(SUPABASE_URL, SUPABASE_KEY);
+
+        // 判断是否是老板
+        let user = JSON.parse(localStorage.getItem("loginUser"));
+        if (!user || user.id !== "admin") {
+            alert("只有老板可访问！");
+            location.href = "login.html";
+        }
+        document.getElementById("adminName").innerText = "当前登录：" + user.name;
+
+        // 加载所有订单
+        async function loadAllData() {
+            let { data: orders } = await db.from("orders").select("*");
+
+            document.getElementById("allCount").innerText = orders.length;
+
+            let totalMoney = orders.reduce((sum, item) => sum + item.price, 0);
+            document.getElementById("allMoney").innerText = totalMoney.toFixed(2);
+
+            let html = "";
+            orders.forEach(o => {
+                html += `
+    <div class="order">
+      <strong>${o.staff_name}</strong>｜${o.wake_time}｜QQ：${o.qq}｜
+      备注：${o.remark || '无'}｜
+      <span class="total-price">${o.price} 元</span>
+    </div>`;
+            });
+            document.getElementById("allOrders").innerHTML = html;
+        }
+
+        function logout() {
+            localStorage.removeItem("loginUser");
+            location.href = "login.html";
+        }
+
+        loadAllData();
+    </script>
+</body>
+
+</html>
