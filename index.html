@@ -82,7 +82,7 @@
 
       // 登录成功，存到本地
       localStorage.setItem("loginUser", JSON.stringify(user));
-      if (user.id === "admin") {
+      if (user.id === "laojie") {
         // 如果是老板，跳转到老板后台
         location.href = "admin.html";
       } else {
@@ -94,5 +94,6 @@
 </body>
 
 </html>
+
 
 
