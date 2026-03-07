@@ -1,0 +1,1145 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+
+<head>
+    <meta charset="UTF-8">
+    <title>叫醒服务系统</title>
+    <!-- 引入 Supabase SDK -->
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: "Microsoft YaHei", sans-serif;
+        }
+
+        body {
+            background-color: #f5f7fa;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: #fff;
+            border-radius: 12px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.08);
+            padding: 30px;
+        }
+
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+            padding-bottom: 15px;
+            border-bottom: 1px solid #eee;
+        }
+
+        .header h1 {
+            font-size: 22px;
+            color: #333;
+            font-weight: 600;
+        }
+
+        .user-info {
+            font-size: 14px;
+            color: #666;
+        }
+
+        .logout-btn {
+            margin-left: 15px;
+            padding: 6px 12px;
+            background: #ff4d4f;
+            color: #fff;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 12px;
+        }
+
+        .logout-btn:hover {
+            background: #ff7875;
+        }
+
+        .tabs {
+            display: flex;
+            margin-bottom: 20px;
+            border-bottom: 1px solid #eee;
+        }
+
+        .tab {
+            padding: 10px 20px;
+            cursor: pointer;
+            font-size: 14px;
+            color: #666;
+            border-bottom: 2px solid transparent;
+        }
+
+        .tab.active {
+            color: #409eff;
+            border-bottom-color: #409eff;
+            font-weight: 500;
+        }
+
+        .tab-content {
+            display: none;
+        }
+
+        .tab-content.active {
+            display: block;
+        }
+
+        .form-group {
+            margin-bottom: 15px;
+        }
+
+        .form-group label {
+            display: block;
+            margin-bottom: 6px;
+            font-size: 14px;
+            color: #333;
+        }
+
+        .form-group input {
+            width: 100%;
+            max-width: 400px;
+            padding: 10px 12px;
+            border: 1px solid #e0e0e0;
+            border-radius: 6px;
+            font-size: 14px;
+            outline: none;
+        }
+
+        .form-group input:focus {
+            border-color: #409eff;
+        }
+
+        .btn {
+            padding: 10px 20px;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 14px;
+            transition: background 0.3s;
+        }
+
+        .btn-primary {
+            background: #409eff;
+            color: #fff;
+        }
+
+        .btn-primary:hover {
+            background: #338eef;
+        }
+
+        .btn-success {
+            background: #52c41a;
+            color: #fff;
+        }
+
+        .btn-success:hover {
+            background: #52c41a;
+            opacity: 0.9;
+        }
+
+        .btn-warning {
+            background: #faad14;
+            color: #fff;
+        }
+
+        .btn-warning:hover {
+            background: #faad14;
+            opacity: 0.9;
+        }
+
+        .btn-danger {
+            background: #ff4d4f;
+            color: #fff;
+        }
+
+        .btn-danger:hover {
+            background: #ff4d4f;
+            opacity: 0.9;
+        }
+
+        .table-container {
+            margin-top: 20px;
+            overflow-x: auto;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 14px;
+        }
+
+        table th,
+        table td {
+            padding: 12px 15px;
+            text-align: left;
+            border-bottom: 1px solid #eee;
+        }
+
+        table th {
+            background-color: #f8f9fa;
+            color: #333;
+            font-weight: 500;
+        }
+
+        table tr:hover {
+            background-color: #f8f9fa;
+        }
+
+        .status-pending {
+            color: #faad14;
+        }
+
+        .status-processing {
+            color: #409eff;
+        }
+
+        .status-completed {
+            color: #52c41a;
+        }
+
+        .modal {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.5);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 999;
+            display: none;
+        }
+
+        .modal-content {
+            background: #fff;
+            border-radius: 8px;
+            width: 400px;
+            padding: 20px;
+        }
+
+        .modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 15px;
+        }
+
+        .modal-header h3 {
+            font-size: 16px;
+            color: #333;
+        }
+
+        .close-modal {
+            cursor: pointer;
+            font-size: 20px;
+            color: #999;
+        }
+
+        .batch-actions {
+            margin-bottom: 15px;
+            display: flex;
+            gap: 10px;
+        }
+
+        .upload-area {
+            border: 1px dashed #d9d9d9;
+            border-radius: 6px;
+            padding: 30px;
+            text-align: center;
+            margin-bottom: 20px;
+            cursor: pointer;
+            transition: border-color 0.3s;
+        }
+
+        .upload-area:hover {
+            border-color: #409eff;
+        }
+
+        .upload-area input {
+            display: none;
+        }
+
+        .upload-icon {
+            font-size: 30px;
+            color: #ccc;
+            margin-bottom: 10px;
+        }
+
+        .upload-text {
+            font-size: 14px;
+            color: #666;
+        }
+
+        .salary-item {
+            display: flex;
+            justify-content: space-between;
+            padding: 10px 0;
+            border-bottom: 1px solid #eee;
+        }
+
+        .salary-label {
+            font-size: 14px;
+            color: #666;
+        }
+
+        .salary-value {
+            font-size: 14px;
+            color: #333;
+            font-weight: 500;
+        }
+
+        .batch-input {
+            width: 100%;
+            height: 150px;
+            padding: 10px;
+            border: 1px solid #e0e0e0;
+            border-radius: 6px;
+            resize: none;
+            outline: none;
+            font-size: 14px;
+            margin-bottom: 15px;
+        }
+
+        .batch-input:focus {
+            border-color: #409eff;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>叫醒服务管理系统</h1>
+            <div class="user-info">
+                <span id="userName">加载中...</span>
+                <button class="logout-btn" onclick="logout()">退出登录</button>
+            </div>
+        </div>
+
+        <div class="tabs">
+            <div class="tab active" onclick="switchTab('order-manage')">订单管理</div>
+            <div class="tab" onclick="switchTab('add-order')">添加订单</div>
+            <div class="tab" id="teamTab" style="display: none;" onclick="switchTab('team-manage')">团队管理</div>
+            <div class="tab" id="salaryTab" onclick="switchTab('salary-manage')">薪资结算</div>
+        </div>
+
+        <!-- 订单管理 Tab -->
+        <div class="tab-content active" id="order-manage">
+            <div class="batch-actions">
+                <button class="btn btn-primary" onclick="batchTakeOrders()">一键接单</button>
+                <button class="btn btn-success" onclick="batchCompleteOrders()">一键完成</button>
+                <button class="btn btn-danger" onclick="batchDeleteOrders()">删除选中</button>
+            </div>
+            <div class="table-container">
+                <table id="orderTable">
+                    <thead>
+                        <tr>
+                            <th><input type="checkbox" id="selectAll"></th>
+                            <th>序号</th>
+                            <th>叫醒时间</th>
+                            <th>手机号</th>
+                            <th>备注</th>
+                            <th>金额</th>
+                            <th>状态</th>
+                            <th>接单员工</th>
+                            <th>操作</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <!-- 订单数据动态生成 -->
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- 添加订单 Tab -->
+        <div class="tab-content" id="add-order">
+            <div class="form-group">
+                <label for="wakeTime">叫醒时间</label>
+                <input type="datetime-local" id="wakeTime" required>
+            </div>
+            <div class="form-group">
+                <label for="phone">手机号</label>
+                <input type="text" id="phone" placeholder="请输入11位手机号" required>
+            </div>
+            <div class="form-group">
+                <label for="note">备注（选填）</label>
+                <input type="text" id="note" placeholder="请输入备注信息">
+            </div>
+            <button class="btn btn-primary" onclick="addSingleOrder()">添加单个订单</button>
+
+            <hr style="margin: 30px 0; border: none; border-top: 1px solid #eee;">
+
+            <h3 style="margin-bottom: 15px; font-size: 16px; color: #333;">批量上传订单</h3>
+            <textarea class="batch-input" id="batchOrderInput" placeholder="请按格式输入：
+手机号 时间 备注（备注可选）
+示例1：13733758736 9:00
+示例2：13800138000 10:30 备注：叫我起床"></textarea>
+            <button class="btn btn-primary" onclick="parseBatchOrders()">识别订单</button>
+
+            <hr style="margin: 30px 0; border: none; border-top: 1px solid #eee;">
+
+            <h3 style="margin-bottom: 15px; font-size: 16px; color: #333;">文件上传订单</h3>
+            <div class="upload-area" onclick="document.getElementById('fileUpload').click()">
+                <div class="upload-icon">📤</div>
+                <div class="upload-text">点击上传TXT/Excel文件</div>
+                <input type="file" id="fileUpload" accept=".txt,.xlsx,.xls" onchange="handleFileUpload(event)">
+            </div>
+        </div>
+
+        <!-- 团队管理 Tab（仅管理员可见） -->
+        <div class="tab-content" id="team-manage">
+            <button class="btn btn-primary" onclick="openAddStaffModal()">添加新员工</button>
+            <div class="table-container" style="margin-top: 20px;">
+                <table id="teamTable">
+                    <thead>
+                        <tr>
+                            <th>员工账号</th>
+                            <th>员工姓名</th>
+                            <th>累计薪资</th>
+                            <th>操作</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <!-- 员工数据动态生成 -->
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- 薪资结算 Tab -->
+        <div class="tab-content" id="salary-manage">
+            <div id="salaryInfo" style="margin-bottom: 20px;">
+                <!-- 薪资信息动态生成 -->
+            </div>
+            <button class="btn btn-primary" id="settleSalaryBtn" onclick="settleAllSalary()">结算所有薪资</button>
+        </div>
+
+        <!-- 添加员工弹窗 -->
+        <div class="modal" id="addStaffModal">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h3>添加新员工</h3>
+                    <span class="close-modal" onclick="closeAddStaffModal()">&times;</span>
+                </div>
+                <div class="form-group">
+                    <label for="newStaffName">员工姓名</label>
+                    <input type="text" id="newStaffName" placeholder="请输入员工姓名" required>
+                </div>
+                <div class="form-group">
+                    <label for="newStaffId">员工账号</label>
+                    <input type="text" id="newStaffId" placeholder="请输入员工账号" required>
+                </div>
+                <div class="form-group">
+                    <label for="newStaffPwd">初始密码</label>
+                    <input type="password" id="newStaffPwd" placeholder="请输入初始密码" required>
+                </div>
+                <button class="btn btn-primary" onclick="saveNewStaff()">保存</button>
+            </div>
+        </div>
+
+        <!-- 重置密码弹窗 -->
+        <div class="modal" id="resetPwdModal">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h3>重置员工密码</h3>
+                    <span class="close-modal" onclick="closeResetPwdModal()">&times;</span>
+                </div>
+                <input type="hidden" id="resetStaffId">
+                <div class="form-group">
+                    <label for="newPwd">新密码</label>
+                    <input type="password" id="newPwd" placeholder="请输入新密码" required>
+                </div>
+                <button class="btn btn-primary" onclick="saveResetPwd()">保存</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // ======================== 需要替换的配置 ========================
+        const supabaseUrl = "https://yhscpdalrsinigamhiht.supabase.co"; // 替换成 Supabase 的 Project URL
+        const supabaseKey = "sb_publishable_tMuL4ECibUBQHkpuE4BWNg_PetrZaNV"; // 替换成 Supabase 的 anon public 密钥
+        // =================================================================
+        const supabase = supabase.createClient(supabaseUrl, supabaseKey);
+
+        // 全局变量
+        const user = JSON.parse(localStorage.getItem("loginUser"));
+        const isAdmin = user?.role === "admin";
+
+        // 页面加载初始化
+        window.onload = function () {
+            if (!user) {
+                location.href = "index.html";
+                return;
+            }
+            document.getElementById("userName").textContent = `当前登录：${user.name}（${isAdmin ? '管理员' : '员工'}）`;
+
+            // 管理员显示团队管理
+            if (isAdmin) {
+                document.getElementById("teamTab").style.display = "block";
+                renderTeamTable();
+            }
+
+            loadOrders();
+            calculateSalary();
+        };
+
+        // 切换Tab
+        function switchTab(tabId) {
+            // 隐藏所有tab
+            document.querySelectorAll('.tab').forEach(tab => tab.classList.remove('active'));
+            document.querySelectorAll('.tab-content').forEach(content => content.classList.remove('active'));
+
+            // 显示选中的tab
+            event.target.classList.add('active');
+            document.getElementById(tabId).classList.add('active');
+        }
+
+        // 全选/取消全选
+        document.getElementById('selectAll').addEventListener('change', function () {
+            const isChecked = this.checked;
+            document.querySelectorAll('.order-checkbox').forEach(checkbox => {
+                checkbox.checked = isChecked;
+            });
+        });
+
+        // 加载订单
+        async function loadOrders() {
+            // 从 Supabase 查询所有订单
+            const { data: allOrders, error } = await supabase
+                .from('wake_orders')
+                .select('*')
+                .order('submitTime', { ascending: false });
+
+            if (error) {
+                alert("加载订单失败：" + error.message);
+                return;
+            }
+
+            // 生成序号
+            const ordersWithSerial = allOrders.map((item, index) => ({
+                ...item,
+                serialNumber: index + 1
+            }));
+
+            // 权限过滤
+            let displayOrders = [];
+            if (isAdmin) {
+                displayOrders = ordersWithSerial;
+            } else {
+                displayOrders = ordersWithSerial.filter(item =>
+                    item.status === "待接单" || item.staffId === user.id
+                );
+            }
+
+            renderTable(displayOrders);
+        }
+
+        // 渲染订单表格
+        function renderTable(orders) {
+            const tbody = document.querySelector('#orderTable tbody');
+            tbody.innerHTML = '';
+
+            if (orders.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="9" style="text-align: center; color: #999;">暂无订单数据</td></tr>';
+                return;
+            }
+
+            orders.forEach(order => {
+                const tr = document.createElement('tr');
+                tr.innerHTML = `
+                    <td><input type="checkbox" class="order-checkbox" value="${order.id}" data-status="${order.status !== '待接单' ? 'processed' : ''}"></td>
+                    <td>${order.serialNumber}</td>
+                    <td>${formatTime(order.wakeTime)}</td>
+                    <td>${order.phone}</td>
+                    <td>${order.note || '-'}</td>
+                    <td>¥${order.money.toFixed(2)}</td>
+                    <td class="status-${order.status === '待接单' ? 'pending' : order.status === '进行中' ? 'processing' : 'completed'}">${order.status}</td>
+                    <td>${order.staffName || '-'}</td>
+                    <td>
+                        ${order.status === '待接单' ?
+                        `<button class="btn btn-primary" style="padding: 4px 8px; font-size: 12px;" onclick="takeOrder(${order.id})">接单</button>` :
+                        (order.status === '进行中' && (isAdmin || order.staffId === user.id)) ?
+                            `<button class="btn btn-success" style="padding: 4px 8px; font-size: 12px;" onclick="finishOrder(${order.id})">完成</button>` :
+                            '-'
+                    }
+                        ${isAdmin ? `<button class="btn btn-danger" style="padding: 4px 8px; font-size: 12px; margin-left: 5px;" onclick="deleteOrder(${order.id})">删除</button>` : ''}
+                    </td>
+                `;
+                tbody.appendChild(tr);
+            });
+        }
+
+        // 格式化时间
+        function formatTime(timeStr) {
+            if (!timeStr) return '';
+            const date = new Date(timeStr);
+            return date.toLocaleString('zh-CN', {
+                year: 'numeric',
+                month: '2-digit',
+                day: '2-digit',
+                hour: '2-digit',
+                minute: '2-digit'
+            }).replace(/\//g, '-');
+        }
+
+        // 计算金额（按时间）
+        function calculateAmountByTime(time) {
+            const hour = parseInt(time.split(':')[0]);
+            if (hour >= 6 && hour < 8) return 5;    // 早高峰
+            if (hour >= 22 || hour < 6) return 8;  // 晚班/凌晨
+            return 3;                               // 普通时段
+        }
+
+        // 添加单个订单
+        async function addSingleOrder() {
+            const wakeTime = document.getElementById("wakeTime").value;
+            const phone = document.getElementById("phone").value.trim();
+            const note = document.getElementById("note").value.trim();
+
+            if (!wakeTime) return alert("请选择叫醒时间！");
+            if (!/^1[3-9]\d{9}$/.test(phone)) return alert("请输入11位有效手机号！");
+
+            // 计算金额
+            const time = wakeTime.split('T')[1];
+            const money = calculateAmountByTime(time);
+            const submitTime = new Date().toISOString();
+
+            // 插入订单到 Supabase
+            const { error } = await supabase
+                .from('wake_orders')
+                .insert([{
+                    wakeTime, phone, note, money,
+                    status: "待接单", submitTime,
+                    staffId: "", staffName: "", salarySettled: false
+                }]);
+
+            if (error) {
+                alert("上传失败：" + error.message);
+                return;
+            }
+
+            // 清空表单 + 刷新订单
+            document.getElementById("phone").value = "";
+            document.getElementById("note").value = "";
+            loadOrders();
+            alert("单个订单上传成功！");
+        }
+
+        // 批量识别订单
+        async function parseBatchOrders() {
+            const inputText = document.getElementById("batchOrderInput").value.trim();
+            if (!inputText) return alert("请输入订单内容！");
+
+            const lines = inputText.split('\n').filter(line => line.trim());
+            const orders = [];
+            const submitTime = new Date().toISOString();
+
+            for (const line of lines) {
+                const parts = line.trim().split(/\s+/);
+                const phone = parts[0];
+                const time = parts[1];
+                const note = parts.slice(2).join(' ') || '';
+
+                if (!/^1[3-9]\d{9}$/.test(phone)) {
+                    alert(`手机号格式错误：${phone}，跳过该条`);
+                    continue;
+                }
+
+                if (!time || !time.includes(':')) {
+                    alert(`时间格式错误：${time}，跳过该条`);
+                    continue;
+                }
+
+                // 拼接完整时间
+                const today = new Date();
+                const [hour, minute] = time.split(':');
+                const wakeTime = new Date(today.getFullYear(), today.getMonth(), today.getDate(), hour, minute).toISOString();
+                const money = calculateAmountByTime(time);
+
+                orders.push({
+                    wakeTime,
+                    phone,
+                    note,
+                    money,
+                    status: "待接单",
+                    submitTime,
+                    staffId: "",
+                    staffName: "",
+                    salarySettled: false
+                });
+            }
+
+            if (orders.length === 0) return alert("没有有效订单！");
+
+            // 批量插入订单到 Supabase
+            const { error } = await supabase
+                .from('wake_orders')
+                .insert(orders);
+
+            if (error) {
+                alert("批量上传失败：" + error.message);
+                return;
+            }
+
+            document.getElementById("batchOrderInput").value = "";
+            loadOrders();
+            alert(`批量上传成功！共添加 ${orders.length} 个订单`);
+        }
+
+        // 处理文件上传
+        function handleFileUpload(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+
+            alert("文件上传功能暂未实现，建议使用批量文本输入方式添加订单");
+            // 可扩展：添加Excel/TXT文件解析逻辑
+            event.target.value = "";
+        }
+
+        // 接单
+        async function takeOrder(orderId) {
+            if (!confirm("确定要接这个订单吗？")) return;
+
+            const { error } = await supabase
+                .from('wake_orders')
+                .update({
+                    status: "进行中",
+                    staffId: user.id,
+                    staffName: user.name
+                })
+                .eq('id', orderId)
+                .eq('status', '待接单');
+
+            if (error) {
+                alert("接单失败：" + error.message);
+                return;
+            }
+
+            loadOrders();
+            alert("接单成功！");
+        }
+
+        // 批量接单
+        async function batchTakeOrders() {
+            const checkedBoxes = document.querySelectorAll(".order-checkbox:checked");
+            if (checkedBoxes.length === 0) {
+                alert("请至少选择一个订单！");
+                return;
+            }
+
+            const selectedIds = [];
+            let hasProcessedOrder = false;
+
+            checkedBoxes.forEach(box => {
+                const id = parseInt(box.value);
+                if (box.dataset.status === "processed") {
+                    hasProcessedOrder = true;
+                }
+                selectedIds.push(id);
+            });
+
+            if (hasProcessedOrder) {
+                alert("一键接单仅支持没接过的订单，请重新选择！");
+                return;
+            }
+
+            // 批量更新订单
+            const { error } = await supabase
+                .from('wake_orders')
+                .update({
+                    status: "进行中",
+                    staffId: user.id,
+                    staffName: user.name
+                })
+                .in('id', selectedIds)
+                .eq('status', '待接单');
+
+            if (error) {
+                alert("接单失败：" + error.message);
+                return;
+            }
+
+            loadOrders();
+            alert(`批量接单成功！共接了 ${selectedIds.length} 个订单`);
+        }
+
+        // 完成订单
+        async function finishOrder(orderId) {
+            if (!confirm("确定要标记该订单为完成吗？")) return;
+
+            // 查询订单金额
+            const { data: order, error: getError } = await supabase
+                .from('wake_orders')
+                .select('money, staffId')
+                .eq('id', orderId)
+                .single();
+
+            if (getError || !order) {
+                alert("获取订单信息失败：" + getError?.message);
+                return;
+            }
+
+            // 更新订单状态
+            const { error: updateError } = await supabase
+                .from('wake_orders')
+                .update({
+                    status: "已完成",
+                    salarySettled: false
+                })
+                .eq('id', orderId);
+
+            if (updateError) {
+                alert("完成订单失败：" + updateError.message);
+                return;
+            }
+
+            // 更新员工薪资（仅未结算的订单）
+            if (order.staffId && !order.salarySettled) {
+                const { data: staff, error: staffError } = await supabase
+                    .from('staff_list')
+                    .select('salary')
+                    .eq('id', order.staffId)
+                    .single();
+
+                if (!staffError && staff) {
+                    const newSalary = (staff.salary || 0) + order.money;
+                    await supabase
+                        .from('staff_list')
+                        .update({ salary: newSalary })
+                        .eq('id', order.staffId);
+                }
+            }
+
+            loadOrders();
+            calculateSalary();
+            if (isAdmin) renderTeamTable();
+            alert("订单已标记为完成，薪资已计入！");
+        }
+
+        // 批量完成订单
+        async function batchCompleteOrders() {
+            const checkedBoxes = document.querySelectorAll(".order-checkbox:checked");
+            if (checkedBoxes.length === 0) {
+                alert("请至少选择一个订单！");
+                return;
+            }
+
+            const selectedIds = [];
+            checkedBoxes.forEach(box => {
+                selectedIds.push(parseInt(box.value));
+            });
+
+            if (!confirm(`确定要完成选中的 ${selectedIds.length} 个订单吗？`)) return;
+
+            // 批量更新订单状态
+            const { error } = await supabase
+                .from('wake_orders')
+                .update({ status: "已完成", salarySettled: false })
+                .in('id', selectedIds)
+                .eq('status', '进行中');
+
+            if (error) {
+                alert("批量完成失败：" + error.message);
+                return;
+            }
+
+            // 批量更新薪资（简化版，实际可优化为批量查询）
+            for (const id of selectedIds) {
+                const { data: order } = await supabase
+                    .from('wake_orders')
+                    .select('money, staffId')
+                    .eq('id', id)
+                    .single();
+
+                if (order?.staffId) {
+                    const { data: staff } = await supabase
+                        .from('staff_list')
+                        .select('salary')
+                        .eq('id', order.staffId)
+                        .single();
+
+                    if (staff) {
+                        const newSalary = (staff.salary || 0) + order.money;
+                        await supabase
+                            .from('staff_list')
+                            .update({ salary: newSalary })
+                            .eq('id', order.staffId);
+                    }
+                }
+            }
+
+            loadOrders();
+            calculateSalary();
+            if (isAdmin) renderTeamTable();
+            alert(`批量完成成功！共完成 ${selectedIds.length} 个订单`);
+        }
+
+        // 删除订单
+        async function deleteOrder(orderId) {
+            if (!confirm("确定要删除该订单吗？删除后不可恢复！")) return;
+
+            const { error } = await supabase
+                .from('wake_orders')
+                .delete()
+                .eq('id', orderId);
+
+            if (error) {
+                alert("删除失败：" + error.message);
+                return;
+            }
+
+            loadOrders();
+            alert("订单已删除！");
+        }
+
+        // 批量删除订单
+        async function batchDeleteOrders() {
+            const checkedBoxes = document.querySelectorAll(".order-checkbox:checked");
+            if (checkedBoxes.length === 0) {
+                alert("请至少选择一个订单！");
+                return;
+            }
+
+            const selectedIds = [];
+            checkedBoxes.forEach(box => {
+                selectedIds.push(parseInt(box.value));
+            });
+
+            if (!confirm(`确定要删除选中的 ${selectedIds.length} 个订单吗？删除后不可恢复！`)) return;
+
+            const { error } = await supabase
+                .from('wake_orders')
+                .delete()
+                .in('id', selectedIds);
+
+            if (error) {
+                alert("批量删除失败：" + error.message);
+                return;
+            }
+
+            loadOrders();
+            alert(`批量删除成功！共删除 ${selectedIds.length} 个订单`);
+        }
+
+        // 打开添加员工弹窗
+        function openAddStaffModal() {
+            document.getElementById("addStaffModal").style.display = "flex";
+            document.getElementById("newStaffName").value = "";
+            document.getElementById("newStaffId").value = "";
+            document.getElementById("newStaffPwd").value = "";
+        }
+
+        // 关闭添加员工弹窗
+        function closeAddStaffModal() {
+            document.getElementById("addStaffModal").style.display = "none";
+        }
+
+        // 保存新员工
+        async function saveNewStaff() {
+            const name = document.getElementById("newStaffName").value.trim();
+            const id = document.getElementById("newStaffId").value.trim();
+            const password = document.getElementById("newStaffPwd").value.trim();
+
+            if (!name || !id || !password) {
+                alert("员工姓名、账号、密码不能为空！");
+                return;
+            }
+
+            // 检查账号是否存在
+            const { data: existStaff } = await supabase
+                .from('staff_list')
+                .select('id')
+                .eq('id', id)
+                .single();
+
+            if (existStaff) {
+                alert("该员工账号已存在，请更换！");
+                return;
+            }
+
+            // 添加新员工
+            const { error } = await supabase
+                .from('staff_list')
+                .insert([{ id, name, password, salary: 0 }]);
+
+            if (error) {
+                alert("添加失败：" + error.message);
+                return;
+            }
+
+            closeAddStaffModal();
+            renderTeamTable();
+            alert(`员工【${name}】添加成功！账号：${id}，密码：${password}`);
+        }
+
+        // 渲染团队表格
+        async function renderTeamTable() {
+            const { data: staffList, error } = await supabase
+                .from('staff_list')
+                .select('*');
+
+            if (error) {
+                alert("加载员工列表失败：" + error.message);
+                return;
+            }
+
+            const tbody = document.querySelector('#teamTable tbody');
+            tbody.innerHTML = '';
+
+            staffList.forEach(staff => {
+                const tr = document.createElement('tr');
+                tr.innerHTML = `
+                    <td>${staff.id}</td>
+                    <td>${staff.name}</td>
+                    <td>¥${staff.salary.toFixed(2)}</td>
+                    <td>
+                        <button class="btn btn-warning" style="padding: 4px 8px; font-size: 12px;" onclick="openResetPwdModal('${staff.id}')">重置密码</button>
+                    </td>
+                `;
+                tbody.appendChild(tr);
+            });
+        }
+
+        // 打开重置密码弹窗
+        function openResetPwdModal(staffId) {
+            document.getElementById("resetPwdModal").style.display = "flex";
+            document.getElementById("resetStaffId").value = staffId;
+            document.getElementById("newPwd").value = "";
+        }
+
+        // 关闭重置密码弹窗
+        function closeResetPwdModal() {
+            document.getElementById("resetPwdModal").style.display = "none";
+        }
+
+        // 保存重置密码
+        async function saveResetPwd() {
+            const staffId = document.getElementById("resetStaffId").value;
+            const newPwd = document.getElementById("newPwd").value.trim();
+
+            if (!newPwd) {
+                alert("新密码不能为空！");
+                return;
+            }
+
+            const { error } = await supabase
+                .from('staff_list')
+                .update({ password: newPwd })
+                .eq('id', staffId);
+
+            if (error) {
+                alert("重置密码失败：" + error.message);
+                return;
+            }
+
+            closeResetPwdModal();
+            alert("密码重置成功！");
+        }
+
+        // 计算薪资
+        async function calculateSalary() {
+            const salaryInfo = document.getElementById("salaryInfo");
+            salaryInfo.innerHTML = '';
+
+            if (isAdmin) {
+                // 管理员查看所有员工薪资
+                const { data: staffList, error } = await supabase
+                    .from('staff_list')
+                    .select('*');
+
+                if (error) {
+                    salaryInfo.innerHTML = `<div style="color: red;">加载薪资失败：${error.message}</div>`;
+                    return;
+                }
+
+                let totalSalary = 0;
+                staffList.forEach(staff => {
+                    totalSalary += staff.salary || 0;
+                    salaryInfo.innerHTML += `
+                        <div class="salary-item">
+                            <span class="salary-label">${staff.name}（${staff.id}）</span>
+                            <span class="salary-value">¥${staff.salary.toFixed(2)}</span>
+                        </div>
+                    `;
+                });
+
+                salaryInfo.innerHTML += `
+                    <div class="salary-item" style="font-weight: bold; margin-top: 10px;">
+                        <span class="salary-label">总计</span>
+                        <span class="salary-value">¥${totalSalary.toFixed(2)}</span>
+                    </div>
+                `;
+            } else {
+                // 员工查看自己的薪资
+                const { data: staff, error } = await supabase
+                    .from('staff_list')
+                    .select('salary')
+                    .eq('id', user.id)
+                    .single();
+
+                if (error) {
+                    salaryInfo.innerHTML = `<div style="color: red;">加载薪资失败：${error.message}</div>`;
+                    return;
+                }
+
+                salaryInfo.innerHTML = `
+                    <div class="salary-item">
+                        <span class="salary-label">你的累计薪资</span>
+                        <span class="salary-value">¥${(staff.salary || 0).toFixed(2)}</span>
+                    </div>
+                `;
+                document.getElementById("settleSalaryBtn").style.display = "none";
+            }
+        }
+
+        // 结算所有薪资
+        async function settleAllSalary() {
+            if (!confirm("确定要结算所有员工薪资吗？结算后薪资将清零！")) return;
+
+            const { data: staffList, error: staffError } = await supabase
+                .from('staff_list')
+                .select('id');
+
+            if (staffError) {
+                alert("获取员工列表失败：" + staffError.message);
+                return;
+            }
+
+            // 批量重置薪资
+            for (const staff of staffList) {
+                await supabase
+                    .from('staff_list')
+                    .update({ salary: 0 })
+                    .eq('id', staff.id);
+            }
+
+            // 标记订单为已结算
+            await supabase
+                .from('wake_orders')
+                .update({ salarySettled: true })
+                .eq('status', '已完成')
+                .eq('salarySettled', false);
+
+            calculateSalary();
+            renderTeamTable();
+            alert("薪资结算完成！所有员工薪资已清零");
+        }
+
+        // 退出登录
+        function logout() {
+            localStorage.removeItem("loginUser");
+            location.href = "index.html";
+        }
+    </script>
+</body>
+
+</html>
