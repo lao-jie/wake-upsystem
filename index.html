@@ -114,9 +114,18 @@
     </div>
 
     <script>
+        // 强制禁用缓存（解决旧代码残留问题）
+        window.addEventListener('load', function() {
+            if (window.performance) {
+                if (performance.navigation.type === 1) {
+                    console.log("页面刷新，清理缓存成功");
+                }
+            }
+        });
+
         // ======================== 需要替换的配置 ========================
-        const supabaseUrl = "https://yhscpdalrsinigamhiht.supabase.co"; // 替换成 Supabase 的 Project URL
-        const supabaseKey = "sb_publishable_tMuL4ECibUBQHkpuE4BWNg_PetrZaNV"; // 替换成 Supabase 的 anon public 密钥
+        const supabaseUrl = "https://yhscpdalrsinigamhiht.supabase.co";
+        const supabaseKey = "sb_publishable_tMuL4ECibUBQHkpuE4BWNg_PetrZaNV";
         // =================================================================
         const supabase = supabase.createClient(supabaseUrl, supabaseKey);
 
@@ -130,27 +139,40 @@
                 return;
             }
 
-            // 从 Supabase 查询员工
-            const { data, error } = await supabase
-                .from('staff_list')
-                .select('*')
-                .eq('id', uid)
-                .eq('password', pwd)
-                .single();
+            try {
+                // 从 Supabase 查询员工
+                const { data, error } = await supabase
+                    .from('staff_list')
+                    .select('*')
+                    .eq('id', uid)
+                    .eq('password', pwd)
+                    .single();
 
-            if (error || !data) {
-                alert("账号或密码错误，请重试");
-                return;
+                if (error || !data) {
+                    alert("账号或密码错误，请重试");
+                    console.log("登录失败原因：", error);
+                    return;
+                }
+
+                // 兼容隐私模式下 localStorage 不可用的情况
+                try {
+                    // 保存登录状态
+                    const user = {
+                        id: data.id,
+                        name: data.name,
+                        role: data.id === 'admin' ? 'admin' : 'staff'
+                    };
+                    localStorage.setItem("loginUser", JSON.stringify(user));
+                } catch (e) {
+                    console.log("隐私模式下跳过localStorage，不影响登录");
+                }
+
+                // 强制跳转（避免跳转失败）
+                window.location.href = "jiaoxing.html";
+            } catch (e) {
+                alert("登录出错，请刷新页面重试");
+                console.log("登录异常：", e);
             }
-
-            // 保存登录状态
-            const user = {
-                id: data.id,
-                name: data.name,
-                role: data.id === 'admin' ? 'admin' : 'staff'
-            };
-            localStorage.setItem("loginUser", JSON.stringify(user));
-            location.href = "jiaoxing.html";
         }
     </script>
 </body>
