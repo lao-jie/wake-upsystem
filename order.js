@@ -367,13 +367,21 @@ async function checkExpiredOrders() {
     allOrders.forEach(item => {
         if (item.status === "进行中") {
             const submitDate = new Date(item.submitTime);
-            const submitMidnight = new Date(submitDate.getFullYear(), submitDate.getMonth(), submitDate.getDate() + 1);
+            // 获取订单提交当天的日期（年-月-日）
+            const submitDateStr = submitDate.toLocaleDateString();
+            // 获取当前日期（年-月-日）
+            const currentDateStr = now.toLocaleDateString();
 
-            if (now >= submitMidnight && !item.salarySettled) {
-                item.status = "已完成";
-                item.salarySettled = true;
-                addSalary(item.staffId, item.money);
-                isUpdated = true;
+            // 只有当天的订单才会被自动结算
+            if (submitDateStr === currentDateStr) {
+                const submitMidnight = new Date(submitDate.getFullYear(), submitDate.getMonth(), submitDate.getDate() + 1);
+
+                if (now >= submitMidnight && !item.salarySettled) {
+                    item.status = "已完成";
+                    item.salarySettled = true;
+                    addSalary(item.staffId, item.amount || item.money);
+                    isUpdated = true;
+                }
             }
         }
     });
@@ -552,13 +560,27 @@ async function parseBatchOrders() {
     document.getElementById("batchUploadBtn").disabled = true;
 
     try {
-        // 调用后端API
-        const res = await fetch("http://localhost:3001/api/parse-orders", {
+        // 直接调用AI API
+        const res = await fetch("https://open.bigmodel.cn/api/paas/v4/chat/completions", {
             method: "POST",
             headers: {
-                "Content-Type": "application/json"
+                "Content-Type": "application/json",
+                "Authorization": "Bearer bb956b2870b346a39c34b3344a61defb.IOTprsN1opphPYp8"
             },
-            body: JSON.stringify({ text })
+            body: JSON.stringify({
+                model: "glm-4-flash",
+                messages: [
+                    {
+                        role: "system",
+                        content: "你是一个叫醒订单识别助手。从文本里提取每一条订单，输出严格JSON数组，不要其他任何内容。每条必须包含：- phone: 11位手机号 - wakeTime: 时间，格式如 07:20 - note: 备注，没有填空"
+                    },
+                    {
+                        role: "user",
+                        content: text
+                    }
+                ],
+                temperature: 0.1
+            })
         });
 
         const data = await res.json();
