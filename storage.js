@@ -4,12 +4,26 @@ async function getOrders() {
         const { data, error } = await supabaseClient
             .from('wake_orders')
             .select('*')
-            .order('submitTime', { ascending: true });
+            .order('submittime', { ascending: true });
 
         if (!error && data) {
+            // 转换数据库字段名到前端字段名
+            const formattedData = data.map(order => ({
+                id: order.id,
+                wakeTime: order.waketime,
+                phone: order.phone,
+                note: order.note,
+                amount: order.amount,
+                status: order.status,
+                serialNumber: order.serialnumber,
+                staffId: order.staffid,
+                staffName: order.staffname,
+                salarySettled: order.salarysettled,
+                submitTime: order.submittime
+            }));
             // 同步到本地存储
-            localStorage.setItem("wakeOrders", JSON.stringify(data));
-            return data;
+            localStorage.setItem("wakeOrders", JSON.stringify(formattedData));
+            return formattedData;
         } else if (error) {
             console.error("Supabase 读取订单失败：", error);
         }
@@ -21,24 +35,19 @@ async function getOrders() {
 
 async function saveOrders(orders) {
     try {
-        // 确保订单数据结构正确，移除可能导致问题的字段
-        const validOrders = orders.map(order => {
-            const validOrder = {
-                wakeTime: order.wakeTime,
-                phone: order.phone,
-                note: order.note || '',
-                amount: parseFloat(order.amount || order.money || 0), // 确保是数值类型
-                status: order.status || '待接单',
-                serialNumber: order.serialNumber || null,
-                staffId: order.staffId || '',
-                staffName: order.staffName || '',
-                salarySettled: Boolean(order.salarySettled || false),
-                submitTime: order.submitTime || new Date().toISOString()
-            };
-            // 移除可能导致问题的字段
-            delete validOrder.id; // 让数据库自动生成ID
-            return validOrder;
-        });
+        // 确保订单数据结构正确，转换为数据库字段名
+        const validOrders = orders.map(order => ({
+            waketime: order.wakeTime,
+            phone: order.phone,
+            note: order.note || '',
+            amount: parseFloat(order.amount || order.money || 0), // 确保是数值类型
+            status: order.status || '待接单',
+            serialnumber: order.serialNumber || null,
+            staffid: order.staffId || '',
+            staffname: order.staffName || '',
+            salarysettled: Boolean(order.salarySettled || false),
+            submittime: order.submitTime || new Date().toISOString()
+        }));
 
         // 先清空表
         const deleteResult = await supabaseClient.from('wake_orders').delete().neq('id', 0);
@@ -115,12 +124,21 @@ async function getSalaryDetails() {
         const { data, error } = await supabaseClient
             .from('salary_details')
             .select('*')
-            .order('createdAt', { ascending: false });
+            .order('createdat', { ascending: false });
 
         if (!error && data) {
+            // 转换数据库字段名到前端字段名
+            const formattedData = data.map(detail => ({
+                id: detail.id,
+                staffId: detail.staffid,
+                amount: detail.amount,
+                type: detail.type,
+                description: detail.description,
+                createdAt: detail.createdat
+            }));
             // 同步到本地存储
-            localStorage.setItem("salaryDetails", JSON.stringify(data));
-            return data;
+            localStorage.setItem("salaryDetails", JSON.stringify(formattedData));
+            return formattedData;
         } else if (error) {
             console.error("Supabase 读取余额明细失败：", error);
         }
@@ -134,11 +152,11 @@ async function saveSalaryDetails(details) {
     try {
         const validDetails = details.map(detail => ({
             id: detail.id,
-            staffId: detail.staffId,
+            staffid: detail.staffId,
             amount: parseFloat(detail.amount || 0),
             type: detail.type,
             description: detail.description,
-            createdAt: detail.createdAt || new Date().toISOString()
+            createdat: detail.createdAt || new Date().toISOString()
         }));
 
         const deleteResult = await supabaseClient.from('salary_details').delete().neq('id', 0);
