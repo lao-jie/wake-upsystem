@@ -21,6 +21,25 @@ async function getOrders() {
 
 async function saveOrders(orders) {
     try {
+        // 确保订单数据结构正确，移除可能导致问题的字段
+        const validOrders = orders.map(order => {
+            const validOrder = {
+                wakeTime: order.wakeTime,
+                phone: order.phone,
+                note: order.note || '',
+                amount: parseFloat(order.amount || order.money || 0), // 确保是数值类型
+                status: order.status || '待接单',
+                serialNumber: order.serialNumber || null,
+                staffId: order.staffId || '',
+                staffName: order.staffName || '',
+                salarySettled: Boolean(order.salarySettled || false),
+                submitTime: order.submitTime || new Date().toISOString()
+            };
+            // 移除可能导致问题的字段
+            delete validOrder.id; // 让数据库自动生成ID
+            return validOrder;
+        });
+
         // 先清空表
         const deleteResult = await supabaseClient.from('wake_orders').delete().neq('id', 0);
         if (deleteResult.error) {
@@ -28,8 +47,8 @@ async function saveOrders(orders) {
         }
 
         // 插入新订单
-        if (orders.length > 0) {
-            const insertResult = await supabaseClient.from('wake_orders').insert(orders);
+        if (validOrders.length > 0) {
+            const insertResult = await supabaseClient.from('wake_orders').insert(validOrders);
             if (insertResult.error) {
                 throw new Error(`插入订单失败：${insertResult.error.message}`);
             }
@@ -64,15 +83,20 @@ async function getStaffList() {
 
 async function saveStaffList(staffList) {
     try {
-        // 先清空表
+        const validStaffList = staffList.map(staff => ({
+            id: staff.id,
+            name: staff.name,
+            password: staff.password,
+            salary: parseFloat(staff.salary || 0)
+        }));
+
         const deleteResult = await supabaseClient.from('staff_list').delete().neq('id', 0);
         if (deleteResult.error) {
             throw new Error(`删除员工失败：${deleteResult.error.message}`);
         }
 
-        // 插入新员工
-        if (staffList.length > 0) {
-            const insertResult = await supabaseClient.from('staff_list').insert(staffList);
+        if (validStaffList.length > 0) {
+            const insertResult = await supabaseClient.from('staff_list').insert(validStaffList);
             if (insertResult.error) {
                 throw new Error(`插入员工失败：${insertResult.error.message}`);
             }
@@ -82,7 +106,6 @@ async function saveStaffList(staffList) {
     } catch (e) {
         console.error("Supabase 保存员工失败，仅保存到本地：", e);
     }
-    // 无论如何都保存到本地存储
     localStorage.setItem("staffList", JSON.stringify(staffList));
 }
 
@@ -109,15 +132,22 @@ async function getSalaryDetails() {
 
 async function saveSalaryDetails(details) {
     try {
-        // 先清空表
+        const validDetails = details.map(detail => ({
+            id: detail.id,
+            staffId: detail.staffId,
+            amount: parseFloat(detail.amount || 0),
+            type: detail.type,
+            description: detail.description,
+            createdAt: detail.createdAt || new Date().toISOString()
+        }));
+
         const deleteResult = await supabaseClient.from('salary_details').delete().neq('id', 0);
         if (deleteResult.error) {
             throw new Error(`删除余额明细失败：${deleteResult.error.message}`);
         }
 
-        // 插入新余额明细
-        if (details.length > 0) {
-            const insertResult = await supabaseClient.from('salary_details').insert(details);
+        if (validDetails.length > 0) {
+            const insertResult = await supabaseClient.from('salary_details').insert(validDetails);
             if (insertResult.error) {
                 throw new Error(`插入余额明细失败：${insertResult.error.message}`);
             }
@@ -127,7 +157,6 @@ async function saveSalaryDetails(details) {
     } catch (e) {
         console.error("Supabase 保存余额明细失败，仅保存到本地：", e);
     }
-    // 无论如何都保存到本地存储
     localStorage.setItem("salaryDetails", JSON.stringify(details));
 }
 
