@@ -194,11 +194,11 @@ async function renderProfilePage() {
                         `;
 
                 dateOrders.forEach(order => {
-                    const settleStatus = order.salarySettled ? "已结算" : "未结算";
+                    const settleStatus = order.salarysettled ? "已结算" : "未结算";
                     html += `
                     <tr style="border-bottom: 1px solid #f1f5f9;">
-                        <td style="padding: 12px; width: 60px;">${order.serialNumber}</td>
-                        <td style="padding: 12px;">${order.wakeTime.split('T')[1]}</td>
+                        <td style="padding: 12px; width: 60px;">${order.serialnumber}</td>
+                        <td style="padding: 12px;">${order.waketime.split('T')[1]}</td>
                         <td style="padding: 12px;">${order.phone}</td>
                         <td style="padding: 12px;">${(order.amount || order.money).toFixed(2)}</td>
                         <td style="padding: 12px;"><span class="status-badge ${order.status === '待接单' ? 'status-pending' : order.status === '进行中' ? 'status-processing' : 'status-done'}">${order.status}</span></td>
