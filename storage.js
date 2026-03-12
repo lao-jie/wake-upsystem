@@ -7,23 +7,9 @@ async function getOrders() {
             .order('submittime', { ascending: true });
 
         if (!error && data) {
-            // 转换数据库字段名到前端字段名
-            const formattedData = data.map(order => ({
-                id: order.id,
-                wakeTime: order.waketime,
-                phone: order.phone,
-                note: order.note,
-                amount: order.amount,
-                status: order.status,
-                serialNumber: order.serialnumber,
-                staffId: order.staffid,
-                staffName: order.staffname,
-                salarySettled: order.salarysettled,
-                submitTime: order.submittime
-            }));
             // 同步到本地存储
-            localStorage.setItem("wakeOrders", JSON.stringify(formattedData));
-            return formattedData;
+            localStorage.setItem("wakeOrders", JSON.stringify(data));
+            return data;
         } else if (error) {
             console.error("Supabase 读取订单失败：", error);
         }
@@ -35,18 +21,18 @@ async function getOrders() {
 
 async function saveOrders(orders) {
     try {
-        // 确保订单数据结构正确，转换为数据库字段名
+        // 确保订单数据结构正确，使用数据库字段名
         const validOrders = orders.map(order => ({
-            waketime: order.wakeTime,
+            waketime: order.waketime,
             phone: order.phone,
             note: order.note || '',
             amount: parseFloat(order.amount || order.money || 0), // 确保是数值类型
             status: order.status || '待接单',
-            serialnumber: order.serialNumber || null,
-            staffid: order.staffId || '',
-            staffname: order.staffName || '',
-            salarysettled: Boolean(order.salarySettled || false),
-            submittime: order.submitTime || new Date().toISOString()
+            serialnumber: order.serialnumber || null,
+            staffid: order.staffid || '',
+            staffname: order.staffname || '',
+            salarysettled: Boolean(order.salarysettled || false),
+            submittime: order.submittime || new Date().toISOString()
         }));
 
         // 先清空表
@@ -127,18 +113,9 @@ async function getSalaryDetails() {
             .order('createdat', { ascending: false });
 
         if (!error && data) {
-            // 转换数据库字段名到前端字段名
-            const formattedData = data.map(detail => ({
-                id: detail.id,
-                staffId: detail.staffid,
-                amount: detail.amount,
-                type: detail.type,
-                description: detail.description,
-                createdAt: detail.createdat
-            }));
             // 同步到本地存储
-            localStorage.setItem("salaryDetails", JSON.stringify(formattedData));
-            return formattedData;
+            localStorage.setItem("salaryDetails", JSON.stringify(data));
+            return data;
         } else if (error) {
             console.error("Supabase 读取余额明细失败：", error);
         }
@@ -152,11 +129,11 @@ async function saveSalaryDetails(details) {
     try {
         const validDetails = details.map(detail => ({
             id: detail.id,
-            staffid: detail.staffId,
+            staffid: detail.staffid,
             amount: parseFloat(detail.amount || 0),
             type: detail.type,
             description: detail.description,
-            createdat: detail.createdAt || new Date().toISOString()
+            createdat: detail.createdat || new Date().toISOString()
         }));
 
         const deleteResult = await supabaseClient.from('salary_details').delete().neq('id', 0);
@@ -179,15 +156,15 @@ async function saveSalaryDetails(details) {
 }
 
 // 添加余额变动记录
-async function addSalaryDetail(staffId, amount, type, description) {
+async function addSalaryDetail(staffid, amount, type, description) {
     const details = await getSalaryDetails();
     const newDetail = {
         id: Date.now().toString(),
-        staffId: staffId,
+        staffid: staffid,
         amount: amount,
         type: type, // 类型：订单收入、奖励、惩罚、结算
         description: description,
-        createdAt: new Date().toISOString()
+        createdat: new Date().toISOString()
     };
     details.unshift(newDetail);
     await saveSalaryDetails(details);
