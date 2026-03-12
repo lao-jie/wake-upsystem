@@ -7,14 +7,14 @@ async function loadOrders() {
     let displayOrders = [];
     const today = new Date().toLocaleDateString();
     if (isAdmin) {
-        displayOrders = [...allOrders].sort((a, b) => a.serialNumber - b.serialNumber);
+        displayOrders = [...allOrders].sort((a, b) => a.serialnumber - b.serialnumber);
     } else if (isStaff) {
         displayOrders = allOrders.filter(item => {
             if (item.status === "待接单") {
                 return true;
             }
-            if (item.staffId && item.staffId === user.id) {
-                const orderDate = new Date(item.submitTime).toLocaleDateString();
+            if (item.staffid && item.staffid === user.id) {
+                const orderDate = new Date(item.submittime).toLocaleDateString();
                 return orderDate === today;
             }
             return false;
@@ -23,7 +23,7 @@ async function loadOrders() {
             if (a.status === "待接单" && b.status !== "待接单") return -1;
             if (a.status !== "待接单" && b.status === "待接单") return 1;
             // 然后按序号排序
-            return a.serialNumber - b.serialNumber;
+            return a.serialnumber - b.serialnumber;
         });
     }
 
@@ -318,12 +318,12 @@ function renderTable(orders) {
 }
 
 // 接单
-async function takeOrder(serialNumber, wakeTime, phone) {
+async function takeOrder(serialnumber, waketime, phone) {
     let allOrders = await getOrders();
-    // 使用serialNumber、wakeTime和phone的组合来查找订单，确保找到正确的订单
+    // 使用serialnumber、waketime和phone的组合来查找订单，确保找到正确的订单
     const targetIndex = allOrders.findIndex(item =>
-        item.serialNumber === serialNumber &&
-        item.wakeTime === wakeTime &&
+        item.serialnumber === serialnumber &&
+        item.waketime === waketime &&
         item.phone === phone
     );
 
@@ -339,8 +339,8 @@ async function takeOrder(serialNumber, wakeTime, phone) {
     }
 
     targetOrder.status = "进行中";
-    targetOrder.staffId = user.id;
-    targetOrder.staffName = user.name;
+    targetOrder.staffid = user.id;
+    targetOrder.staffname = user.name;
 
     await saveOrders(allOrders);
     loadOrders();
@@ -375,10 +375,10 @@ async function batchTakeOrders() {
     let successCount = 0;
 
     allOrders.forEach(order => {
-        if (selectedSerials.includes(order.serialNumber) && order.status === "待接单") {
+        if (selectedSerials.includes(order.serialnumber) && order.status === "待接单") {
             order.status = "进行中";
-            order.staffId = user.id;
-            order.staffName = user.name;
+            order.staffid = user.id;
+            order.staffname = user.name;
             successCount++;
         }
     });
@@ -389,12 +389,12 @@ async function batchTakeOrders() {
 }
 
 // 完成订单
-async function finishOrder(serialNumber, wakeTime, phone) {
+async function finishOrder(serialnumber, waketime, phone) {
     let allOrders = await getOrders();
-    // 使用serialNumber、wakeTime和phone的组合来查找订单，确保找到正确的订单
+    // 使用serialnumber、waketime和phone的组合来查找订单，确保找到正确的订单
     const targetIndex = allOrders.findIndex(item =>
-        item.serialNumber === serialNumber &&
-        item.wakeTime === wakeTime &&
+        item.serialnumber === serialnumber &&
+        item.waketime === waketime &&
         item.phone === phone
     );
     if (targetIndex === -1) {
@@ -407,8 +407,8 @@ async function finishOrder(serialNumber, wakeTime, phone) {
         return;
     }
     targetOrder.status = "已完成";
-    targetOrder.salarySettled = true;
-    await addSalary(targetOrder.staffId, targetOrder.amount || targetOrder.money);
+    targetOrder.salarysettled = true;
+    await addSalary(targetOrder.staffid, targetOrder.amount || targetOrder.money);
 
     await saveOrders(allOrders);
     loadOrders();
@@ -423,7 +423,7 @@ async function checkExpiredOrders() {
 
     allOrders.forEach(item => {
         if (item.status === "进行中") {
-            const submitDate = new Date(item.submitTime);
+            const submitDate = new Date(item.submittime);
             // 获取订单提交当天的日期（年-月-日）
             const submitDateStr = submitDate.toLocaleDateString();
             // 获取当前日期（年-月-日）
@@ -433,10 +433,10 @@ async function checkExpiredOrders() {
             if (submitDateStr === currentDateStr) {
                 const submitMidnight = new Date(submitDate.getFullYear(), submitDate.getMonth(), submitDate.getDate() + 1);
 
-                if (now >= submitMidnight && !item.salarySettled) {
+                if (now >= submitMidnight && !item.salarysettled) {
                     item.status = "已完成";
-                    item.salarySettled = true;
-                    addSalary(item.staffId, item.amount || item.money);
+                    item.salarysettled = true;
+                    addSalary(item.staffid, item.amount || item.money);
                     isUpdated = true;
                 }
             }
@@ -456,7 +456,7 @@ async function cleanExpiredOrders() {
     const sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
 
     const recentOrders = allOrders.filter(order => {
-        const orderDate = new Date(order.submitTime);
+        const orderDate = new Date(order.submittime);
         return orderDate >= sevenDaysAgo;
     });
 
@@ -470,12 +470,12 @@ async function cleanExpiredOrders() {
 
 // 添加单个订单
 async function addSingleOrder() {
-    const wakeTime = document.getElementById("wakeTime").value;
+    const waketime = document.getElementById("wakeTime").value;
     const phone = document.getElementById("phone").value.trim();
     const note = document.getElementById("note").value.trim();
 
-    if (!wakeTime) return alert("请选择叫醒时间！");
-    const wakeTimeDate = new Date(wakeTime);
+    if (!waketime) return alert("请选择叫醒时间！");
+    const wakeTimeDate = new Date(waketime);
     const now = new Date();
     if (wakeTimeDate < now) {
         alert("不能选择过去的时间作为叫醒时间！");
@@ -483,20 +483,20 @@ async function addSingleOrder() {
     }
     if (!/^1[3-9]\d{9}$/.test(phone)) return alert("请输入11位有效手机号！");
 
-    const time = wakeTime.split('T')[1];
+    const time = waketime.split('T')[1];
     const amount = calculateAmountByTime(time);
 
     const newOrder = {
-        wakeTime: wakeTime,
+        waketime: waketime,
         phone: phone,
         note: note,
         amount: amount,
         status: "待接单",
-        serialNumber: null,
-        staffId: "",
-        staffName: "",
-        salarySettled: false,
-        submitTime: new Date().toISOString()
+        serialnumber: null,
+        staffid: "",
+        staffname: "",
+        salarysettled: false,
+        submittime: new Date().toISOString()
     };
 
     let allOrders = await getOrders();
@@ -518,7 +518,7 @@ async function deleteSelected() {
     if (!confirm(`确定删除选中的 ${checkedSerials.length} 条订单吗？`)) return;
 
     let allOrders = await getOrders();
-    allOrders = allOrders.filter(item => !checkedSerials.includes(item.serialNumber));
+    allOrders = allOrders.filter(item => !checkedSerials.includes(item.serialnumber));
     await saveOrders(allOrders);
 
     loadOrders();
@@ -533,11 +533,11 @@ async function editSelected() {
     if (checkedSerials.length !== 1) return alert("请仅选择一条订单进行修改！");
 
     let allOrders = await getOrders();
-    const targetIndex = allOrders.findIndex(item => item.serialNumber === checkedSerials[0]);
+    const targetIndex = allOrders.findIndex(item => item.serialnumber === checkedSerials[0]);
     if (targetIndex === -1) return alert("订单不存在！");
 
     const target = allOrders[targetIndex];
-    const newTime = prompt("修改叫醒时间（格式：YYYY-MM-DDTHH:MM）", target.wakeTime);
+    const newTime = prompt("修改叫醒时间（格式：YYYY-MM-DDTHH:MM）", target.waketime);
     const newPhone = prompt("修改手机号", target.phone);
     const newNote = prompt("修改备注", target.note);
 
@@ -550,7 +550,7 @@ async function editSelected() {
         return;
     }
 
-    target.wakeTime = newTime;
+    target.waketime = newTime;
     target.phone = newPhone;
     target.note = newNote;
     target.money = calculateAmountByTime(newTime.split('T')[1]);
@@ -575,8 +575,8 @@ function searchOrders() {
             return true;
         }
         // 搜索时间
-        const wakeTime = order.wakeTime && order.wakeTime.includes('T') ? order.wakeTime.split('T')[1] : order.wakeTime;
-        if (wakeTime && wakeTime.toLowerCase().includes(searchTerm)) {
+        const waketime = order.waketime && order.waketime.includes('T') ? order.waketime.split('T')[1] : order.waketime;
+        if (waketime && waketime.toLowerCase().includes(searchTerm)) {
             return true;
         }
         // 搜索备注
@@ -588,7 +588,7 @@ function searchOrders() {
             return true;
         }
         // 搜索叫醒员
-        if (order.staffName && order.staffName.toLowerCase().includes(searchTerm)) {
+        if (order.staffname && order.staffname.toLowerCase().includes(searchTerm)) {
             return true;
         }
         return false;
@@ -654,30 +654,30 @@ async function parseBatchOrders() {
         parsedBatchOrders = orders.map(o => {
             const time = normalizeTime(o.wakeTime);
             return {
-                wakeTime: `${dateStr}T${time}`,
+                waketime: `${dateStr}T${time}`,
                 phone: o.phone,
                 note: o.note || "-",
                 amount: calculateAmountByTime(time),
                 status: "待接单",
-                serialNumber: null,
-                staffId: "",
-                staffName: "",
-                salarySettled: false,
-                submitTime: new Date().toISOString()
+                serialnumber: null,
+                staffid: "",
+                staffname: "",
+                salarysettled: false,
+                submittime: new Date().toISOString()
             };
         });
 
         parsedBatchOrders.sort((a, b) => {
-            const t1 = a.wakeTime.split('T')[1];
-            const t2 = b.wakeTime.split('T')[1];
+            const t1 = a.waketime.split('T')[1];
+            const t2 = b.waketime.split('T')[1];
             const c = t1.localeCompare(t2);
             if (c !== 0) return c;
-            return new Date(a.submitTime) - new Date(b.submitTime);
+            return new Date(a.submittime) - new Date(b.submittime);
         });
 
         let html = "<div>✅ 识别完成：</div>";
         parsedBatchOrders.forEach((it, i) => {
-            html += `<div>第${i + 1}单：${it.wakeTime.split('T')[1]} ${it.phone} 备注：${it.note}</div>`;
+            html += `<div>第${i + 1}单：${it.waketime.split('T')[1]} ${it.phone} 备注：${it.note}</div>`;
         });
         document.getElementById("parsePreview").innerHTML = html;
         document.getElementById("batchUploadBtn").disabled = false;
