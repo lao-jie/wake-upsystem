@@ -29,7 +29,7 @@ function generateFixedSerial(orders) {
     // 按日期分组
     const ordersByDate = {};
     orders.forEach(order => {
-        const orderDate = new Date(order.submitTime).toLocaleDateString();
+        const orderDate = new Date(order.submittime).toLocaleDateString();
         if (!ordersByDate[orderDate]) {
             ordersByDate[orderDate] = [];
         }
@@ -40,20 +40,20 @@ function generateFixedSerial(orders) {
     const result = [];
     Object.keys(ordersByDate).forEach(date => {
         const dateOrders = ordersByDate[date].sort((a, b) => {
-            const timeA = a.wakeTime.includes('T') ? a.wakeTime.split('T')[1] : a.wakeTime;
-            const timeB = b.wakeTime.includes('T') ? b.wakeTime.split('T')[1] : b.wakeTime;
+            const timeA = a.waketime.includes('T') ? a.waketime.split('T')[1] : a.waketime;
+            const timeB = b.waketime.includes('T') ? b.waketime.split('T')[1] : b.waketime;
             const timeCompare = timeA.localeCompare(timeB);
             if (timeCompare !== 0) {
                 return timeCompare;
             }
-            const submitTimeA = new Date(a.submitTime);
-            const submitTimeB = new Date(b.submitTime);
+            const submitTimeA = new Date(a.submittime);
+            const submitTimeB = new Date(b.submittime);
             return submitTimeA - submitTimeB;
         });
 
         // 每个日期的订单从1开始编号
         dateOrders.forEach((item, index) => {
-            item.serialNumber = index + 1;
+            item.serialnumber = index + 1;
             result.push(item);
         });
     });
