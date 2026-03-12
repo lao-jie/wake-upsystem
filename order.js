@@ -162,7 +162,7 @@ function renderTable(orders) {
         // 按日期分组订单
         const ordersByDate = {};
         orders.forEach(order => {
-            const orderDate = new Date(order.submitTime).toLocaleDateString();
+            const orderDate = new Date(order.submittime).toLocaleDateString();
             if (!ordersByDate[orderDate]) {
                 ordersByDate[orderDate] = [];
             }
