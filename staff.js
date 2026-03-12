@@ -146,12 +146,133 @@ async function renderProfilePage() {
     const myInfo = staffList.find(staff => staff.id === user.id) || { salary: 0 };
     document.getElementById("totalBalance").innerText = myInfo.salary.toFixed(2);
 
-    if (isStaff && mobileMQ.matches) {
-        renderProfileCards(myOrders);
-    } else {
+    // 无论是否为移动端，都尝试渲染订单
+    try {
+        if (isStaff && mobileMQ.matches) {
+            renderProfileCards(myOrders);
+        } else {
+            // 按日期分组订单
+            const ordersByDate = {};
+            myOrders.forEach(order => {
+                const orderDate = new Date(order.submitTime).toLocaleDateString();
+                if (!ordersByDate[orderDate]) {
+                    ordersByDate[orderDate] = [];
+                }
+                ordersByDate[orderDate].push(order);
+            });
+
+            let html = "";
+            // 按日期倒序排列
+            const dates = Object.keys(ordersByDate).sort((a, b) => new Date(b) - new Date(a));
+
+            dates.forEach(date => {
+                const dateOrders = ordersByDate[date];
+                html += `
+                <tr class="date-collapse-header">
+                    <td colspan="6" style="padding: 0;">
+                        <div class="date-header" onclick="toggleDateCollapse('table-${date}')">
+                            <span class="date-title">${date}（${dateOrders.length}单）</span>
+                            <span class="date-arrow">▶</span>
+                        </div>
+                    </td>
+                </tr>
+                <tr class="date-collapse-content" id="collapse-table-${date}" style="display: none;">
+                    <td colspan="6" style="padding: 0;">
+                        <div style="padding: 12px;">
+                            <table style="width: 100%; border-collapse: collapse;">
+                                <thead>
+                                    <tr>
+                                        <th style="padding: 12px; text-align: left; font-size: 13px; font-weight: 600; color: #64748b; text-transform: uppercase; letter-spacing: 0.5px; border-bottom: 2px solid #e2e8f0; width: 60px;">序号</th>
+                                        <th style="padding: 12px; text-align: left; font-size: 13px; font-weight: 600; color: #64748b; text-transform: uppercase; letter-spacing: 0.5px; border-bottom: 2px solid #e2e8f0;">叫醒时间</th>
+                                        <th style="padding: 12px; text-align: left; font-size: 13px; font-weight: 600; color: #64748b; text-transform: uppercase; letter-spacing: 0.5px; border-bottom: 2px solid #e2e8f0;">电话</th>
+                                        <th style="padding: 12px; text-align: left; font-size: 13px; font-weight: 600; color: #64748b; text-transform: uppercase; letter-spacing: 0.5px; border-bottom: 2px solid #e2e8f0;">金额（元）</th>
+                                        <th style="padding: 12px; text-align: left; font-size: 13px; font-weight: 600; color: #64748b; text-transform: uppercase; letter-spacing: 0.5px; border-bottom: 2px solid #e2e8f0;">状态</th>
+                                        <th style="padding: 12px; text-align: left; font-size: 13px; font-weight: 600; color: #64748b; text-transform: uppercase; letter-spacing: 0.5px; border-bottom: 2px solid #e2e8f0;">结算状态</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                        `;
+
+                dateOrders.forEach(order => {
+                    const settleStatus = order.salarySettled ? "已结算" : "未结算";
+                    html += `
+                    <tr style="border-bottom: 1px solid #f1f5f9;">
+                        <td style="padding: 12px; width: 60px;">${order.serialNumber}</td>
+                        <td style="padding: 12px;">${order.wakeTime.split('T')[1]}</td>
+                        <td style="padding: 12px;">${order.phone}</td>
+                        <td style="padding: 12px;">${(order.amount || order.money).toFixed(2)}</td>
+                        <td style="padding: 12px;"><span class="status-badge ${order.status === '待接单' ? 'status-pending' : order.status === '进行中' ? 'status-processing' : 'status-done'}">${order.status}</span></td>
+                        <td style="padding: 12px;">${settleStatus}</td>
+                    </tr>
+                    `;
+                });
+
+                html += `
+                                </tbody>
+                            </table>
+                        </div>
+                    </td>
+                </tr>
+                `;
+            });
+
+            document.getElementById("profileOrderTable").innerHTML = html || `<tr><td colspan="6" style="text-align: center; padding: 20px; color: #64748b;">暂无订单</td></tr>`;
+        }
+    } catch (error) {
+        console.error("渲染个人中心失败：", error);
+        // 即使渲染失败，也要确保基本信息显示
+        document.getElementById("todayOrderCount").innerText = todayCount;
+        document.getElementById("totalBalance").innerText = myInfo.salary.toFixed(2);
+    }
+}
+
+// 渲染个人中心卡片（移动端）
+function renderProfileCards(orders) {
+    try {
+        const container = document.getElementById("profileOrderCards");
+        if (!container) {
+            // 如果没有找到容器，尝试使用表格容器
+            const tableContainer = document.getElementById("profileOrderTable");
+            if (tableContainer) {
+                // 渲染简单的订单列表
+                let html = "";
+                if (orders.length > 0) {
+                    html += `
+                    <tr>
+                        <th style="padding: 12px; text-align: left; font-size: 13px; font-weight: 600; color: #64748b; text-transform: uppercase; letter-spacing: 0.5px; border-bottom: 2px solid #e2e8f0; width: 60px;">序号</th>
+                        <th style="padding: 12px; text-align: left; font-size: 13px; font-weight: 600; color: #64748b; text-transform: uppercase; letter-spacing: 0.5px; border-bottom: 2px solid #e2e8f0;">叫醒时间</th>
+                        <th style="padding: 12px; text-align: left; font-size: 13px; font-weight: 600; color: #64748b; text-transform: uppercase; letter-spacing: 0.5px; border-bottom: 2px solid #e2e8f0;">电话</th>
+                        <th style="padding: 12px; text-align: left; font-size: 13px; font-weight: 600; color: #64748b; text-transform: uppercase; letter-spacing: 0.5px; border-bottom: 2px solid #e2e8f0;">金额（元）</th>
+                        <th style="padding: 12px; text-align: left; font-size: 13px; font-weight: 600; color: #64748b; text-transform: uppercase; letter-spacing: 0.5px; border-bottom: 2px solid #e2e8f0;">状态</th>
+                        <th style="padding: 12px; text-align: left; font-size: 13px; font-weight: 600; color: #64748b; text-transform: uppercase; letter-spacing: 0.5px; border-bottom: 2px solid #e2e8f0;">结算状态</th>
+                    </tr>
+                    `;
+                    orders.forEach(order => {
+                        const settleStatus = order.salarySettled ? "已结算" : "未结算";
+                        const showTime = order.wakeTime.includes('T') ? order.wakeTime.split('T')[1] : order.wakeTime;
+
+                        html += `
+                        <tr style="border-bottom: 1px solid #f1f5f9;">
+                            <td style="padding: 12px; width: 60px;">${order.serialNumber}</td>
+                            <td style="padding: 12px;">${showTime}</td>
+                            <td style="padding: 12px;">${order.phone}</td>
+                            <td style="padding: 12px;">${(order.amount || order.money).toFixed(2)}</td>
+                            <td style="padding: 12px;">${order.status}</td>
+                            <td style="padding: 12px;">${settleStatus}</td>
+                        </tr>
+                        `;
+                    });
+                } else {
+                    html = `<tr><td colspan="6" style="text-align: center; padding: 20px; color: #64748b;">暂无订单</td></tr>`;
+                }
+                tableContainer.innerHTML = html;
+            }
+            return;
+        }
+
         // 按日期分组订单
         const ordersByDate = {};
-        myOrders.forEach(order => {
+        orders.forEach(order => {
             const orderDate = new Date(order.submitTime).toLocaleDateString();
             if (!ordersByDate[orderDate]) {
                 ordersByDate[orderDate] = [];
@@ -166,132 +287,61 @@ async function renderProfilePage() {
         dates.forEach(date => {
             const dateOrders = ordersByDate[date];
             html += `
-            <tr class="date-collapse-header">
-                <td colspan="6" style="padding: 0;">
-                    <div class="date-header" onclick="toggleDateCollapse('table-${date}')">
-                        <span class="date-title">${date}（${dateOrders.length}单）</span>
-                        <span class="date-arrow">▶</span>
-                    </div>
-                </td>
-            </tr>
-            <tr class="date-collapse-content" id="collapse-table-${date}" style="display: none;">
-                <td colspan="6" style="padding: 0;">
-                    <div style="padding: 12px;">
-                        <table style="width: 100%; border-collapse: collapse;">
-                            <thead>
-                                <tr>
-                                    <th style="padding: 12px; text-align: left; font-size: 13px; font-weight: 600; color: #64748b; text-transform: uppercase; letter-spacing: 0.5px; border-bottom: 2px solid #e2e8f0; width: 60px;">序号</th>
-                                    <th style="padding: 12px; text-align: left; font-size: 13px; font-weight: 600; color: #64748b; text-transform: uppercase; letter-spacing: 0.5px; border-bottom: 2px solid #e2e8f0;">叫醒时间</th>
-                                    <th style="padding: 12px; text-align: left; font-size: 13px; font-weight: 600; color: #64748b; text-transform: uppercase; letter-spacing: 0.5px; border-bottom: 2px solid #e2e8f0;">电话</th>
-                                    <th style="padding: 12px; text-align: left; font-size: 13px; font-weight: 600; color: #64748b; text-transform: uppercase; letter-spacing: 0.5px; border-bottom: 2px solid #e2e8f0;">金额（元）</th>
-                                    <th style="padding: 12px; text-align: left; font-size: 13px; font-weight: 600; color: #64748b; text-transform: uppercase; letter-spacing: 0.5px; border-bottom: 2px solid #e2e8f0;">状态</th>
-                                    <th style="padding: 12px; text-align: left; font-size: 13px; font-weight: 600; color: #64748b; text-transform: uppercase; letter-spacing: 0.5px; border-bottom: 2px solid #e2e8f0;">结算状态</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                    `;
+            <div class="date-collapse">
+                <div class="date-header" onclick="toggleDateCollapse('${date}')">
+                    <span class="date-title">${date}（${dateOrders.length}单）</span>
+                    <span class="date-arrow">▶</span>
+                </div>
+                <div class="date-content" id="collapse-${date}" style="display: none;">
+            `;
 
             dateOrders.forEach(order => {
+                let statusClass = "";
+                switch (order.status) {
+                    case "待接单": statusClass = "status-pending"; break;
+                    case "进行中": statusClass = "status-processing"; break;
+                    case "已完成": statusClass = "status-done"; break;
+                }
+
                 const settleStatus = order.salarySettled ? "已结算" : "未结算";
+                const showTime = order.wakeTime.includes('T') ? order.wakeTime.split('T')[1] : order.wakeTime;
+
                 html += `
-                <tr style="border-bottom: 1px solid #f1f5f9;">
-                    <td style="padding: 12px; width: 60px;">${order.serialNumber}</td>
-                    <td style="padding: 12px;">${order.wakeTime.split('T')[1]}</td>
-                    <td style="padding: 12px;">${order.phone}</td>
-                    <td style="padding: 12px;">${(order.amount || order.money).toFixed(2)}</td>
-                    <td style="padding: 12px;"><span class="status-badge ${order.status === '待接单' ? 'status-pending' : order.status === '进行中' ? 'status-processing' : 'status-done'}">${order.status}</span></td>
-                    <td style="padding: 12px;">${settleStatus}</td>
-                </tr>
+                <div class="order-card">
+                    <div class="order-card-header">
+                        <div class="order-card-title">
+                            <span class="serial-number">${order.serialNumber}</span>
+                            <span class="time">${showTime}</span>
+                        </div>
+                        <div style="display:flex;align-items:center;gap:8px;">
+                            <span class="status-badge ${statusClass}">${order.status}</span>
+                            <span class="order-money">${(order.amount || order.money).toFixed(2)} 元</span>
+                        </div>
+                    </div>
+                    <div class="order-card-body">
+                        <div class="order-kv">
+                            <div class="k">电话</div>
+                            <div class="v">${order.phone}</div>
+                        </div>
+                        <div class="order-kv">
+                            <div class="k">结算状态</div>
+                            <div class="v">${settleStatus}</div>
+                        </div>
+                    </div>
+                </div>
                 `;
             });
 
             html += `
-                            </tbody>
-                        </table>
-                    </div>
-                </td>
-            </tr>
+                </div>
+            </div>
             `;
         });
 
-        document.getElementById("profileOrderTable").innerHTML = html || `<tr><td colspan="6" style="text-align: center; padding: 20px; color: #64748b;">暂无订单</td></tr>`;
+        container.innerHTML = html || `<div style="color:#64748b;font-size:14px;padding:12px;">暂无订单</div>`;
+    } catch (error) {
+        console.error("渲染个人中心卡片失败：", error);
     }
-}
-
-// 渲染个人中心卡片（移动端）
-function renderProfileCards(orders) {
-    const container = document.getElementById("profileOrderCards");
-    if (!container) return;
-
-    // 按日期分组订单
-    const ordersByDate = {};
-    orders.forEach(order => {
-        const orderDate = new Date(order.submitTime).toLocaleDateString();
-        if (!ordersByDate[orderDate]) {
-            ordersByDate[orderDate] = [];
-        }
-        ordersByDate[orderDate].push(order);
-    });
-
-    let html = "";
-    // 按日期倒序排列
-    const dates = Object.keys(ordersByDate).sort((a, b) => new Date(b) - new Date(a));
-
-    dates.forEach(date => {
-        const dateOrders = ordersByDate[date];
-        html += `
-        <div class="date-collapse">
-            <div class="date-header" onclick="toggleDateCollapse('${date}')">
-                <span class="date-title">${date}（${dateOrders.length}单）</span>
-                <span class="date-arrow">▶</span>
-            </div>
-            <div class="date-content" id="collapse-${date}" style="display: none;">
-        `;
-
-        dateOrders.forEach(order => {
-            let statusClass = "";
-            switch (order.status) {
-                case "待接单": statusClass = "status-pending"; break;
-                case "进行中": statusClass = "status-processing"; break;
-                case "已完成": statusClass = "status-done"; break;
-            }
-
-            const settleStatus = order.salarySettled ? "已结算" : "未结算";
-            const showTime = order.wakeTime.includes('T') ? order.wakeTime.split('T')[1] : order.wakeTime;
-
-            html += `
-            <div class="order-card">
-                <div class="order-card-header">
-                    <div class="order-card-title">
-                        <span class="serial-number">${order.serialNumber}</span>
-                        <span class="time">${showTime}</span>
-                    </div>
-                    <div style="display:flex;align-items:center;gap:8px;">
-                        <span class="status-badge ${statusClass}">${order.status}</span>
-                        <span class="order-money">${(order.amount || order.money).toFixed(2)} 元</span>
-                    </div>
-                </div>
-                <div class="order-card-body">
-                    <div class="order-kv">
-                        <div class="k">电话</div>
-                        <div class="v">${order.phone}</div>
-                    </div>
-                    <div class="order-kv">
-                        <div class="k">结算状态</div>
-                        <div class="v">${settleStatus}</div>
-                    </div>
-                </div>
-            </div>
-            `;
-        });
-
-        html += `
-            </div>
-        </div>
-        `;
-    });
-
-    container.innerHTML = html || `<div style="color:#64748b;font-size:14px;padding:12px;">暂无订单</div>`;
 }
 
 // 添加薪资
@@ -331,7 +381,7 @@ async function openSalaryDetailModal(staffId) {
         staffDetails.forEach(detail => {
             const amountClass = detail.amount >= 0 ? "color: #10b981; font-weight: 600;" : "color: #ef4444; font-weight: 600;";
             const amountText = detail.amount >= 0 ? `+${detail.amount.toFixed(2)}` : detail.amount.toFixed(2);
-            
+
             let typeText = "";
             switch (detail.type) {
                 case "订单收入": typeText = "订单收入"; break;
