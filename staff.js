@@ -19,8 +19,8 @@ async function renderTeamTable() {
     staffList.forEach(staff => {
         const today = new Date().toLocaleDateString();
         const todayOrders = allOrders.filter(order =>
-            order.staffId === staff.id &&
-            new Date(order.submitTime).toLocaleDateString() === today
+            order.staffid === staff.id &&
+            new Date(order.submittime).toLocaleDateString() === today
         );
         const todayCount = todayOrders.length;
 
@@ -134,11 +134,11 @@ async function punishStaff(staffId) {
 // 渲染个人中心
 async function renderProfilePage() {
     const allOrders = await getOrders();
-    const myOrders = allOrders.filter(order => order.staffId === user.id);
+    const myOrders = allOrders.filter(order => order.staffid === user.id);
 
     const today = new Date().toLocaleDateString();
     const todayCount = myOrders.filter(order =>
-        new Date(order.submitTime).toLocaleDateString() === today
+        new Date(order.submittime).toLocaleDateString() === today
     ).length;
     document.getElementById("todayOrderCount").innerText = todayCount;
 
@@ -154,7 +154,7 @@ async function renderProfilePage() {
             // 按日期分组订单
             const ordersByDate = {};
             myOrders.forEach(order => {
-                const orderDate = new Date(order.submitTime).toLocaleDateString();
+                const orderDate = new Date(order.submittime).toLocaleDateString();
                 if (!ordersByDate[orderDate]) {
                     ordersByDate[orderDate] = [];
                 }
@@ -248,12 +248,12 @@ function renderProfileCards(orders) {
                     </tr>
                     `;
                     orders.forEach(order => {
-                        const settleStatus = order.salarySettled ? "已结算" : "未结算";
-                        const showTime = order.wakeTime.includes('T') ? order.wakeTime.split('T')[1] : order.wakeTime;
+                        const settleStatus = order.salarysettled ? "已结算" : "未结算";
+                        const showTime = order.waketime.includes('T') ? order.waketime.split('T')[1] : order.waketime;
 
                         html += `
                         <tr style="border-bottom: 1px solid #f1f5f9;">
-                            <td style="padding: 12px; width: 60px;">${order.serialNumber}</td>
+                            <td style="padding: 12px; width: 60px;">${order.serialnumber}</td>
                             <td style="padding: 12px;">${showTime}</td>
                             <td style="padding: 12px;">${order.phone}</td>
                             <td style="padding: 12px;">${(order.amount || order.money).toFixed(2)}</td>
@@ -273,7 +273,7 @@ function renderProfileCards(orders) {
         // 按日期分组订单
         const ordersByDate = {};
         orders.forEach(order => {
-            const orderDate = new Date(order.submitTime).toLocaleDateString();
+            const orderDate = new Date(order.submittime).toLocaleDateString();
             if (!ordersByDate[orderDate]) {
                 ordersByDate[orderDate] = [];
             }
@@ -303,14 +303,14 @@ function renderProfileCards(orders) {
                     case "已完成": statusClass = "status-done"; break;
                 }
 
-                const settleStatus = order.salarySettled ? "已结算" : "未结算";
-                const showTime = order.wakeTime.includes('T') ? order.wakeTime.split('T')[1] : order.wakeTime;
+                const settleStatus = order.salarysettled ? "已结算" : "未结算";
+                const showTime = order.waketime.includes('T') ? order.waketime.split('T')[1] : order.waketime;
 
                 html += `
                 <div class="order-card">
                     <div class="order-card-header">
                         <div class="order-card-title">
-                            <span class="serial-number">${order.serialNumber}</span>
+                            <span class="serial-number">${order.serialnumber}</span>
                             <span class="time">${showTime}</span>
                         </div>
                         <div style="display:flex;align-items:center;gap:8px;">
@@ -345,14 +345,14 @@ function renderProfileCards(orders) {
 }
 
 // 添加薪资
-async function addSalary(staffId, amount) {
+async function addSalary(staffid, amount) {
     let staffList = await getStaffList();
-    const index = staffList.findIndex(staff => staff.id === staffId);
+    const index = staffList.findIndex(staff => staff.id === staffid);
     if (index !== -1) {
         staffList[index].salary = (staffList[index].salary || 0) + amount;
         await saveStaffList(staffList);
         // 添加余额变动记录
-        await addSalaryDetail(staffId, amount, '订单收入', '订单完成自动结算');
+        await addSalaryDetail(staffid, amount, '订单收入', '订单完成自动结算');
     }
 }
 
