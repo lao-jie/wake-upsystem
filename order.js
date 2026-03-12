@@ -214,34 +214,34 @@ function renderTable(orders) {
                 let actionBtn = "无操作权限";
                 if (isAdmin) {
                     if (item.status === "进行中") {
-                        actionBtn = `<button class="success" onclick="finishOrder(${item.serialNumber}, '${item.wakeTime}', '${item.phone}')">手动完成</button>`;
+                        actionBtn = `<button class="success" onclick="finishOrder(${item.serialnumber}, '${item.waketime}', '${item.phone}')">手动完成</button>`;
                     } else if (item.status === "待接单") {
                         actionBtn = "待接单";
                     } else {
                         actionBtn = "已完成";
                     }
                 } else if (isStaff && item.status === "待接单") {
-                    actionBtn = `<button class="warning" onclick="takeOrder(${item.serialNumber}, '${item.wakeTime}', '${item.phone}')">接单</button>`;
+                    actionBtn = `<button class="warning" onclick="takeOrder(${item.serialnumber}, '${item.waketime}', '${item.phone}')">接单</button>`;
                 } else if (item.status === "进行中") {
                     actionBtn = "进行中";
                 } else if (item.status === "已完成") {
                     actionBtn = "已完成";
                 }
 
-                const showTime = item.wakeTime.includes('T') ? item.wakeTime.split('T')[1] : item.wakeTime;
+                const showTime = item.waketime.includes('T') ? item.waketime.split('T')[1] : item.waketime;
 
                 html += `
                 <tr style="border-bottom: 1px solid #f1f5f9;">
-                    <td style="padding: 12px;"><input type="checkbox" class="order-checkbox" value="${item.serialNumber}" ${item.status !== "待接单" ? "data-status='processed'" : ""}></td>
-                    <td style="padding: 12px; font-weight: 600; color: #2563eb;">${item.serialNumber}</td>
+                    <td style="padding: 12px;"><input type="checkbox" class="order-checkbox" value="${item.serialnumber}" ${item.status !== "待接单" ? "data-status='processed'" : ""}></td>
+                    <td style="padding: 12px; font-weight: 600; color: #2563eb;">${item.serialnumber}</td>
                     <td style="padding: 12px;">${showTime}</td>
                     <td style="padding: 12px;">${item.phone}</td>
                     <td style="padding: 12px;">${item.note || '-'}</td>
-                    <td style="padding: 12px;">${item.staffName || '-'}</td>
+                    <td style="padding: 12px;">${item.staffname || '-'}</td>
                     <td style="padding: 12px;"><span class="status-badge ${statusClass}">${item.status}</span></td>
                     <td style="padding: 12px;">${(item.amount || item.money).toFixed(2)} 元</td>
                     <td style="padding: 12px;">${actionBtn}</td>
-                    <td style="padding: 12px;">${formatTime(item.submitTime)}</td>
+                    <td style="padding: 12px;">${formatTime(item.submittime)}</td>
                 </tr>
                 `;
             });
@@ -289,27 +289,27 @@ function renderTable(orders) {
                     actionBtn = "已完成";
                 }
             } else if (isStaff && item.status === "待接单") {
-                actionBtn = `<button class="warning" onclick="takeOrder(${item.serialNumber}, '${item.wakeTime}', '${item.phone}')">接单</button>`;
+                actionBtn = `<button class="warning" onclick="takeOrder(${item.serialnumber}, '${item.waketime}', '${item.phone}')">接单</button>`;
             } else if (item.status === "进行中") {
                 actionBtn = "进行中";
             } else if (item.status === "已完成") {
                 actionBtn = "已完成";
             }
 
-            const showTime = item.wakeTime.includes('T') ? item.wakeTime.split('T')[1] : item.wakeTime;
+            const showTime = item.waketime.includes('T') ? item.waketime.split('T')[1] : item.waketime;
 
             html += `
     <tr>
-      <td><input type="checkbox" class="order-checkbox" value="${item.serialNumber}" ${item.status !== "待接单" ? "data-status='processed'" : ""}></td>
-      <td class="serial-number">${item.serialNumber}</td>
+      <td><input type="checkbox" class="order-checkbox" value="${item.serialnumber}" ${item.status !== "待接单" ? "data-status='processed'" : ""}></td>
+      <td class="serial-number">${item.serialnumber}</td>
       <td>${showTime}</td>
       <td>${item.phone}</td>
       <td>${item.note || '-'}</td>
-      <td>${item.staffName || '-'}</td>
+      <td>${item.staffname || '-'}</td>
       <td><span class="status-badge ${statusClass}">${item.status}</span></td>
       <td>${(item.amount || item.money).toFixed(2)} 元</td>
       <td>${actionBtn}</td>
-      <td>${formatTime(item.submitTime)}</td>
+      <td>${formatTime(item.submittime)}</td>
     </tr>`;
         });
     }
