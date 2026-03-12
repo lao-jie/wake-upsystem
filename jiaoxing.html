@@ -1,0 +1,270 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+
+<head>
+    <meta charset="UTF-8">
+    <!-- 保留视口设置，适配手机 -->
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+    <title>老街网创 - 叫醒订单管理</title>
+    <link rel="stylesheet" href="styles.css">
+
+</head>
+
+<body>
+
+    <!-- 左侧导航 -->
+    <div class="sidebar">
+        <div class="sidebar-header">老街网创</div>
+
+        <div class="nav-row">
+            <div class="nav-item" id="nav-home" onclick="showPage('home')">
+                <span class="icon">🏠</span>
+                <span>首页</span>
+            </div>
+
+            <div class="nav-item" id="nav-taobao" onclick="toggleSubMenu()">
+                <span class="icon">🛒</span>
+                <span>淘宝监督项目</span>
+                <span class="arrow" id="arrow">▼</span>
+            </div>
+
+            <div class="sub-menu" id="subMenu">
+                <div class="sub-item" id="sub-wake" onclick="showPage('wake')">叫醒</div>
+                <div class="sub-item" id="sub-supervise" onclick="showPage('supervise')">监督</div>
+            </div>
+
+            <div class="nav-item" id="nav-team" onclick="showPage('team')">
+                <span class="icon">👥</span>
+                <span id="navTeamText">团队管理</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- 轻提示 Toast（替代难看的 alert 弹框） -->
+    <div id="toast" class="toast" aria-live="polite" aria-atomic="true"></div>
+
+    <!-- 右侧内容 -->
+    <div class="main-content">
+        <!-- 首页 -->
+        <div id="page_home" class="page">
+            <h2>控制台首页</h2>
+            <div class="user-info">当前用户：<span id="userName"></span></div>
+            <!-- 角色切换按钮（仅管理员可见） -->
+            <div id="roleSwitchArea">
+                <button onclick="switchUser('admin')">切换到管理员</button>
+                <button onclick="switchUser('staff01')">切换到员工1</button>
+                <button onclick="switchUser('staff02')">切换到员工2</button>
+            </div>
+        </div>
+
+        <!-- 叫醒页面 -->
+        <div id="page_wake" class="page">
+            <h2 id="wakePageTitle"
+                style="text-align: center; font-size: 24px; color: #1e293b; margin-bottom: 24px; font-weight: 600;">
+                叫醒订单管理</h2>
+
+            <!-- 搜索区域 -->
+            <div style="margin-bottom: 16px; display: flex; gap: 8px; flex-wrap: wrap; align-items: center;">
+                <input type="text" id="searchInput" placeholder="搜索：电话、时间、备注" style="flex: 1; min-width: 200px;">
+                <button onclick="searchOrders()">搜索</button>
+                <button onclick="clearSearch()">清空</button>
+            </div>
+
+            <!-- 管理员：单条上传区域（员工不可见） -->
+            <div id="adminUploadArea" class="admin-form" style="display:none;">
+                <input type="datetime-local" id="wakeTime" placeholder="选择叫醒时间">
+                <input type="text" id="phone" placeholder="11位手机号">
+                <input type="text" id="note" placeholder="备注信息">
+                <button onclick="addSingleOrder()">上传单个订单</button>
+            </div>
+
+            <!-- 管理员：批量识别上传区域（员工不可见） -->
+            <div id="batchUploadArea" class="admin-form" style="display:none; flex-direction: column;">
+                <h3 style="margin: 0 0 12px 0; font-size: 16px; color: #1e293b;">AI 批量识别上传</h3>
+                <textarea id="batchText" placeholder="粘贴订单文本（示例：
+① 15277143265 7:20
+② 早上七点半，18108510863
+③ 17506529179 8:05
+④ 13590847631，8點整，提醒我去大信坐車
+...">① 15277143265 7:20
+② 早上七点半，18108510863
+③ 17506529179 8:05
+④ 13590847631，8點整，提醒我去大信坐車
+⑤ 18953772567 上午9点20
+⑥ 17722277993，早9:30叫
+⑦ 18953772567 9点40
+⑧ 今天9:45，17371992416
+⑨ 18953772567 10点
+⑩ 18953772567 10点20
+⑪ 18953772567 10点40
+⑫ 18953772567 11点
+⑬ 18953772567 11点20
+⑭ 18953772567 11点40
+⑮ 18953772567 12点
+⑯ 18953772567 12点半</textarea>
+                <div style="display: flex; flex-wrap: wrap; gap: 12px;">
+                    <button onclick="parseBatchOrders()">识别订单</button>
+                    <button id="batchUploadBtn" disabled onclick="uploadBatchOrders()">批量上传</button>
+                </div>
+                <div id="parsePreview" class="preview-box"></div>
+            </div>
+
+            <!-- 管理员：删改按钮（员工不可见） -->
+            <div id="adminButtons" class="admin-buttons" style="display:none;">
+                <button class="danger" onclick="deleteSelected()">删除选中</button>
+                <button onclick="editSelected()">修改选中</button>
+            </div>
+
+            <!-- 员工：一键接单按钮（管理员不可见） -->
+            <div id="staffBatchTakeBtn" class="staff-buttons" style="display:none;">
+                <button class="warning" onclick="batchTakeOrders()">一键接单选中订单</button>
+            </div>
+
+            <!-- 员工端：卡片列表（管理员端不显示） -->
+            <div id="orderCards" class="order-cards"></div>
+
+            <!-- 订单表格 -->
+            <div class="table-wrapper">
+                <table>
+                    <tbody id="orderTable"></tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- 监督页面（预留） -->
+        <div id="page_supervise" class="page">
+            <h2>监督页面（待开发）</h2>
+        </div>
+
+        <!-- 团队管理/个人中心页面 -->
+        <div id="page_team" class="page">
+            <h2 id="teamPageTitle">团队管理</h2>
+            <div class="user-info">当前用户：<span id="teamUserName"></span></div>
+
+            <!-- 管理员：添加员工按钮 + 团队管理表格 -->
+            <div style="margin-bottom: 16px; display: none;" id="addStaffBtnContainer">
+                <button class="success" onclick="openAddStaffModal()">添加新员工</button>
+            </div>
+
+            <!-- 管理员：团队管理表格 -->
+            <div id="teamManagerArea" style="display: none;">
+                <div class="table-wrapper">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>选择</th>
+                                <th>员工账号</th>
+                                <th>员工姓名</th>
+                                <th>密码</th>
+                                <th>今日接单数</th>
+                                <th>累计余额（元）</th>
+                                <th>操作</th>
+                            </tr>
+                        </thead>
+                        <tbody id="teamTable"></tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- 员工：个人中心 -->
+            <div id="staffProfileArea" style="display: none;">
+                <!-- 个人统计 -->
+                <div class="admin-form" style="margin-bottom: 16px;">
+                    <div
+                        style="flex: 1; padding: 12px; border: 1px solid #e2e8f0; border-radius: 6px; margin-bottom: 8px;">
+                        <div style="font-size: 14px; color: #64748b;">今日接单数</div>
+                        <div style="font-size: 24px; font-weight: 600; color: #2563eb;" id="todayOrderCount">0</div>
+                    </div>
+                    <div style="flex: 1; padding: 12px; border: 1px solid #e2e8f0; border-radius: 6px; cursor: pointer;"
+                        id="balanceCard">
+                        <div style="font-size: 14px; color: #64748b;">累计余额</div>
+                        <div style="font-size: 24px; font-weight: 600; color: #2563eb;" id="totalBalance">0.00</div>
+                        <div style="font-size: 12px; color: #94a3b8; margin-top: 4px;">点击查看明细</div>
+                    </div>
+                </div>
+
+                <!-- 个人订单列表 -->
+                <div class="table-wrapper" id="profileTableWrapper">
+                    <table>
+                        <tbody id="profileOrderTable"></tbody>
+                    </table>
+                </div>
+
+                <!-- 个人订单卡片列表（移动端） -->
+                <div id="profileOrderCards" class="order-cards"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 新增员工弹窗 -->
+    <div class="modal-overlay" id="addStaffModal">
+        <div class="modal-box">
+            <h3>添加新员工</h3>
+            <div class="modal-form-item">
+                <label for="newStaffName">员工姓名</label>
+                <input type="text" id="newStaffName" placeholder="请输入员工姓名">
+            </div>
+            <div class="modal-form-item">
+                <label for="newStaffId">员工账号</label>
+                <input type="text" id="newStaffId" placeholder="请输入员工账号（如staff03）">
+            </div>
+            <div class="modal-form-item">
+                <label for="newStaffPwd">员工密码</label>
+                <input type="password" id="newStaffPwd" placeholder="请输入员工密码">
+            </div>
+            <div class="modal-footer">
+                <button onclick="closeAddStaffModal()" style="background-color: #64748b;">取消</button>
+                <button onclick="saveNewStaff()" class="success">确认添加</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 余额明细查询弹窗 -->
+    <div class="modal-overlay" id="salaryDetailModal">
+        <div class="modal-box" style="width: 90vw; max-width: 500px; max-height: 80vh; overflow-y: auto;">
+            <h3 id="salaryDetailTitle">余额明细</h3>
+            <div style="margin-bottom: 16px;">
+                <div style="font-size: 14px; color: #64748b;">当前余额</div>
+                <div style="font-size: 24px; font-weight: 600; color: #2563eb;" id="currentBalance">0.00</div>
+            </div>
+            <div style="margin-bottom: 16px; overflow-x: auto; max-height: 50vh;">
+                <table style="width: 100%; border-collapse: collapse; min-width: 400px;">
+                    <thead style="position: sticky; top: 0; background-color: #f8fafc;">
+                        <tr>
+                            <th
+                                style="padding: 12px; text-align: left; font-size: 13px; font-weight: 600; color: #64748b; text-transform: uppercase; letter-spacing: 0.5px; border-bottom: 2px solid #e2e8f0;">
+                                日期</th>
+                            <th
+                                style="padding: 12px; text-align: left; font-size: 13px; font-weight: 600; color: #64748b; text-transform: uppercase; letter-spacing: 0.5px; border-bottom: 2px solid #e2e8f0;">
+                                类型</th>
+                            <th
+                                style="padding: 12px; text-align: left; font-size: 13px; font-weight: 600; color: #64748b; text-transform: uppercase; letter-spacing: 0.5px; border-bottom: 2px solid #e2e8f0;">
+                                金额（元）</th>
+                            <th
+                                style="padding: 12px; text-align: left; font-size: 13px; font-weight: 600; color: #64748b; text-transform: uppercase; letter-spacing: 0.5px; border-bottom: 2px solid #e2e8f0;">
+                                描述</th>
+                        </tr>
+                    </thead>
+                    <tbody id="salaryDetailTable">
+                        <tr>
+                            <td colspan="4" style="text-align: center; padding: 20px; color: #64748b;">暂无余额变动记录</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+            <div class="modal-footer">
+                <button onclick="closeSalaryDetailModal()" style="background-color: #64748b;">关闭</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="config.js"></script>
+    <script src="utils.js"></script>
+    <script src="storage.js"></script>
+    <script src="order.js"></script>
+    <script src="staff.js"></script>
+    <script src="app.js"></script>
+</body>
+
+</html>

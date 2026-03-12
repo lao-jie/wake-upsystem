@@ -1,0 +1,123 @@
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+    font-family: "Microsoft YaHei", sans-serif;
+}
+
+body {
+    /* 全屏背景 */
+    background-image: url("bg.jpg");
+    background-size: cover;
+    background-position: center;
+    background-repeat: no-repeat;
+    /* 移动端上 fixed 容易闪烁，这里改为 scroll */
+    background-attachment: scroll;
+
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    min-height: 100vh;
+    padding: 16px;
+    /* 给手机留一点内边距，避免贴边 */
+}
+
+/* 背景半透明遮罩，让登录框更清晰 */
+body::before {
+    content: "";
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0);
+    z-index: -1;
+}
+
+.login-box {
+    background: rgba(255, 255, 255, 0.95);
+    padding: 28px 22px;
+    border-radius: 16px;
+    width: 360px;
+    max-width: 100%;
+    /* 核心：在窄屏时不超出屏幕 */
+    box-shadow: 0 8px 30px rgba(0, 0, 0, 0.15);
+    backdrop-filter: blur(4px);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+.title {
+    text-align: center;
+    font-size: 22px;
+    color: #222;
+    margin-bottom: 24px;
+    font-weight: 600;
+}
+
+.input-item {
+    margin-bottom: 16px;
+}
+
+input {
+    width: 100%;
+    padding: 12px 14px;
+    border: 1px solid #e0e0e0;
+    border-radius: 8px;
+    font-size: 14px;
+    outline: none;
+    transition: border-color 0.3s, box-shadow 0.3s;
+}
+
+input:focus {
+    border-color: #409eff;
+    box-shadow: 0 0 0 2px rgba(64, 158, 255, 0.15);
+}
+
+.login-btn {
+    width: 100%;
+    padding: 12px;
+    background: #409eff;
+    color: #fff;
+    border: none;
+    border-radius: 8px;
+    font-size: 16px;
+    cursor: pointer;
+    transition: background 0.3s;
+}
+
+.login-btn:active {
+    transform: scale(0.98);
+}
+
+.login-btn:hover {
+    background: #338eef;
+}
+
+.tip {
+    text-align: center;
+    margin-top: 14px;
+    font-size: 12px;
+    color: #999;
+}
+
+/* 额外移动端优化 */
+@media (max-width: 480px) {
+    .login-box {
+        padding: 24px 18px;
+        border-radius: 12px;
+        box-shadow: 0 4px 18px rgba(0, 0, 0, 0.12);
+    }
+
+    .title {
+        font-size: 20px;
+        margin-bottom: 20px;
+    }
+
+    input {
+        font-size: 14px;
+    }
+
+    .login-btn {
+        font-size: 15px;
+    }
+}
