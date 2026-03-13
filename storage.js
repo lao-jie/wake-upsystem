@@ -37,7 +37,7 @@ async function saveOrders(orders) {
 
         // 确保订单数据结构正确，使用数据库字段名
         const validOrders = orders.map(order => ({
-            id: order.id || Date.now().toString() + Math.floor(Math.random() * 1000), // 生成唯一ID
+            id: order.id || Math.floor(Date.now() / 1000), // 使用时间戳作为ID，避免超出整数范围
             waketime: order.waketime,
             phone: order.phone,
             note: order.note || '',
@@ -49,6 +49,7 @@ async function saveOrders(orders) {
             salarysettled: Boolean(order.salarysettled || false),
             submittime: order.submittime || getChinaTime().toISOString()
         }));
+
 
         // 只有在有订单时才进行数据库操作
         if (validOrders.length > 0) {
