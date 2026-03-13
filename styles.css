@@ -437,14 +437,30 @@ body.is-staff #page_wake td:nth-child(10) {
 .order-cards {
     display: none;
     gap: 12px;
+    grid-template-columns: 1fr;
 }
 
 body.is-staff.is-mobile #page_wake .table-wrapper {
-    display: none;
+    display: none !important;
 }
 
 body.is-staff.is-mobile #page_wake .order-cards {
-    display: grid;
+    display: grid !important;
+    gap: 12px;
+    margin-bottom: 16px;
+}
+
+/* 确保订单卡片在移动端正确显示 */
+body.is-staff.is-mobile #page_wake #orderCards {
+    display: grid !important;
+    gap: 12px;
+}
+
+/* 个人中心移动端卡片 */
+body.is-staff.is-mobile #staffProfileArea #profileOrderCards {
+    display: grid !important;
+    gap: 12px;
+    margin-top: 16px;
 }
 
 .order-card {
