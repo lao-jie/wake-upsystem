@@ -32,7 +32,9 @@ function generateFixedSerial(orders) {
     // 按日期分组
     const ordersByDate = {};
     orders.forEach(order => {
-        const orderDate = new Date(order.submittime).toLocaleDateString();
+        // 处理未定义的submittime
+        const submitTime = order.submittime ? new Date(order.submittime) : new Date();
+        const orderDate = submitTime.toLocaleDateString();
         if (!ordersByDate[orderDate]) {
             ordersByDate[orderDate] = [];
         }
@@ -49,8 +51,9 @@ function generateFixedSerial(orders) {
             if (timeCompare !== 0) {
                 return timeCompare;
             }
-            const submitTimeA = new Date(a.submittime);
-            const submitTimeB = new Date(b.submittime);
+            // 处理未定义的submittime
+            const submitTimeA = a.submittime ? new Date(a.submittime) : new Date(0);
+            const submitTimeB = b.submittime ? new Date(b.submittime) : new Date(0);
             return submitTimeA - submitTimeB;
         });
 
