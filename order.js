@@ -4,13 +4,13 @@ async function loadOrders() {
     let allOrders = await getOrders();
     console.log('获取到订单数量:', allOrders.length);
 
-    // 去重处理：根据waketime、phone和submittime的组合来判断重复订单
+    // 去重处理：根据waketime和phone的组合来判断重复订单（更宽松的去重条件）
     const uniqueOrders = [];
     const orderKeys = new Set();
 
     allOrders.forEach(order => {
-        // 创建唯一键：叫醒时间 + 手机号 + 提交时间
-        const key = `${order.waketime}-${order.phone}-${order.submittime}`;
+        // 创建唯一键：叫醒时间 + 手机号（忽略提交时间，因为提交时间可能不同）
+        const key = `${order.waketime}-${order.phone}`;
         if (!orderKeys.has(key)) {
             orderKeys.add(key);
             uniqueOrders.push(order);
@@ -19,17 +19,24 @@ async function loadOrders() {
 
     console.log('去重后订单数量:', uniqueOrders.length);
 
-    // 只有在订单数量发生变化时才重新生成序号并保存
-    if (uniqueOrders.length !== allOrders.length) {
+    // 确保至少有一个订单，避免清空数据库
+    if (uniqueOrders.length === 0 && allOrders.length > 0) {
+        console.log('去重后订单为空，使用原始订单');
+        allOrders = allOrders;
+    } else {
         allOrders = uniqueOrders;
-        allOrders = generateFixedSerial(allOrders);
-        console.log('生成序号后订单数量:', allOrders.length);
+    }
+
+    // 生成序号
+    allOrders = generateFixedSerial(allOrders);
+    console.log('生成序号后订单数量:', allOrders.length);
+
+    // 只有在订单数量发生变化时才保存
+    if (uniqueOrders.length !== allOrders.length) {
         await saveOrders(allOrders);
         console.log('订单保存完成');
     } else {
-        // 只是重新生成序号，不保存（避免重复插入）
-        allOrders = generateFixedSerial(allOrders);
-        console.log('仅生成序号，未保存');
+        console.log('无重复订单，不需要保存');
     }
 
     let displayOrders = [];
