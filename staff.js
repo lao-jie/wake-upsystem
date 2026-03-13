@@ -133,22 +133,32 @@ async function punishStaff(staffId) {
 
 // 渲染个人中心
 async function renderProfilePage() {
+    console.log('开始渲染个人中心');
     const allOrders = await getOrders();
+    console.log('获取到订单数量:', allOrders.length);
+
     const myOrders = allOrders.filter(order => order.staffid === user.id);
+    console.log('我的订单数量:', myOrders.length);
 
     const today = new Date().toLocaleDateString();
+    console.log('今天日期:', today);
+
     const todayCount = myOrders.filter(order =>
         order.staffid === user.id &&
         (order.status === "进行中" || order.status === "已完成")
     ).length;
+    console.log('今日接单数:', todayCount);
     document.getElementById("todayOrderCount").innerText = todayCount;
 
     const staffList = await getStaffList();
+    console.log('员工列表数量:', staffList.length);
     const myInfo = staffList.find(staff => staff.id === user.id) || { salary: 0 };
+    console.log('我的信息:', myInfo);
     document.getElementById("totalBalance").innerText = myInfo.salary.toFixed(2);
 
     // 无论是否为移动端，都尝试渲染订单
     try {
+        console.log('渲染订单，移动端:', mobileMQ.matches, '员工:', isStaff);
         if (isStaff && mobileMQ.matches) {
             renderProfileCards(myOrders);
         } else {
@@ -165,9 +175,11 @@ async function renderProfilePage() {
             let html = "";
             // 按日期倒序排列
             const dates = Object.keys(ordersByDate).sort((a, b) => new Date(b) - new Date(a));
+            console.log('订单日期分组:', dates);
 
             dates.forEach(date => {
                 const dateOrders = ordersByDate[date];
+                console.log('日期', date, '的订单数量:', dateOrders.length);
                 html += `
                 <tr class="date-collapse-header">
                     <td colspan="6" style="padding: 0;">
@@ -201,7 +213,7 @@ async function renderProfilePage() {
                         <td style="padding: 12px; width: 60px;">${order.serialnumber}</td>
                         <td style="padding: 12px;">${order.waketime.split('T')[1]}</td>
                         <td style="padding: 12px;">${order.phone}</td>
-                        <td style="padding: 12px;">${(order.amount || order.money).toFixed(2)}</td>
+                        <td style="padding: 12px;">${(order.amount || order.money || 0).toFixed(2)}</td>
                         <td style="padding: 12px;"><span class="status-badge ${order.status === '待接单' ? 'status-pending' : order.status === '进行中' ? 'status-processing' : 'status-done'}">${order.status}</span></td>
                         <td style="padding: 12px;">${settleStatus}</td>
                     </tr>
