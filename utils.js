@@ -1,9 +1,12 @@
-// 格式化时间
+// 格式化时间（使用中国时区 UTC+8）
 function formatTime(timeStr) {
     const d = new Date(timeStr);
-    return d.toLocaleString("zh-CN", {
+    // 手动调整为 UTC+8
+    const chinaTime = new Date(d.getTime() + 8 * 60 * 60 * 1000);
+    return chinaTime.toLocaleString("zh-CN", {
         year: "numeric", month: "2-digit", day: "2-digit",
-        hour: "2-digit", minute: "2-digit", second: "2-digit"
+        hour: "2-digit", minute: "2-digit", second: "2-digit",
+        timeZone: "Asia/Shanghai"
     });
 }
 
