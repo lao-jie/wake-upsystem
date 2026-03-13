@@ -37,7 +37,7 @@ async function saveOrders(orders) {
 
         // 确保订单数据结构正确，使用数据库字段名
         const validOrders = orders.map(order => ({
-            id: order.id || Date.now(), // 使用毫秒级时间戳作为ID，确保唯一性
+            id: order.id || Math.floor(Math.random() * 1000000), // 使用6位随机数作为ID，避免超出整数范围
             waketime: order.waketime,
             phone: order.phone,
             note: order.note || '',
@@ -49,6 +49,7 @@ async function saveOrders(orders) {
             salarysettled: Boolean(order.salarysettled || false),
             submittime: order.submittime || getChinaTime().toISOString()
         }));
+
 
 
 
