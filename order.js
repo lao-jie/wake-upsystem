@@ -31,13 +31,10 @@ async function loadOrders() {
     allOrders = generateFixedSerial(allOrders);
     console.log('生成序号后订单数量:', allOrders.length);
 
-    // 只有在订单数量发生变化时才保存
-    if (uniqueOrders.length !== allOrders.length) {
-        await saveOrders(allOrders);
-        console.log('订单保存完成');
-    } else {
-        console.log('无重复订单，不需要保存');
-    }
+    // 总是保存订单，确保数据同步到数据库
+    await saveOrders(allOrders);
+    console.log('订单保存完成');
+
 
     let displayOrders = [];
     const today = new Date();
