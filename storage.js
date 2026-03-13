@@ -49,21 +49,24 @@ async function saveOrders(orders) {
             submittime: order.submittime || getChinaTime().toISOString()
         }));
 
-        // 先清空表
-        const deleteResult = await supabaseClient.from('wake_orders').delete().neq('id', 0);
-        if (deleteResult.error) {
-            throw new Error(`删除订单失败：${deleteResult.error.message}`);
-        }
-
-        // 插入新订单
+        // 只有在有订单时才清空表并插入新订单
         if (validOrders.length > 0) {
+            // 先清空表
+            const deleteResult = await supabaseClient.from('wake_orders').delete().neq('id', 0);
+            if (deleteResult.error) {
+                throw new Error(`删除订单失败：${deleteResult.error.message}`);
+            }
+
+            // 插入新订单
             const insertResult = await supabaseClient.from('wake_orders').insert(validOrders);
             if (insertResult.error) {
                 throw new Error(`插入订单失败：${insertResult.error.message}`);
             }
-        }
 
-        console.log("Supabase 保存订单成功");
+            console.log("Supabase 保存订单成功");
+        } else {
+            console.log("订单数量为0，跳过数据库操作");
+        }
     } catch (e) {
         console.error("Supabase 保存订单失败，仅保存到本地：", e);
     }
