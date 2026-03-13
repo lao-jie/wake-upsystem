@@ -1,13 +1,22 @@
 // 加载订单
 async function loadOrders() {
+    console.log('开始加载订单');
     let allOrders = await getOrders();
+    console.log('获取到订单数量:', allOrders.length);
+
     allOrders = generateFixedSerial(allOrders);
+    console.log('生成序号后订单数量:', allOrders.length);
+
     await saveOrders(allOrders);
+    console.log('订单保存完成');
 
     let displayOrders = [];
     const today = new Date().toLocaleDateString();
+    console.log('今天日期:', today, '用户角色:', isAdmin ? 'admin' : 'staff', '用户ID:', user.id);
+
     if (isAdmin) {
         displayOrders = [...allOrders].sort((a, b) => a.serialnumber - b.serialnumber);
+        console.log('管理员订单数量:', displayOrders.length);
     } else if (isStaff) {
         displayOrders = allOrders.filter(item => {
             if (item.status === "待接单") {
@@ -25,6 +34,7 @@ async function loadOrders() {
             // 然后按序号排序
             return a.serialnumber - b.serialnumber;
         });
+        console.log('员工订单数量:', displayOrders.length);
     }
 
     // 保存原始订单数据用于搜索
@@ -34,6 +44,7 @@ async function loadOrders() {
 
 // 渲染订单
 function renderOrders(orders) {
+    console.log('渲染订单:', orders.length, '个订单，移动端:', mobileMQ.matches, '员工:', isStaff);
     if (isStaff && mobileMQ.matches) {
         renderCards(orders);
     } else {
@@ -44,10 +55,14 @@ function renderOrders(orders) {
 // 渲染卡片（移动端）
 function renderCards(orders) {
     try {
+        console.log('渲染移动端卡片，订单数量:', orders.length);
         const container = document.getElementById("orderCards");
+        console.log('订单卡片容器:', container);
+
         if (!container) {
             // 如果没有找到容器，尝试使用表格容器
             const tableContainer = document.getElementById("orderTable");
+            console.log('表格容器:', tableContainer);
             if (tableContainer) {
                 // 渲染简单的订单列表
                 let html = "";
@@ -87,7 +102,7 @@ function renderCards(orders) {
                             <td>${item.phone}</td>
                             <td>${item.note || '-'}</td>
                             <td><span class="status-badge ${statusClass}">${item.status}</span></td>
-                            <td>${(item.amount || item.money).toFixed(2)} 元</td>
+                            <td>${(item.amount || item.money || 0).toFixed(2)} 元</td>
                             <td>${actionHtml}</td>
                         </tr>
                         `;
@@ -101,54 +116,59 @@ function renderCards(orders) {
         }
 
         let html = "";
-        orders.forEach(item => {
-            let statusClass = "";
-            switch (item.status) {
-                case "待接单": statusClass = "status-pending"; break;
-                case "进行中": statusClass = "status-processing"; break;
-                case "已完成": statusClass = "status-done"; break;
-            }
+        if (orders.length > 0) {
+            orders.forEach(item => {
+                let statusClass = "";
+                switch (item.status) {
+                    case "待接单": statusClass = "status-pending"; break;
+                    case "进行中": statusClass = "status-processing"; break;
+                    case "已完成": statusClass = "status-done"; break;
+                }
 
-            let actionHtml = "";
-            if (isStaff && item.status === "待接单") {
-                actionHtml = `<button class="warning" onclick="takeOrder(${item.serialnumber}, '${item.waketime}', '${item.phone}')">接单</button>`;
-            } else {
-                actionHtml = `<span class="status-badge ${statusClass}">${item.status}</span>`;
-            }
+                let actionHtml = "";
+                if (isStaff && item.status === "待接单") {
+                    actionHtml = `<button class="warning" onclick="takeOrder(${item.serialnumber}, '${item.waketime}', '${item.phone}')">接单</button>`;
+                } else {
+                    actionHtml = `<span class="status-badge ${statusClass}">${item.status}</span>`;
+                }
 
-            const showTime = item.waketime.includes('T') ? item.waketime.split('T')[1] : item.waketime;
+                const showTime = item.waketime.includes('T') ? item.waketime.split('T')[1] : item.waketime;
 
-            html += `
-            <div class="order-card">
-                <div class="order-card-header">
-                    <div class="order-card-title">
-                        <input type="checkbox" class="order-checkbox" value="${item.serialnumber}" ${item.status !== "待接单" ? "data-status='processed'" : ""}>
-                        <span class="serial-number">${item.serialnumber}</span>
-                        <span class="time">${showTime}</span>
+                html += `
+                <div class="order-card">
+                    <div class="order-card-header">
+                        <div class="order-card-title">
+                            <input type="checkbox" class="order-checkbox" value="${item.serialnumber}" ${item.status !== "待接单" ? "data-status='processed'" : ""}>
+                            <span class="serial-number">${item.serialnumber}</span>
+                            <span class="time">${showTime}</span>
+                        </div>
+                        <div style="display:flex;align-items:center;gap:8px;">
+                            <span class="status-badge ${statusClass}">${item.status}</span>
+                            <span class="order-money">${(item.amount || item.money || 0).toFixed(2)} 元</span>
+                        </div>
                     </div>
-                    <div style="display:flex;align-items:center;gap:8px;">
-                        <span class="status-badge ${statusClass}">${item.status}</span>
-                        <span class="order-money">${(item.amount || item.money).toFixed(2)} 元</span>
+                    <div class="order-card-body">
+                        <div class="order-kv">
+                            <div class="k">电话</div>
+                            <div class="v">${item.phone}</div>
+                        </div>
+                        <div class="order-kv">
+                            <div class="k">备注</div>
+                            <div class="v">${item.note || '-'}</div>
+                        </div>
                     </div>
-                </div>
-                <div class="order-card-body">
-                    <div class="order-kv">
-                        <div class="k">电话</div>
-                        <div class="v">${item.phone}</div>
+                    <div class="order-card-footer">
+                        <div style="color:#64748b;font-size:12px;">勾选后可一键接单</div>
+                        <div>${actionHtml}</div>
                     </div>
-                    <div class="order-kv">
-                        <div class="k">备注</div>
-                        <div class="v">${item.note || '-'}</div>
-                    </div>
-                </div>
-                <div class="order-card-footer">
-                    <div style="color:#64748b;font-size:12px;">勾选后可一键接单</div>
-                    <div>${actionHtml}</div>
-                </div>
-            </div>`;
-        });
+                </div>`;
+            });
+        } else {
+            html = `<div style="color:#64748b;font-size:14px;padding:12px;">暂无订单</div>`;
+        }
 
-        container.innerHTML = html || `<div style="color:#64748b;font-size:14px;padding:12px;">暂无订单</div>`;
+        container.innerHTML = html;
+        console.log('移动端卡片渲染完成');
     } catch (error) {
         console.error("渲染订单卡片失败：", error);
     }
