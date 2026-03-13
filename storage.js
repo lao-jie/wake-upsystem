@@ -29,11 +29,10 @@ async function getOrders() {
 
 async function saveOrders(orders) {
     try {
-        // 获取中国时间（UTC+8）
+        // 获取当前时间（UTC）
         function getChinaTime() {
             const now = new Date();
-            const chinaTime = new Date(now.getTime() + 8 * 60 * 60 * 1000);
-            return chinaTime;
+            return now;
         }
 
         // 确保订单数据结构正确，使用数据库字段名
