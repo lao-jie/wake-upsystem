@@ -140,12 +140,16 @@ async function renderProfilePage() {
     const myOrders = allOrders.filter(order => order.staffid === user.id);
     console.log('我的订单数量:', myOrders.length);
 
-    const today = new Date().toLocaleDateString();
-    console.log('今天日期:', today);
+    const today = new Date();
+    const todayStart = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+    const todayEnd = new Date(today.getFullYear(), today.getMonth(), today.getDate() + 1);
+    console.log('今天日期:', today.toLocaleDateString());
 
     const todayCount = myOrders.filter(order =>
         order.staffid === user.id &&
-        (order.status === "进行中" || order.status === "已完成")
+        (order.status === "进行中" || order.status === "已完成") &&
+        new Date(order.submittime) >= todayStart &&
+        new Date(order.submittime) < todayEnd
     ).length;
     console.log('今日接单数:', todayCount);
     document.getElementById("todayOrderCount").innerText = todayCount;
@@ -358,14 +362,14 @@ function renderProfileCards(orders) {
 }
 
 // 添加薪资
-async function addSalary(staffid, amount) {
+async function addSalary(staffid, amount, completedTime = new Date()) {
     let staffList = await getStaffList();
     const index = staffList.findIndex(staff => staff.id === staffid);
     if (index !== -1) {
         staffList[index].salary = (staffList[index].salary || 0) + amount;
         await saveStaffList(staffList);
         // 添加余额变动记录
-        await addSalaryDetail(staffid, amount, '订单收入', '订单完成自动结算');
+        await addSalaryDetail(staffid, amount, '订单收入', '订单完成自动结算', completedTime);
     }
 }
 
