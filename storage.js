@@ -164,7 +164,7 @@ async function saveSalaryDetails(details) {
 }
 
 // 添加余额变动记录
-async function addSalaryDetail(staffid, amount, type, description) {
+async function addSalaryDetail(staffid, amount, type, description, completedTime = new Date()) {
     const details = await getSalaryDetails();
     const newDetail = {
         id: Date.now().toString(),
@@ -172,7 +172,7 @@ async function addSalaryDetail(staffid, amount, type, description) {
         amount: amount,
         type: type, // 类型：订单收入、奖励、惩罚、结算
         description: description,
-        createdat: new Date().toISOString()
+        createdat: completedTime.toISOString()
     };
     details.unshift(newDetail);
     await saveSalaryDetails(details);
