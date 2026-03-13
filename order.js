@@ -555,11 +555,10 @@ async function cleanExpiredOrders() {
     return false;
 }
 
-// 获取中国时间（UTC+8）
+// 获取当前时间（UTC）
 function getChinaTime() {
     const now = new Date();
-    const chinaTime = new Date(now.getTime() + 8 * 60 * 60 * 1000);
-    return chinaTime;
+    return now;
 }
 
 // 添加单个订单
