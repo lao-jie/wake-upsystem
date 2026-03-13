@@ -1,12 +1,17 @@
 // Supabase 读写
 async function getOrders() {
+    console.log('开始从数据库获取订单');
     try {
         const { data, error } = await supabaseClient
             .from('wake_orders')
             .select('*')
             .order('submittime', { ascending: true });
 
+        console.log('数据库返回数据:', data);
+        console.log('数据库返回错误:', error);
+
         if (!error && data) {
+            console.log('成功从数据库获取订单，数量:', data.length);
             // 同步到本地存储
             localStorage.setItem("wakeOrders", JSON.stringify(data));
             return data;
@@ -16,7 +21,10 @@ async function getOrders() {
     } catch (e) {
         console.error("Supabase 读取订单异常：", e);
     }
-    return JSON.parse(localStorage.getItem("wakeOrders") || "[]");
+    // 从本地存储获取
+    const localOrders = JSON.parse(localStorage.getItem("wakeOrders") || "[]");
+    console.log('从本地存储获取订单，数量:', localOrders.length);
+    return localOrders;
 }
 
 async function saveOrders(orders) {
