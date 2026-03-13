@@ -138,7 +138,8 @@ async function renderProfilePage() {
 
     const today = new Date().toLocaleDateString();
     const todayCount = myOrders.filter(order =>
-        new Date(order.submittime).toLocaleDateString() === today
+        order.staffid === user.id &&
+        (order.status === "进行中" || order.status === "已完成")
     ).length;
     document.getElementById("todayOrderCount").innerText = todayCount;
 
@@ -373,7 +374,7 @@ async function openSalaryDetailModal(staffId) {
 
     // 获取余额明细
     const details = await getSalaryDetails();
-    const staffDetails = details.filter(d => d.staffId === staffId);
+    const staffDetails = details.filter(d => d.staffid === staffId);
 
     // 渲染明细表格
     let html = "";
@@ -392,7 +393,7 @@ async function openSalaryDetailModal(staffId) {
 
             html += `
             <tr>
-                <td>${formatTime(detail.createdAt)}</td>
+                <td>${formatTime(detail.createdat)}</td>
                 <td>${typeText}</td>
                 <td style="${amountClass}">${amountText}</td>
                 <td>${detail.description}</td>
