@@ -11,8 +11,10 @@ async function loadOrders() {
     console.log('订单保存完成');
 
     let displayOrders = [];
-    const today = new Date().toLocaleDateString();
-    console.log('今天日期:', today, '用户角色:', isAdmin ? 'admin' : 'staff', '用户ID:', user.id);
+    const today = new Date();
+    const todayStart = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+    const todayEnd = new Date(today.getFullYear(), today.getMonth(), today.getDate() + 1);
+    console.log('今天日期:', today.toLocaleDateString(), '用户角色:', isAdmin ? 'admin' : 'staff', '用户ID:', user.id);
 
     if (isAdmin) {
         displayOrders = [...allOrders].sort((a, b) => a.serialnumber - b.serialnumber);
@@ -23,8 +25,8 @@ async function loadOrders() {
                 return true;
             }
             if (item.staffid && item.staffid === user.id) {
-                const orderDate = new Date(item.submittime).toLocaleDateString();
-                return orderDate === today;
+                const orderDate = new Date(item.submittime);
+                return orderDate >= todayStart && orderDate < todayEnd;
             }
             return false;
         }).sort((a, b) => {
@@ -45,10 +47,72 @@ async function loadOrders() {
 // 渲染订单
 function renderOrders(orders) {
     console.log('渲染订单:', orders.length, '个订单，移动端:', mobileMQ.matches, '员工:', isStaff);
-    if (isStaff && mobileMQ.matches) {
-        renderCards(orders);
-    } else {
-        renderTable(orders);
+    // 确保无论是否为移动端，都能正确渲染订单
+    try {
+        if (isStaff && mobileMQ.matches) {
+            console.log('渲染移动端卡片');
+            renderCards(orders);
+        } else {
+            console.log('渲染桌面端表格');
+            renderTable(orders);
+        }
+    } catch (error) {
+        console.error('渲染订单失败:', error);
+        // 降级处理：尝试使用表格渲染
+        try {
+            console.log('降级渲染为表格');
+            const tableContainer = document.getElementById("orderTable");
+            if (tableContainer) {
+                let html = "";
+                if (orders.length > 0) {
+                    html += `
+                    <tr>
+                        <th>序号</th>
+                        <th>叫醒时间</th>
+                        <th>电话</th>
+                        <th>备注</th>
+                        <th>状态</th>
+                        <th>金额</th>
+                        <th>操作</th>
+                    </tr>
+                    `;
+                    orders.forEach(item => {
+                        let statusClass = "";
+                        switch (item.status) {
+                            case "待接单": statusClass = "status-pending"; break;
+                            case "进行中": statusClass = "status-processing"; break;
+                            case "已完成": statusClass = "status-done"; break;
+                        }
+
+                        let actionHtml = "";
+                        if (isStaff && item.status === "待接单") {
+                            actionHtml = `<button class="warning" onclick="takeOrder(${item.serialnumber}, '${item.waketime}', '${item.phone}')">接单</button>`;
+                        } else {
+                            actionHtml = `<span class="status-badge ${statusClass}">${item.status}</span>`;
+                        }
+
+                        const showTime = item.waketime.includes('T') ? item.waketime.split('T')[1] : item.waketime;
+
+                        html += `
+                        <tr>
+                            <td>${item.serialnumber}</td>
+                            <td>${showTime}</td>
+                            <td>${item.phone}</td>
+                            <td>${item.note || '-'}</td>
+                            <td><span class="status-badge ${statusClass}">${item.status}</span></td>
+                            <td>${(item.amount || item.money || 0).toFixed(2)} 元</td>
+                            <td>${actionHtml}</td>
+                        </tr>
+                        `;
+                    });
+                } else {
+                    html = `<tr><td colspan="7" style="text-align: center; padding: 20px; color: #64748b;">暂无订单</td></tr>`;
+                }
+                tableContainer.innerHTML = html;
+            }
+        } catch (fallbackError) {
+            console.error('降级渲染也失败:', fallbackError);
+        }
     }
 }
 
