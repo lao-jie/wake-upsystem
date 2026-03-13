@@ -63,6 +63,13 @@ async function resetStaffPassword(staffId) {
     }
 }
 
+// 获取中国时间（UTC+8）
+function getChinaTime() {
+    const now = new Date();
+    const chinaTime = new Date(now.getTime() + 8 * 60 * 60 * 1000);
+    return chinaTime;
+}
+
 // 结算员工薪资
 async function settleStaffSalary(staffId) {
     if (!confirm("确定要结算该员工薪资并清零余额吗？")) return;
@@ -74,7 +81,7 @@ async function settleStaffSalary(staffId) {
         staffList[index].salary = 0;
         await saveStaffList(staffList);
         // 添加余额变动记录（结算为负数）
-        await addSalaryDetail(staffId, -settledAmount, '结算', '管理员手动结算');
+        await addSalaryDetail(staffId, -settledAmount, '结算', '管理员手动结算', getChinaTime());
         renderTeamTable();
         alert(`已结算该员工薪资 ${settledAmount.toFixed(2)} 元，余额已清零！`);
     }
@@ -96,7 +103,7 @@ async function rewardStaff(staffId) {
         staffList[index].salary = (staffList[index].salary || 0) + amount;
         await saveStaffList(staffList);
         // 添加余额变动记录
-        await addSalaryDetail(staffId, amount, '奖励', '管理员手动奖励');
+        await addSalaryDetail(staffId, amount, '奖励', '管理员手动奖励', getChinaTime());
         renderTeamTable();
         alert(`已奖励该员工 ${amount.toFixed(2)} 元，当前余额：${staffList[index].salary.toFixed(2)} 元`);
     }
@@ -125,7 +132,7 @@ async function punishStaff(staffId) {
         staffList[index].salary = Math.max(0, currentSalary - amount);
         await saveStaffList(staffList);
         // 添加余额变动记录（惩罚为负数）
-        await addSalaryDetail(staffId, -amount, '惩罚', '管理员手动惩罚');
+        await addSalaryDetail(staffId, -amount, '惩罚', '管理员手动惩罚', getChinaTime());
         renderTeamTable();
         alert(`已扣除该员工 ${amount.toFixed(2)} 元，当前余额：${staffList[index].salary.toFixed(2)} 元`);
     }
