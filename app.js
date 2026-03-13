@@ -30,7 +30,15 @@ const isStaff = user.role === "staff";
 document.body.classList.toggle("is-staff", isStaff);
 const mobileMQ = window.matchMedia("(max-width: 768px)");
 function applyMobileFlag() {
-    document.body.classList.toggle("is-mobile", mobileMQ.matches);
+    const isMobile = mobileMQ.matches;
+    console.log('移动端检测:', isMobile);
+    document.body.classList.toggle("is-mobile", isMobile);
+    // 强制应用移动端样式类，确保即使在移动端也能正确显示
+    if (isMobile) {
+        document.body.classList.add("is-mobile");
+    } else {
+        document.body.classList.remove("is-mobile");
+    }
 }
 applyMobileFlag();
 if (mobileMQ.addEventListener) {
@@ -45,6 +53,11 @@ if (mobileMQ.addEventListener) {
         if (currentPage === "wake") loadOrders();
     });
 }
+
+// 初始化时强制检查并应用移动端状态
+console.log('初始化时用户角色:', user.role, 'isStaff:', isStaff, 'isAdmin:', isAdmin);
+document.body.classList.toggle("is-staff", isStaff);
+console.log('body类:', document.body.className);
 document.getElementById("userName").innerText = user.name;
 document.getElementById("teamUserName").innerText = user.name;
 
