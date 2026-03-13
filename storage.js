@@ -37,6 +37,7 @@ async function saveOrders(orders) {
 
         // 确保订单数据结构正确，使用数据库字段名
         const validOrders = orders.map(order => ({
+            id: order.id || Date.now().toString() + Math.floor(Math.random() * 1000), // 生成唯一ID
             waketime: order.waketime,
             phone: order.phone,
             note: order.note || '',
@@ -49,18 +50,44 @@ async function saveOrders(orders) {
             submittime: order.submittime || getChinaTime().toISOString()
         }));
 
-        // 只有在有订单时才清空表并插入新订单
+        // 只有在有订单时才进行数据库操作
         if (validOrders.length > 0) {
-            // 先清空表
-            const deleteResult = await supabaseClient.from('wake_orders').delete().neq('id', 0);
-            if (deleteResult.error) {
-                throw new Error(`删除订单失败：${deleteResult.error.message}`);
+            // 先获取数据库中已有的订单
+            const { data: existingOrders, error: fetchError } = await supabaseClient
+                .from('wake_orders')
+                .select('id');
+
+            if (fetchError) {
+                throw new Error(`获取现有订单失败：${fetchError.message}`);
             }
 
+            // 提取现有订单的ID
+            const existingIds = new Set(existingOrders?.map(order => order.id) || []);
+
+            // 分离新订单和现有订单
+            const newOrders = validOrders.filter(order => !existingIds.has(order.id));
+            const existingOrdersToUpdate = validOrders.filter(order => existingIds.has(order.id));
+
+            console.log(`新订单数量：${newOrders.length}，待更新订单数量：${existingOrdersToUpdate.length}`);
+
             // 插入新订单
-            const insertResult = await supabaseClient.from('wake_orders').insert(validOrders);
-            if (insertResult.error) {
-                throw new Error(`插入订单失败：${insertResult.error.message}`);
+            if (newOrders.length > 0) {
+                const insertResult = await supabaseClient.from('wake_orders').insert(newOrders);
+                if (insertResult.error) {
+                    throw new Error(`插入新订单失败：${insertResult.error.message}`);
+                }
+                console.log(`成功插入 ${newOrders.length} 个新订单`);
+            }
+
+            // 更新现有订单
+            for (const order of existingOrdersToUpdate) {
+                const updateResult = await supabaseClient
+                    .from('wake_orders')
+                    .update(order)
+                    .eq('id', order.id);
+                if (updateResult.error) {
+                    console.error(`更新订单 ${order.id} 失败：${updateResult.error.message}`);
+                }
             }
 
             console.log("Supabase 保存订单成功");
