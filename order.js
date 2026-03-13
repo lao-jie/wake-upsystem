@@ -555,6 +555,13 @@ async function cleanExpiredOrders() {
     return false;
 }
 
+// 获取中国时间（UTC+8）
+function getChinaTime() {
+    const now = new Date();
+    const chinaTime = new Date(now.getTime() + 8 * 60 * 60 * 1000);
+    return chinaTime;
+}
+
 // 添加单个订单
 async function addSingleOrder() {
     const waketime = document.getElementById("wakeTime").value;
@@ -563,7 +570,7 @@ async function addSingleOrder() {
 
     if (!waketime) return alert("请选择叫醒时间！");
     const wakeTimeDate = new Date(waketime);
-    const now = new Date();
+    const now = getChinaTime();
     if (wakeTimeDate < now) {
         alert("不能选择过去的时间作为叫醒时间！");
         return;
@@ -583,7 +590,7 @@ async function addSingleOrder() {
         staffid: "",
         staffname: "",
         salarysettled: false,
-        submittime: new Date().toISOString()
+        submittime: getChinaTime().toISOString()
     };
 
     let allOrders = await getOrders();
@@ -750,7 +757,7 @@ async function parseBatchOrders() {
                 staffid: "",
                 staffname: "",
                 salarysettled: false,
-                submittime: new Date().toISOString()
+                submittime: getChinaTime().toISOString()
             };
         });
 
