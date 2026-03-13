@@ -73,16 +73,16 @@ function renderCards(orders) {
 
                         let actionHtml = "";
                         if (isStaff && item.status === "待接单") {
-                            actionHtml = `<button class="warning" onclick="takeOrder(${item.serialNumber}, '${item.wakeTime}', '${item.phone}')">接单</button>`;
+                            actionHtml = `<button class="warning" onclick="takeOrder(${item.serialnumber}, '${item.waketime}', '${item.phone}')">接单</button>`;
                         } else {
                             actionHtml = `<span class="status-badge ${statusClass}">${item.status}</span>`;
                         }
 
-                        const showTime = item.wakeTime.includes('T') ? item.wakeTime.split('T')[1] : item.wakeTime;
+                        const showTime = item.waketime.includes('T') ? item.waketime.split('T')[1] : item.waketime;
 
                         html += `
                         <tr>
-                            <td>${item.serialNumber}</td>
+                            <td>${item.serialnumber}</td>
                             <td>${showTime}</td>
                             <td>${item.phone}</td>
                             <td>${item.note || '-'}</td>
@@ -111,19 +111,19 @@ function renderCards(orders) {
 
             let actionHtml = "";
             if (isStaff && item.status === "待接单") {
-                actionHtml = `<button class="warning" onclick="takeOrder(${item.serialNumber}, '${item.wakeTime}', '${item.phone}')">接单</button>`;
+                actionHtml = `<button class="warning" onclick="takeOrder(${item.serialnumber}, '${item.waketime}', '${item.phone}')">接单</button>`;
             } else {
                 actionHtml = `<span class="status-badge ${statusClass}">${item.status}</span>`;
             }
 
-            const showTime = item.wakeTime.includes('T') ? item.wakeTime.split('T')[1] : item.wakeTime;
+            const showTime = item.waketime.includes('T') ? item.waketime.split('T')[1] : item.waketime;
 
             html += `
             <div class="order-card">
                 <div class="order-card-header">
                     <div class="order-card-title">
-                        <input type="checkbox" class="order-checkbox" value="${item.serialNumber}" ${item.status !== "待接单" ? "data-status='processed'" : ""}>
-                        <span class="serial-number">${item.serialNumber}</span>
+                        <input type="checkbox" class="order-checkbox" value="${item.serialnumber}" ${item.status !== "待接单" ? "data-status='processed'" : ""}>
+                        <span class="serial-number">${item.serialnumber}</span>
                         <span class="time">${showTime}</span>
                     </div>
                     <div style="display:flex;align-items:center;gap:8px;">
@@ -282,7 +282,7 @@ function renderTable(orders) {
             let actionBtn = "无操作权限";
             if (isAdmin) {
                 if (item.status === "进行中") {
-                    actionBtn = `<button class="success" onclick="finishOrder(${item.serialNumber}, '${item.wakeTime}', '${item.phone}')">手动完成</button>`;
+                    actionBtn = `<button class="success" onclick="finishOrder(${item.serialnumber}, '${item.waketime}', '${item.phone}')">手动完成</button>`;
                 } else if (item.status === "待接单") {
                     actionBtn = "待接单";
                 } else {
