@@ -4,11 +4,33 @@ async function loadOrders() {
     let allOrders = await getOrders();
     console.log('获取到订单数量:', allOrders.length);
 
-    allOrders = generateFixedSerial(allOrders);
-    console.log('生成序号后订单数量:', allOrders.length);
+    // 去重处理：根据waketime、phone和submittime的组合来判断重复订单
+    const uniqueOrders = [];
+    const orderKeys = new Set();
 
-    await saveOrders(allOrders);
-    console.log('订单保存完成');
+    allOrders.forEach(order => {
+        // 创建唯一键：叫醒时间 + 手机号 + 提交时间
+        const key = `${order.waketime}-${order.phone}-${order.submittime}`;
+        if (!orderKeys.has(key)) {
+            orderKeys.add(key);
+            uniqueOrders.push(order);
+        }
+    });
+
+    console.log('去重后订单数量:', uniqueOrders.length);
+
+    // 只有在订单数量发生变化时才重新生成序号并保存
+    if (uniqueOrders.length !== allOrders.length) {
+        allOrders = uniqueOrders;
+        allOrders = generateFixedSerial(allOrders);
+        console.log('生成序号后订单数量:', allOrders.length);
+        await saveOrders(allOrders);
+        console.log('订单保存完成');
+    } else {
+        // 只是重新生成序号，不保存（避免重复插入）
+        allOrders = generateFixedSerial(allOrders);
+        console.log('仅生成序号，未保存');
+    }
 
     let displayOrders = [];
     const today = new Date();
