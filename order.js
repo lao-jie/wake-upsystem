@@ -492,7 +492,9 @@ async function finishOrder(serialnumber, waketime, phone) {
     }
     targetOrder.status = "已完成";
     targetOrder.salarysettled = true;
-    await addSalary(targetOrder.staffid, targetOrder.amount || targetOrder.money);
+    // 传递当前时间作为完成时间
+    const completedTime = new Date();
+    await addSalary(targetOrder.staffid, targetOrder.amount || targetOrder.money, completedTime);
 
     await saveOrders(allOrders);
     loadOrders();
@@ -505,7 +507,7 @@ async function checkExpiredOrders() {
     const now = new Date();
     let isUpdated = false;
 
-    allOrders.forEach(item => {
+    for (const item of allOrders) {
         if (item.status === "进行中") {
             const submitDate = new Date(item.submittime);
             // 获取订单提交当天的日期（年-月-日）
@@ -520,12 +522,13 @@ async function checkExpiredOrders() {
                 if (now >= submitMidnight && !item.salarysettled) {
                     item.status = "已完成";
                     item.salarysettled = true;
-                    addSalary(item.staffid, item.amount || item.money);
+                    // 传递当前时间作为完成时间
+                    await addSalary(item.staffid, item.amount || item.money, now);
                     isUpdated = true;
                 }
             }
         }
-    });
+    }
 
     if (isUpdated) {
         await saveOrders(allOrders);
