@@ -53,20 +53,40 @@ async function saveOrders(orders) {
 
 
 
-        // 只有在有订单时才进行数据库操作
-        if (validOrders.length > 0) {
-            // 先获取数据库中已有的订单
-            const { data: existingOrders, error: fetchError } = await supabaseClient
-                .from('wake_orders')
-                .select('id');
+        // 先获取数据库中已有的订单
+        const { data: existingOrders, error: fetchError } = await supabaseClient
+            .from('wake_orders')
+            .select('id');
 
-            if (fetchError) {
-                throw new Error(`获取现有订单失败：${fetchError.message}`);
+        if (fetchError) {
+            throw new Error(`获取现有订单失败：${fetchError.message}`);
+        }
+
+        // 提取现有订单的ID
+        const existingIds = new Set(existingOrders?.map(order => order.id) || []);
+        // 提取当前订单的ID
+        const currentIds = new Set(validOrders.map(order => order.id));
+
+        // 找出需要删除的订单ID（数据库中有但当前列表中没有）
+        const ordersToDelete = Array.from(existingIds).filter(id => !currentIds.has(id));
+        console.log(`需要删除的订单数量：${ordersToDelete.length}`);
+
+        // 删除订单
+        if (ordersToDelete.length > 0) {
+            for (const id of ordersToDelete) {
+                const deleteResult = await supabaseClient
+                    .from('wake_orders')
+                    .delete()
+                    .eq('id', id);
+                if (deleteResult.error) {
+                    console.error(`删除订单 ${id} 失败：${deleteResult.error.message}`);
+                }
             }
+            console.log(`成功删除 ${ordersToDelete.length} 个订单`);
+        }
 
-            // 提取现有订单的ID
-            const existingIds = new Set(existingOrders?.map(order => order.id) || []);
-
+        // 只有在有订单时才进行插入和更新操作
+        if (validOrders.length > 0) {
             // 分离新订单和现有订单
             const newOrders = validOrders.filter(order => !existingIds.has(order.id));
             const existingOrdersToUpdate = validOrders.filter(order => existingIds.has(order.id));
@@ -95,7 +115,7 @@ async function saveOrders(orders) {
 
             console.log("Supabase 保存订单成功");
         } else {
-            console.log("订单数量为0，跳过数据库操作");
+            console.log("订单数量为0，跳过插入和更新操作");
         }
     } catch (e) {
         console.error("Supabase 保存订单失败，仅保存到本地：", e);
