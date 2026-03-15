@@ -7,7 +7,7 @@ async function loadOrders() {
     // 去重处理：按照提交时间、电话和叫醒时间的顺序判断重复订单
     const uniqueOrders = [];
     const orderKeys = new Set();
-
+    
     allOrders.forEach(order => {
         // 创建唯一键：提交时间 + 电话 + 叫醒时间
         const key = `${order.submittime}-${order.phone}-${order.waketime}`;
@@ -530,22 +530,29 @@ async function finishOrder(serialnumber, waketime, phone) {
 // 检查过期订单
 async function checkExpiredOrders() {
     let allOrders = await getOrders();
+    // 获取当前中国时间（UTC+8）
     const now = new Date();
+    const chinaNow = new Date(now.getTime() + 8 * 60 * 60 * 1000);
     let isUpdated = false;
 
     for (const item of allOrders) {
         if (item.status === "进行中") {
             const submitDate = new Date(item.submittime);
+            // 获取订单提交当天的中国时间
+            const chinaSubmitDate = new Date(submitDate.getTime() + 8 * 60 * 60 * 1000);
             // 获取订单提交当天的日期（年-月-日）
-            const submitDateStr = submitDate.toLocaleDateString();
-            // 获取当前日期（年-月-日）
-            const currentDateStr = now.toLocaleDateString();
+            const submitDateStr = chinaSubmitDate.toLocaleDateString();
+            // 获取当前中国日期（年-月-日）
+            const currentDateStr = chinaNow.toLocaleDateString();
 
             // 只有当天的订单才会被自动结算
             if (submitDateStr === currentDateStr) {
-                const submitMidnight = new Date(submitDate.getFullYear(), submitDate.getMonth(), submitDate.getDate() + 1);
+                // 计算提交日期的午夜（中国时间）
+                const submitMidnight = new Date(chinaSubmitDate.getFullYear(), chinaSubmitDate.getMonth(), chinaSubmitDate.getDate() + 1);
+                // 转换为UTC时间进行比较
+                const submitMidnightUTC = new Date(submitMidnight.getTime() - 8 * 60 * 60 * 1000);
 
-                if (now >= submitMidnight && !item.salarysettled) {
+                if (now >= submitMidnightUTC && !item.salarysettled) {
                     item.status = "已完成";
                     item.salarysettled = true;
                     // 传递当前时间作为完成时间
