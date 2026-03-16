@@ -28,16 +28,20 @@ async function login() {
         // 并行处理：同时进行 Supabase 查询和本地账号检查
         const [supabaseResult, localResult] = await Promise.all([
             // Supabase 查询
-            supabaseClient
-                .from('staff_list')
-                .select('id, password, name')
-                .eq('id', uid)
-                .eq('password', pwd)
-                .single()
-                .catch(err => {
+            (async () => {
+                try {
+                    const result = await supabaseClient
+                        .from('staff_list')
+                        .select('id, password, name')
+                        .eq('id', uid)
+                        .eq('password', pwd)
+                        .single();
+                    return result;
+                } catch (err) {
                     console.log("Supabase 查询失败，使用本地账号兜底：", err);
                     return { data: null, error: err };
-                }),
+                }
+            })(),
             // 本地账号检查（立即执行）
             Promise.resolve(() => {
                 const adminUid = uid === 'admin' ? 'admin001' : uid;
