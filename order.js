@@ -7,7 +7,7 @@ async function loadOrders() {
     // 去重处理：按照提交时间、电话和叫醒时间的顺序判断重复订单
     const uniqueOrders = [];
     const orderKeys = new Set();
-    
+
     allOrders.forEach(order => {
         // 创建唯一键：提交时间 + 电话 + 叫醒时间
         const key = `${order.submittime}-${order.phone}-${order.waketime}`;
@@ -533,6 +533,7 @@ async function checkExpiredOrders() {
     // 获取当前中国时间（UTC+8）
     const now = new Date();
     const chinaNow = new Date(now.getTime() + 8 * 60 * 60 * 1000);
+    console.log('检查过期订单，当前中国时间:', chinaNow.toLocaleString('zh-CN'));
     let isUpdated = false;
 
     for (const item of allOrders) {
@@ -545,14 +546,27 @@ async function checkExpiredOrders() {
             // 获取当前中国日期（年-月-日）
             const currentDateStr = chinaNow.toLocaleDateString();
 
-            // 只有当天的订单才会被自动结算
-            if (submitDateStr === currentDateStr) {
+            console.log('订单ID:', item.id, '提交时间:', chinaSubmitDate.toLocaleString('zh-CN'), '当前状态:', item.status);
+            console.log('提交日期:', submitDateStr, '当前日期:', currentDateStr);
+
+            // 检查是否是昨天的订单（提交日期早于当前日期）
+            if (new Date(submitDateStr) < new Date(currentDateStr)) {
+                console.log('订单是昨天的，需要自动完成');
+                item.status = "已完成";
+                item.salarysettled = true;
+                // 传递当前时间作为完成时间
+                await addSalary(item.staffid, item.amount || item.money, now);
+                isUpdated = true;
+            } else if (submitDateStr === currentDateStr) {
                 // 计算提交日期的午夜（中国时间）
                 const submitMidnight = new Date(chinaSubmitDate.getFullYear(), chinaSubmitDate.getMonth(), chinaSubmitDate.getDate() + 1);
                 // 转换为UTC时间进行比较
                 const submitMidnightUTC = new Date(submitMidnight.getTime() - 8 * 60 * 60 * 1000);
 
+                console.log('订单是今天的，午夜时间（UTC）:', submitMidnightUTC.toISOString(), '当前时间（UTC）:', now.toISOString());
+
                 if (now >= submitMidnightUTC && !item.salarysettled) {
+                    console.log('订单已过午夜，需要自动完成');
                     item.status = "已完成";
                     item.salarysettled = true;
                     // 传递当前时间作为完成时间
@@ -564,8 +578,11 @@ async function checkExpiredOrders() {
     }
 
     if (isUpdated) {
+        console.log('有订单状态更新，保存到数据库');
         await saveOrders(allOrders);
         loadOrders();
+    } else {
+        console.log('没有订单需要更新');
     }
 }
 
