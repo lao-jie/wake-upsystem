@@ -50,50 +50,47 @@ async function saveOrders(orders) {
             submittime: order.submittime || getChinaTime().toISOString()
         }));
 
+        // 只有在有订单时才进行数据库操作
+        if (validOrders.length > 0) {
+            // 先获取数据库中已有的订单
+            const { data: existingOrders, error: fetchError } = await supabaseClient
+                .from('wake_orders')
+                .select('id');
 
+            if (fetchError) {
+                throw new Error(`获取现有订单失败：${fetchError.message}`);
+            }
 
+            // 提取现有订单的ID
+            const existingIds = new Set(existingOrders?.map(order => order.id) || []);
+            // 提取当前订单的ID
+            const currentIds = new Set(validOrders.map(order => order.id));
 
-        // 先获取数据库中已有的订单
-        const { data: existingOrders, error: fetchError } = await supabaseClient
-            .from('wake_orders')
-            .select('id');
+            // 找出需要删除的订单ID（数据库中有但当前列表中没有）
+            const ordersToDelete = Array.from(existingIds).filter(id => !currentIds.has(id));
+            console.log(`需要删除的订单数量：${ordersToDelete.length}`);
 
-        if (fetchError) {
-            throw new Error(`获取现有订单失败：${fetchError.message}`);
-        }
-
-        // 提取现有订单的ID
-        const existingIds = new Set(existingOrders?.map(order => order.id) || []);
-        // 提取当前订单的ID
-        const currentIds = new Set(validOrders.map(order => order.id));
-
-        // 找出需要删除的订单ID（数据库中有但当前列表中没有）
-        const ordersToDelete = Array.from(existingIds).filter(id => !currentIds.has(id));
-        console.log(`需要删除的订单数量：${ordersToDelete.length}`);
-
-        // 删除订单
-        if (ordersToDelete.length > 0) {
-            for (const id of ordersToDelete) {
+            // 批量删除订单
+            if (ordersToDelete.length > 0) {
+                // 使用批量删除，减少数据库操作次数
                 const deleteResult = await supabaseClient
                     .from('wake_orders')
                     .delete()
-                    .eq('id', id);
+                    .in('id', ordersToDelete);
                 if (deleteResult.error) {
-                    console.error(`删除订单 ${id} 失败：${deleteResult.error.message}`);
+                    console.error(`批量删除订单失败：${deleteResult.error.message}`);
+                } else {
+                    console.log(`成功删除 ${ordersToDelete.length} 个订单`);
                 }
             }
-            console.log(`成功删除 ${ordersToDelete.length} 个订单`);
-        }
 
-        // 只有在有订单时才进行插入和更新操作
-        if (validOrders.length > 0) {
             // 分离新订单和现有订单
             const newOrders = validOrders.filter(order => !existingIds.has(order.id));
             const existingOrdersToUpdate = validOrders.filter(order => existingIds.has(order.id));
 
             console.log(`新订单数量：${newOrders.length}，待更新订单数量：${existingOrdersToUpdate.length}`);
 
-            // 插入新订单
+            // 批量插入新订单
             if (newOrders.length > 0) {
                 const insertResult = await supabaseClient.from('wake_orders').insert(newOrders);
                 if (insertResult.error) {
@@ -102,20 +99,35 @@ async function saveOrders(orders) {
                 console.log(`成功插入 ${newOrders.length} 个新订单`);
             }
 
-            // 更新现有订单
-            for (const order of existingOrdersToUpdate) {
-                const updateResult = await supabaseClient
-                    .from('wake_orders')
-                    .update(order)
-                    .eq('id', order.id);
-                if (updateResult.error) {
-                    console.error(`更新订单 ${order.id} 失败：${updateResult.error.message}`);
+            // 批量更新现有订单（如果Supabase支持批量更新）
+            // 注意：Supabase的update操作不支持批量更新多个不同的记录
+            // 所以这里仍然需要循环更新，但可以优化为批量提交
+            if (existingOrdersToUpdate.length > 0) {
+                // 计算批量大小，避免一次提交太多数据
+                const batchSize = 10;
+                for (let i = 0; i < existingOrdersToUpdate.length; i += batchSize) {
+                    const batch = existingOrdersToUpdate.slice(i, i + batchSize);
+                    // 并行执行批量更新
+                    const updatePromises = batch.map(order => {
+                        return supabaseClient
+                            .from('wake_orders')
+                            .update(order)
+                            .eq('id', order.id);
+                    });
+
+                    const results = await Promise.all(updatePromises);
+                    results.forEach((result, index) => {
+                        if (result.error) {
+                            console.error(`更新订单 ${batch[index].id} 失败：${result.error.message}`);
+                        }
+                    });
                 }
+                console.log(`成功更新 ${existingOrdersToUpdate.length} 个订单`);
             }
 
             console.log("Supabase 保存订单成功");
         } else {
-            console.log("订单数量为0，跳过插入和更新操作");
+            console.log("订单数量为0，跳过数据库操作");
         }
     } catch (e) {
         console.error("Supabase 保存订单失败，仅保存到本地：", e);
