@@ -1,10 +1,12 @@
 // 加载订单
 async function loadOrders() {
     console.log('开始加载订单');
+
+    // 1. 从数据库获取订单
     let allOrders = await getOrders();
     console.log('获取到订单数量:', allOrders.length);
 
-    // 去重处理：按照提交时间、电话和叫醒时间的顺序判断重复订单
+    // 2. 去重处理：按照提交时间、电话和叫醒时间的顺序判断重复订单
     const uniqueOrders = [];
     const orderKeys = new Set();
 
@@ -19,7 +21,7 @@ async function loadOrders() {
 
     console.log('去重后订单数量:', uniqueOrders.length);
 
-    // 确保至少有一个订单，避免清空数据库
+    // 3. 确保至少有一个订单，避免清空数据库
     if (uniqueOrders.length === 0 && allOrders.length > 0) {
         console.log('去重后订单为空，使用原始订单');
         allOrders = allOrders;
@@ -27,15 +29,19 @@ async function loadOrders() {
         allOrders = uniqueOrders;
     }
 
-    // 生成序号
+    // 4. 生成序号
     allOrders = generateFixedSerial(allOrders);
     console.log('生成序号后订单数量:', allOrders.length);
 
-    // 总是保存订单，确保数据同步到数据库
-    await saveOrders(allOrders);
-    console.log('订单保存完成');
+    // 5. 只在订单发生变化时保存，避免每次加载都保存
+    if (uniqueOrders.length !== allOrders.length) {
+        await saveOrders(allOrders);
+        console.log('订单保存完成');
+    } else {
+        console.log('订单无变化，跳过保存');
+    }
 
-
+    // 6. 过滤和排序订单
     let displayOrders = [];
     const today = new Date();
     const todayStart = new Date(today.getFullYear(), today.getMonth(), today.getDate());
@@ -43,9 +49,11 @@ async function loadOrders() {
     console.log('今天日期:', today.toLocaleDateString(), '用户角色:', isAdmin ? 'admin' : 'staff', '用户ID:', user.id);
 
     if (isAdmin) {
+        // 管理员显示所有订单，按序号排序
         displayOrders = [...allOrders].sort((a, b) => a.serialnumber - b.serialnumber);
         console.log('管理员订单数量:', displayOrders.length);
     } else if (isStaff) {
+        // 员工只显示待接单和今天的订单
         displayOrders = allOrders.filter(item => {
             if (item.status === "待接单") {
                 return true;
@@ -65,8 +73,10 @@ async function loadOrders() {
         console.log('员工订单数量:', displayOrders.length);
     }
 
-    // 保存原始订单数据用于搜索
+    // 7. 保存原始订单数据用于搜索
     originalOrders = displayOrders;
+
+    // 8. 渲染订单
     renderOrders(displayOrders);
 }
 
