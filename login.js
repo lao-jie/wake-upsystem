@@ -15,60 +15,33 @@ async function login() {
         return;
     }
 
-
-    // 添加加载状态
-    const loginBtn = document.querySelector('.login-btn');
-    const originalText = loginBtn.textContent;
-    loginBtn.textContent = "登录中...";
-    loginBtn.disabled = true;
-
     let user = null;
-
     try {
-        // 并行处理：同时进行 Supabase 查询和本地账号检查
-        const [supabaseResult, localResult] = await Promise.all([
-            // Supabase 查询
-            (async () => {
-                try {
-                    const result = await supabaseClient
-                        .from('staff_list')
-                        .select('id, password, name')
-                        .eq('id', uid)
-                        .eq('password', pwd)
-                        .single();
-                    return result;
-                } catch (err) {
-                    console.log("Supabase 查询失败，使用本地账号兜底：", err);
-                    return { data: null, error: err };
-                }
-            })(),
-            // 本地账号检查（立即执行）
-            Promise.resolve(() => {
-                const adminUid = uid === 'admin' ? 'admin001' : uid;
-                return users.find(u => u.id === adminUid && u.pwd === pwd);
-            })()
-        ]);
+        // 第一步：优先从 Supabase 查询
+        const { data, error } = await supabaseClient
+            .from('staff_list')
+            .select('id, password, name')
+            .eq('id', uid)
+            .eq('password', pwd)
+            .single();
 
-        // 优先使用 Supabase 结果
-        if (supabaseResult.data) {
+        if (!error && data) {
+            // Supabase 查询成功，组装用户信息
             user = {
-                id: supabaseResult.data.id,
-                name: supabaseResult.data.name,
-                role: supabaseResult.data.id === 'admin' ? 'admin' : 'staff'
+                id: data.id,
+                name: data.name,
+                role: data.id === 'admin' ? 'admin' : 'staff'
             };
-        } else if (localResult) {
-            // Supabase 无数据，使用本地账号
-            user = localResult;
         }
     } catch (e) {
-        console.log("登录过程出错：", e);
-        // 出错时尝试本地账号
+        console.log("Supabase 查询失败，使用本地账号兜底：", e);
+    }
+
+    // 第二步：Supabase 无数据/失败，用本地账号兜底
+    if (!user) {
+        // 支持输入"admin"或"admin001"作为管理员账号
         const adminUid = uid === 'admin' ? 'admin001' : uid;
         user = users.find(u => u.id === adminUid && u.pwd === pwd);
-    } finally {
-        // 恢复按钮状态
-        loginBtn.textContent = originalText;
-        loginBtn.disabled = false;
     }
 
     // 验证最终结果
