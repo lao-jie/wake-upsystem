@@ -27,14 +27,13 @@ async function login() {
     try {
         // 并行处理：同时进行 Supabase 查询和本地账号检查
         const [supabaseResult, localResult] = await Promise.all([
-            // Supabase 查询（设置超时）
+            // Supabase 查询
             supabaseClient
                 .from('staff_list')
                 .select('id, password, name')
                 .eq('id', uid)
                 .eq('password', pwd)
                 .single()
-                .timeout(3000) // 3秒超时
                 .catch(err => {
                     console.log("Supabase 查询失败，使用本地账号兜底：", err);
                     return { data: null, error: err };
