@@ -1,73 +1,82 @@
 // 加载订单
 async function loadOrders() {
-    console.log('开始加载订单');
-    let allOrders = await getOrders();
-    console.log('获取到订单数量:', allOrders.length);
-
-    // 去重处理：按照提交时间、电话和叫醒时间的顺序判断重复订单
-    const uniqueOrders = [];
-    const orderKeys = new Set();
-
-    allOrders.forEach(order => {
-        // 创建唯一键：提交时间 + 电话 + 叫醒时间
-        const key = `${order.submittime}-${order.phone}-${order.waketime}`;
-        if (!orderKeys.has(key)) {
-            orderKeys.add(key);
-            uniqueOrders.push(order);
-        }
-    });
-
-    console.log('去重后订单数量:', uniqueOrders.length);
-
-    // 确保至少有一个订单，避免清空数据库
-    if (uniqueOrders.length === 0 && allOrders.length > 0) {
-        console.log('去重后订单为空，使用原始订单');
-        allOrders = allOrders;
-    } else {
-        allOrders = uniqueOrders;
+    // 显示加载状态
+    const loadingElement = document.getElementById('loadingIndicator');
+    if (loadingElement) {
+        loadingElement.style.display = 'block';
     }
 
-    // 生成序号
-    allOrders = generateFixedSerial(allOrders);
-    console.log('生成序号后订单数量:', allOrders.length);
+    try {
+        let allOrders = await getOrders();
 
-    // 总是保存订单，确保数据同步到数据库
-    await saveOrders(allOrders);
-    console.log('订单保存完成');
+        // 去重处理：按照提交时间、电话和叫醒时间的顺序判断重复订单
+        const uniqueOrders = [];
+        const orderKeys = new Set();
 
-
-    let displayOrders = [];
-    const today = new Date();
-    const todayStart = new Date(today.getFullYear(), today.getMonth(), today.getDate());
-    const todayEnd = new Date(today.getFullYear(), today.getMonth(), today.getDate() + 1);
-    console.log('今天日期:', today.toLocaleDateString(), '用户角色:', isAdmin ? 'admin' : 'staff', '用户ID:', user.id);
-
-    if (isAdmin) {
-        displayOrders = [...allOrders].sort((a, b) => a.serialnumber - b.serialnumber);
-        console.log('管理员订单数量:', displayOrders.length);
-    } else if (isStaff) {
-        displayOrders = allOrders.filter(item => {
-            if (item.status === "待接单") {
-                return true;
+        allOrders.forEach(order => {
+            // 创建唯一键：提交时间 + 电话 + 叫醒时间
+            const key = `${order.submittime}-${order.phone}-${order.waketime}`;
+            if (!orderKeys.has(key)) {
+                orderKeys.add(key);
+                uniqueOrders.push(order);
             }
-            if (item.staffid && item.staffid === user.id) {
-                const orderDate = new Date(item.submittime);
-                return orderDate >= todayStart && orderDate < todayEnd;
-            }
-            return false;
-        }).sort((a, b) => {
-            // 优先展示未接的订单
-            if (a.status === "待接单" && b.status !== "待接单") return -1;
-            if (a.status !== "待接单" && b.status === "待接单") return 1;
-            // 然后按序号排序
-            return a.serialnumber - b.serialnumber;
         });
-        console.log('员工订单数量:', displayOrders.length);
-    }
 
-    // 保存原始订单数据用于搜索
-    originalOrders = displayOrders;
-    renderOrders(displayOrders);
+        // 确保至少有一个订单，避免清空数据库
+        if (uniqueOrders.length === 0 && allOrders.length > 0) {
+            allOrders = allOrders;
+        } else {
+            allOrders = uniqueOrders;
+        }
+
+        // 生成序号
+        const ordersWithSerial = generateFixedSerial(allOrders);
+
+        // 只有当订单发生变化时才保存到数据库
+        const localOrders = JSON.parse(localStorage.getItem("wakeOrders") || "[]");
+        const hasChanges = JSON.stringify(ordersWithSerial) !== JSON.stringify(localOrders);
+
+        if (hasChanges) {
+            await saveOrders(ordersWithSerial);
+        }
+
+        let displayOrders = [];
+        const today = new Date();
+        const todayStart = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+        const todayEnd = new Date(today.getFullYear(), today.getMonth(), today.getDate() + 1);
+
+        if (isAdmin) {
+            displayOrders = [...ordersWithSerial].sort((a, b) => a.serialnumber - b.serialnumber);
+        } else if (isStaff) {
+            displayOrders = ordersWithSerial.filter(item => {
+                if (item.status === "待接单") {
+                    return true;
+                }
+                if (item.staffid && item.staffid === user.id) {
+                    const orderDate = new Date(item.submittime);
+                    return orderDate >= todayStart && orderDate < todayEnd;
+                }
+                return false;
+            }).sort((a, b) => {
+                // 优先展示未接的订单
+                if (a.status === "待接单" && b.status !== "待接单") return -1;
+                if (a.status !== "待接单" && b.status === "待接单") return 1;
+                // 然后按序号排序
+                return a.serialnumber - b.serialnumber;
+            });
+        }
+
+        // 保存原始订单数据用于搜索
+        originalOrders = displayOrders;
+        renderOrders(displayOrders);
+    } catch (error) {
+        console.error('加载订单失败:', error);
+    } finally {
+        // 隐藏加载状态
+        if (loadingElement) {
+            loadingElement.style.display = 'none';
+        }
+    }
 }
 
 // 渲染订单
