@@ -126,6 +126,17 @@
                 <button class="warning" onclick="batchTakeOrders()">一键接单选中订单</button>
             </div>
 
+            <!-- 加载指示器 -->
+            <div id="loadingIndicator" style="display: none; text-align: center; padding: 20px; background-color: #f8fafc; border-radius: 6px; margin-bottom: 16px;">
+                <div style="display: inline-block; width: 20px; height: 20px; border: 2px solid #e2e8f0; border-top-color: #2563eb; border-radius: 50%; animation: spin 1s linear infinite;"></div>
+                <span style="margin-left: 8px; color: #64748b;">加载中...</span>
+                <style>
+                    @keyframes spin {
+                        to { transform: rotate(360deg); }
+                    }
+                </style>
+            </div>
+
             <!-- 员工端：卡片列表（管理员端不显示） -->
             <div id="orderCards" class="order-cards"></div>
 
