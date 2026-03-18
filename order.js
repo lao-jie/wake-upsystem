@@ -552,25 +552,36 @@ async function checkExpiredOrders() {
         if (item.status === "进行中") {
             // 获取订单提交时间（已经是中国时间）
             const submitDate = new Date(item.submittime);
-            // 获取订单提交日期（年-月-日）
-            const submitDateStr = submitDate.toLocaleDateString();
-            // 获取当前中国日期（年-月-日）
-            const currentDateStr = chinaNow.toLocaleDateString();
+            // 确保 submitDate 是中国时间
+            const chinaSubmitDate = new Date(submitDate.getTime());
 
-            console.log('订单ID:', item.id, '提交时间:', submitDate.toLocaleString('zh-CN'), '当前状态:', item.status);
-            console.log('提交日期:', submitDateStr, '当前日期:', currentDateStr);
+            // 获取订单提交日期（年-月-日）
+            const submitYear = chinaSubmitDate.getFullYear();
+            const submitMonth = chinaSubmitDate.getMonth();
+            const submitDay = chinaSubmitDate.getDate();
+
+            // 获取当前中国日期（年-月-日）
+            const currentYear = chinaNow.getFullYear();
+            const currentMonth = chinaNow.getMonth();
+            const currentDay = chinaNow.getDate();
+
+            console.log('订单ID:', item.id, '提交时间:', chinaSubmitDate.toLocaleString('zh-CN'), '当前状态:', item.status);
+            console.log('提交日期:', `${submitYear}-${submitMonth + 1}-${submitDay}`, '当前日期:', `${currentYear}-${currentMonth + 1}-${currentDay}`);
 
             // 检查是否是昨天的订单（提交日期早于当前日期）
-            if (new Date(submitDateStr) < new Date(currentDateStr)) {
+            const submitDateObj = new Date(submitYear, submitMonth, submitDay);
+            const currentDateObj = new Date(currentYear, currentMonth, currentDay);
+
+            if (submitDateObj < currentDateObj) {
                 console.log('订单是昨天的，需要自动完成');
                 item.status = "已完成";
                 item.salarysettled = true;
                 // 传递当前时间作为完成时间
                 await addSalary(item.staffid, item.amount || item.money, now);
                 isUpdated = true;
-            } else if (submitDateStr === currentDateStr) {
+            } else if (submitDateObj.getTime() === currentDateObj.getTime()) {
                 // 计算提交日期的午夜（中国时间）
-                const submitMidnight = new Date(submitDate.getFullYear(), submitDate.getMonth(), submitDate.getDate() + 1);
+                const submitMidnight = new Date(submitYear, submitMonth, submitDay + 1);
                 // 转换为UTC时间进行比较
                 const submitMidnightUTC = new Date(submitMidnight.getTime() - 8 * 60 * 60 * 1000);
 
