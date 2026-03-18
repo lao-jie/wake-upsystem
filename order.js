@@ -53,12 +53,12 @@ async function loadOrders() {
             displayOrders = [...ordersWithSerial].sort((a, b) => a.serialnumber - b.serialnumber);
         } else if (isStaff) {
             displayOrders = ordersWithSerial.filter(item => {
+                // 员工可以看到：1. 待接单的订单（所有员工都可见） 2. 自己接的订单（只有接单员工本人可见）
                 if (item.status === "待接单") {
                     return true;
                 }
-                // 员工可以看到当天的所有订单（包括自己接的和待接单的）
-                const orderDate = new Date(item.submittime);
-                return orderDate >= todayStartUTC && orderDate < todayEndUTC;
+                // 检查是否是自己接的订单
+                return item.staffid === user.id;
             }).sort((a, b) => {
                 // 优先展示未接的订单
                 if (a.status === "待接单" && b.status !== "待接单") return -1;
