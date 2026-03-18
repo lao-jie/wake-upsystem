@@ -47,7 +47,7 @@ async function saveOrders(orders) {
             staffid: order.staffid || '',
             staffname: order.staffname || '',
             salarysettled: Boolean(order.salarysettled || false),
-            submittime: order.submittime || getChinaTime().toISOString()
+            submittime: order.submittime || new Date().toISOString()
         }));
 
         // 先获取数据库中已有的订单
@@ -221,6 +221,7 @@ async function saveSalaryDetails(details) {
 // 添加余额变动记录
 async function addSalaryDetail(staffid, amount, type, description, completedTime = new Date()) {
     const details = await getSalaryDetails();
+
     const newDetail = {
         id: Date.now().toString(),
         staffid: staffid,
