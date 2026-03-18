@@ -19,8 +19,8 @@ async function renderTeamTable() {
     staffList.forEach(staff => {
         const today = new Date().toLocaleDateString();
         const todayOrders = allOrders.filter(order =>
-            order.staffid === staff.id &&
-            new Date(order.submittime).toLocaleDateString() === today
+            order.staffId === staff.id &&
+            new Date(order.submitTime).toLocaleDateString() === today
         );
         const todayCount = todayOrders.length;
 
@@ -63,12 +63,6 @@ async function resetStaffPassword(staffId) {
     }
 }
 
-// 获取当前时间（UTC）
-function getChinaTime() {
-    const now = new Date();
-    return now;
-}
-
 // 结算员工薪资
 async function settleStaffSalary(staffId) {
     if (!confirm("确定要结算该员工薪资并清零余额吗？")) return;
@@ -80,7 +74,7 @@ async function settleStaffSalary(staffId) {
         staffList[index].salary = 0;
         await saveStaffList(staffList);
         // 添加余额变动记录（结算为负数）
-        await addSalaryDetail(staffId, -settledAmount, '结算', '管理员手动结算', getChinaTime());
+        await addSalaryDetail(staffId, -settledAmount, '结算', '管理员手动结算');
         renderTeamTable();
         alert(`已结算该员工薪资 ${settledAmount.toFixed(2)} 元，余额已清零！`);
     }
@@ -102,7 +96,7 @@ async function rewardStaff(staffId) {
         staffList[index].salary = (staffList[index].salary || 0) + amount;
         await saveStaffList(staffList);
         // 添加余额变动记录
-        await addSalaryDetail(staffId, amount, '奖励', '管理员手动奖励', getChinaTime());
+        await addSalaryDetail(staffId, amount, '奖励', '管理员手动奖励');
         renderTeamTable();
         alert(`已奖励该员工 ${amount.toFixed(2)} 元，当前余额：${staffList[index].salary.toFixed(2)} 元`);
     }
@@ -131,7 +125,7 @@ async function punishStaff(staffId) {
         staffList[index].salary = Math.max(0, currentSalary - amount);
         await saveStaffList(staffList);
         // 添加余额变动记录（惩罚为负数）
-        await addSalaryDetail(staffId, -amount, '惩罚', '管理员手动惩罚', getChinaTime());
+        await addSalaryDetail(staffId, -amount, '惩罚', '管理员手动惩罚');
         renderTeamTable();
         alert(`已扣除该员工 ${amount.toFixed(2)} 元，当前余额：${staffList[index].salary.toFixed(2)} 元`);
     }
@@ -139,156 +133,96 @@ async function punishStaff(staffId) {
 
 // 渲染个人中心
 async function renderProfilePage() {
-    // 显示加载状态
-    const loadingElement = document.getElementById('profileLoadingIndicator');
-    if (!loadingElement) {
-        // 动态添加加载指示器
-        const profileArea = document.getElementById('staffProfileArea');
-        if (profileArea) {
-            const loadingDiv = document.createElement('div');
-            loadingDiv.id = 'profileLoadingIndicator';
-            loadingDiv.style.cssText = `
-                display: block;
-                text-align: center;
-                padding: 20px;
-                background-color: #f8fafc;
-                border-radius: 6px;
-                margin-bottom: 16px;
-            `;
-            loadingDiv.innerHTML = `
-                <div style="display: inline-block; width: 20px; height: 20px; border: 2px solid #e2e8f0; border-top-color: #2563eb; border-radius: 50%; animation: spin 1s linear infinite;"></div>
-                <span style="margin-left: 8px; color: #64748b;">加载中...</span>
-                <style>
-                    @keyframes spin {
-                        to { transform: rotate(360deg); }
-                    }
-                </style>
-            `;
-            profileArea.insertBefore(loadingDiv, profileArea.firstChild);
-        }
-    } else {
-        loadingElement.style.display = 'block';
-    }
+    const allOrders = await getOrders();
+    const myOrders = allOrders.filter(order => order.staffId === user.id);
 
+    const today = new Date().toLocaleDateString();
+    const todayCount = myOrders.filter(order =>
+        new Date(order.submitTime).toLocaleDateString() === today
+    ).length;
+    document.getElementById("todayOrderCount").innerText = todayCount;
+
+    const staffList = await getStaffList();
+    const myInfo = staffList.find(staff => staff.id === user.id) || { salary: 0 };
+    document.getElementById("totalBalance").innerText = myInfo.salary.toFixed(2);
+
+    // 无论是否为移动端，都尝试渲染订单
     try {
-        // 并行获取数据
-        const [allOrders, staffList] = await Promise.all([
-            getOrders(),
-            getStaffList()
-        ]);
+        if (isStaff && mobileMQ.matches) {
+            renderProfileCards(myOrders);
+        } else {
+            // 按日期分组订单
+            const ordersByDate = {};
+            myOrders.forEach(order => {
+                const orderDate = new Date(order.submitTime).toLocaleDateString();
+                if (!ordersByDate[orderDate]) {
+                    ordersByDate[orderDate] = [];
+                }
+                ordersByDate[orderDate].push(order);
+            });
 
-        const myOrders = allOrders.filter(order => order.staffid === user.id);
+            let html = "";
+            // 按日期倒序排列
+            const dates = Object.keys(ordersByDate).sort((a, b) => new Date(b) - new Date(a));
 
-        // 计算今日接单数
-        const today = new Date();
-        const todayStart = new Date(today.getFullYear(), today.getMonth(), today.getDate());
-        const todayEnd = new Date(today.getFullYear(), today.getMonth(), today.getDate() + 1);
-
-        const todayCount = myOrders.filter(order =>
-            (order.status === "进行中" || order.status === "已完成") &&
-            new Date(order.submittime) >= todayStart &&
-            new Date(order.submittime) < todayEnd
-        ).length;
-
-        // 获取个人信息
-        const myInfo = staffList.find(staff => staff.id === user.id) || { salary: 0 };
-
-        // 立即更新基本信息
-        document.getElementById("todayOrderCount").innerText = todayCount;
-        document.getElementById("totalBalance").innerText = myInfo.salary.toFixed(2);
-
-        // 渲染订单（异步渲染，不阻塞UI）
-        setTimeout(() => {
-            try {
-                if (isStaff && mobileMQ.matches) {
-                    renderProfileCards(myOrders);
-                } else {
-                    // 按日期分组订单
-                    const ordersByDate = {};
-                    myOrders.forEach(order => {
-                        const orderDate = new Date(order.submittime).toLocaleDateString();
-                        if (!ordersByDate[orderDate]) {
-                            ordersByDate[orderDate] = [];
-                        }
-                        ordersByDate[orderDate].push(order);
-                    });
-
-                    let html = "";
-                    // 按日期倒序排列
-                    const dates = Object.keys(ordersByDate).sort((a, b) => new Date(b) - new Date(a));
-
-                    dates.forEach(date => {
-                        const dateOrders = ordersByDate[date];
-                        html += `
-                        <tr class="date-collapse-header">
-                            <td colspan="6" style="padding: 0;">
-                                <div class="date-header" onclick="toggleDateCollapse('table-${date}')">
-                                    <span class="date-title">${date}（${dateOrders.length}单）</span>
-                                    <span class="date-arrow">▶</span>
-                                </div>
-                            </td>
-                        </tr>
-                        <tr class="date-collapse-content" id="collapse-table-${date}" style="display: none;">
-                            <td colspan="6" style="padding: 0;">
-                                <div style="padding: 12px;">
-                                    <table style="width: 100%; border-collapse: collapse;">
-                                        <thead>
-                                            <tr>
-                                                <th style="padding: 12px; text-align: left; font-size: 13px; font-weight: 600; color: #64748b; text-transform: uppercase; letter-spacing: 0.5px; border-bottom: 2px solid #e2e8f0; width: 60px;">序号</th>
-                                                <th style="padding: 12px; text-align: left; font-size: 13px; font-weight: 600; color: #64748b; text-transform: uppercase; letter-spacing: 0.5px; border-bottom: 2px solid #e2e8f0;">叫醒时间</th>
-                                                <th style="padding: 12px; text-align: left; font-size: 13px; font-weight: 600; color: #64748b; text-transform: uppercase; letter-spacing: 0.5px; border-bottom: 2px solid #e2e8f0;">电话</th>
-                                                <th style="padding: 12px; text-align: left; font-size: 13px; font-weight: 600; color: #64748b; text-transform: uppercase; letter-spacing: 0.5px; border-bottom: 2px solid #e2e8f0;">金额（元）</th>
-                                                <th style="padding: 12px; text-align: left; font-size: 13px; font-weight: 600; color: #64748b; text-transform: uppercase; letter-spacing: 0.5px; border-bottom: 2px solid #e2e8f0;">状态</th>
-                                                <th style="padding: 12px; text-align: left; font-size: 13px; font-weight: 600; color: #64748b; text-transform: uppercase; letter-spacing: 0.5px; border-bottom: 2px solid #e2e8f0;">结算状态</th>
-                                            </tr>
-                                        </thead>
-                                        <tbody>
-                            `;
-
-                        dateOrders.forEach(order => {
-                            const settleStatus = order.salarysettled ? "已结算" : "未结算";
-                            html += `
-                            <tr style="border-bottom: 1px solid #f1f5f9;">
-                                <td style="padding: 12px; width: 60px;">${order.serialnumber}</td>
-                                <td style="padding: 12px;">${order.waketime.split('T')[1]}</td>
-                                <td style="padding: 12px;">${order.phone}</td>
-                                <td style="padding: 12px;">${(order.amount || order.money || 0).toFixed(2)}</td>
-                                <td style="padding: 12px;"><span class="status-badge ${order.status === '待接单' ? 'status-pending' : order.status === '进行中' ? 'status-processing' : 'status-done'}">${order.status}</span></td>
-                                <td style="padding: 12px;">${settleStatus}</td>
-                            </tr>
-                            `;
-                        });
-
-                        html += `
-                                        </tbody>
-                                    </table>
-                                </div>
-                            </td>
-                        </tr>
+            dates.forEach(date => {
+                const dateOrders = ordersByDate[date];
+                html += `
+                <tr class="date-collapse-header">
+                    <td colspan="6" style="padding: 0;">
+                        <div class="date-header" onclick="toggleDateCollapse('table-${date}')">
+                            <span class="date-title">${date}（${dateOrders.length}单）</span>
+                            <span class="date-arrow">▶</span>
+                        </div>
+                    </td>
+                </tr>
+                <tr class="date-collapse-content" id="collapse-table-${date}" style="display: none;">
+                    <td colspan="6" style="padding: 0;">
+                        <div style="padding: 12px;">
+                            <table style="width: 100%; border-collapse: collapse;">
+                                <thead>
+                                    <tr>
+                                        <th style="padding: 12px; text-align: left; font-size: 13px; font-weight: 600; color: #64748b; text-transform: uppercase; letter-spacing: 0.5px; border-bottom: 2px solid #e2e8f0; width: 60px;">序号</th>
+                                        <th style="padding: 12px; text-align: left; font-size: 13px; font-weight: 600; color: #64748b; text-transform: uppercase; letter-spacing: 0.5px; border-bottom: 2px solid #e2e8f0;">叫醒时间</th>
+                                        <th style="padding: 12px; text-align: left; font-size: 13px; font-weight: 600; color: #64748b; text-transform: uppercase; letter-spacing: 0.5px; border-bottom: 2px solid #e2e8f0;">电话</th>
+                                        <th style="padding: 12px; text-align: left; font-size: 13px; font-weight: 600; color: #64748b; text-transform: uppercase; letter-spacing: 0.5px; border-bottom: 2px solid #e2e8f0;">金额（元）</th>
+                                        <th style="padding: 12px; text-align: left; font-size: 13px; font-weight: 600; color: #64748b; text-transform: uppercase; letter-spacing: 0.5px; border-bottom: 2px solid #e2e8f0;">状态</th>
+                                        <th style="padding: 12px; text-align: left; font-size: 13px; font-weight: 600; color: #64748b; text-transform: uppercase; letter-spacing: 0.5px; border-bottom: 2px solid #e2e8f0;">结算状态</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
                         `;
-                    });
 
-                    document.getElementById("profileOrderTable").innerHTML = html || `<tr><td colspan="6" style="text-align: center; padding: 20px; color: #64748b;">暂无订单</td></tr>`;
-                }
-            } catch (error) {
-                console.error("渲染个人中心订单失败：", error);
-            } finally {
-                // 隐藏加载状态
-                const loadingElement = document.getElementById('profileLoadingIndicator');
-                if (loadingElement) {
-                    loadingElement.style.display = 'none';
-                }
-            }
-        }, 0);
+                dateOrders.forEach(order => {
+                    const settleStatus = order.salarySettled ? "已结算" : "未结算";
+                    html += `
+                    <tr style="border-bottom: 1px solid #f1f5f9;">
+                        <td style="padding: 12px; width: 60px;">${order.serialNumber}</td>
+                        <td style="padding: 12px;">${order.wakeTime.split('T')[1]}</td>
+                        <td style="padding: 12px;">${order.phone}</td>
+                        <td style="padding: 12px;">${(order.amount || order.money).toFixed(2)}</td>
+                        <td style="padding: 12px;"><span class="status-badge ${order.status === '待接单' ? 'status-pending' : order.status === '进行中' ? 'status-processing' : 'status-done'}">${order.status}</span></td>
+                        <td style="padding: 12px;">${settleStatus}</td>
+                    </tr>
+                    `;
+                });
 
+                html += `
+                                </tbody>
+                            </table>
+                        </div>
+                    </td>
+                </tr>
+                `;
+            });
+
+            document.getElementById("profileOrderTable").innerHTML = html || `<tr><td colspan="6" style="text-align: center; padding: 20px; color: #64748b;">暂无订单</td></tr>`;
+        }
     } catch (error) {
         console.error("渲染个人中心失败：", error);
-    } finally {
-        // 隐藏加载状态
-        const loadingElement = document.getElementById('profileLoadingIndicator');
-        if (loadingElement) {
-            loadingElement.style.display = 'none';
-        }
+        // 即使渲染失败，也要确保基本信息显示
+        document.getElementById("todayOrderCount").innerText = todayCount;
+        document.getElementById("totalBalance").innerText = myInfo.salary.toFixed(2);
     }
 }
 
@@ -314,12 +248,12 @@ function renderProfileCards(orders) {
                     </tr>
                     `;
                     orders.forEach(order => {
-                        const settleStatus = order.salarysettled ? "已结算" : "未结算";
-                        const showTime = order.waketime.includes('T') ? order.waketime.split('T')[1] : order.waketime;
+                        const settleStatus = order.salarySettled ? "已结算" : "未结算";
+                        const showTime = order.wakeTime.includes('T') ? order.wakeTime.split('T')[1] : order.wakeTime;
 
                         html += `
                         <tr style="border-bottom: 1px solid #f1f5f9;">
-                            <td style="padding: 12px; width: 60px;">${order.serialnumber}</td>
+                            <td style="padding: 12px; width: 60px;">${order.serialNumber}</td>
                             <td style="padding: 12px;">${showTime}</td>
                             <td style="padding: 12px;">${order.phone}</td>
                             <td style="padding: 12px;">${(order.amount || order.money).toFixed(2)}</td>
@@ -339,7 +273,7 @@ function renderProfileCards(orders) {
         // 按日期分组订单
         const ordersByDate = {};
         orders.forEach(order => {
-            const orderDate = new Date(order.submittime).toLocaleDateString();
+            const orderDate = new Date(order.submitTime).toLocaleDateString();
             if (!ordersByDate[orderDate]) {
                 ordersByDate[orderDate] = [];
             }
@@ -369,14 +303,14 @@ function renderProfileCards(orders) {
                     case "已完成": statusClass = "status-done"; break;
                 }
 
-                const settleStatus = order.salarysettled ? "已结算" : "未结算";
-                const showTime = order.waketime.includes('T') ? order.waketime.split('T')[1] : order.waketime;
+                const settleStatus = order.salarySettled ? "已结算" : "未结算";
+                const showTime = order.wakeTime.includes('T') ? order.wakeTime.split('T')[1] : order.wakeTime;
 
                 html += `
                 <div class="order-card">
                     <div class="order-card-header">
                         <div class="order-card-title">
-                            <span class="serial-number">${order.serialnumber}</span>
+                            <span class="serial-number">${order.serialNumber}</span>
                             <span class="time">${showTime}</span>
                         </div>
                         <div style="display:flex;align-items:center;gap:8px;">
@@ -411,14 +345,14 @@ function renderProfileCards(orders) {
 }
 
 // 添加薪资
-async function addSalary(staffid, amount, completedTime = new Date()) {
+async function addSalary(staffId, amount, completedTime = new Date()) {
     let staffList = await getStaffList();
-    const index = staffList.findIndex(staff => staff.id === staffid);
+    const index = staffList.findIndex(staff => staff.id === staffId);
     if (index !== -1) {
         staffList[index].salary = (staffList[index].salary || 0) + amount;
         await saveStaffList(staffList);
         // 添加余额变动记录
-        await addSalaryDetail(staffid, amount, '订单收入', '订单完成自动结算', completedTime);
+        await addSalaryDetail(staffId, amount, '订单收入', '订单完成自动结算', completedTime);
     }
 }
 
@@ -439,7 +373,7 @@ async function openSalaryDetailModal(staffId) {
 
     // 获取余额明细
     const details = await getSalaryDetails();
-    const staffDetails = details.filter(d => d.staffid === staffId);
+    const staffDetails = details.filter(d => d.staffId === staffId);
 
     // 渲染明细表格
     let html = "";
@@ -458,7 +392,7 @@ async function openSalaryDetailModal(staffId) {
 
             html += `
             <tr>
-                <td>${formatTime(detail.createdat)}</td>
+                <td>${formatTime(detail.createdAt)}</td>
                 <td>${typeText}</td>
                 <td style="${amountClass}">${amountText}</td>
                 <td>${detail.description}</td>
