@@ -550,20 +550,22 @@ async function checkExpiredOrders() {
 
     for (const item of allOrders) {
         if (item.status === "进行中") {
-            // 获取订单提交时间（已经是中国时间）
+            // 获取订单提交时间
             const submitDate = new Date(item.submittime);
+            // 确保 submitDate 是中国时间
+            const chinaSubmitDate = new Date(submitDate.getTime());
 
             // 获取订单提交日期（年-月-日）
-            const submitYear = submitDate.getFullYear();
-            const submitMonth = submitDate.getMonth();
-            const submitDay = submitDate.getDate();
+            const submitYear = chinaSubmitDate.getFullYear();
+            const submitMonth = chinaSubmitDate.getMonth();
+            const submitDay = chinaSubmitDate.getDate();
 
             // 获取当前中国日期（年-月-日）
             const currentYear = chinaNow.getFullYear();
             const currentMonth = chinaNow.getMonth();
             const currentDay = chinaNow.getDate();
 
-            console.log('订单ID:', item.id, '提交时间:', submitDate.toLocaleString('zh-CN'), '当前状态:', item.status);
+            console.log('订单ID:', item.id, '提交时间:', chinaSubmitDate.toLocaleString('zh-CN'), '当前状态:', item.status);
             console.log('提交日期:', `${submitYear}-${submitMonth + 1}-${submitDay}`, '当前日期:', `${currentYear}-${currentMonth + 1}-${currentDay}`);
 
             // 检查是否是昨天的订单（提交日期早于当前日期）
@@ -632,6 +634,19 @@ function getChinaTime() {
     return new Date(now.getTime() + 8 * 60 * 60 * 1000);
 }
 
+// 获取当前时间的 ISO 字符串（中国时间 UTC+8）
+function getChinaTimeISO() {
+    const chinaTime = getChinaTime();
+    // 手动构建 ISO 字符串，保持中国时间
+    const year = chinaTime.getFullYear();
+    const month = String(chinaTime.getMonth() + 1).padStart(2, '0');
+    const day = String(chinaTime.getDate()).padStart(2, '0');
+    const hours = String(chinaTime.getHours()).padStart(2, '0');
+    const minutes = String(chinaTime.getMinutes()).padStart(2, '0');
+    const seconds = String(chinaTime.getSeconds()).padStart(2, '0');
+    return `${year}-${month}-${day}T${hours}:${minutes}:${seconds}.000+08:00`;
+}
+
 // 添加单个订单
 async function addSingleOrder() {
     const waketime = document.getElementById("wakeTime").value;
@@ -660,7 +675,7 @@ async function addSingleOrder() {
         staffid: "",
         staffname: "",
         salarysettled: false,
-        submittime: getChinaTime().toISOString()
+        submittime: getChinaTimeISO()
     };
 
     let allOrders = await getOrders();
@@ -827,7 +842,7 @@ async function parseBatchOrders() {
                 staffid: "",
                 staffname: "",
                 salarysettled: false,
-                submittime: getChinaTime().toISOString()
+                submittime: getChinaTimeISO()
             };
         });
 
