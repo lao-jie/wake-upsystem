@@ -41,9 +41,13 @@ async function loadOrders() {
         }
 
         let displayOrders = [];
-        const today = new Date();
-        const todayStart = new Date(today.getFullYear(), today.getMonth(), today.getDate());
-        const todayEnd = new Date(today.getFullYear(), today.getMonth(), today.getDate() + 1);
+        const now = new Date();
+        const chinaNow = new Date(now.getTime() + 8 * 60 * 60 * 1000);
+        const todayStart = new Date(chinaNow.getFullYear(), chinaNow.getMonth(), chinaNow.getDate());
+        const todayEnd = new Date(chinaNow.getFullYear(), chinaNow.getMonth(), chinaNow.getDate() + 1);
+        // 转换为UTC时间进行比较
+        todayStart.setHours(todayStart.getHours() - 8);
+        todayEnd.setHours(todayEnd.getHours() - 8);
 
         if (isAdmin) {
             displayOrders = [...ordersWithSerial].sort((a, b) => a.serialnumber - b.serialnumber);
@@ -52,11 +56,9 @@ async function loadOrders() {
                 if (item.status === "待接单") {
                     return true;
                 }
-                if (item.staffid && item.staffid === user.id) {
-                    const orderDate = new Date(item.submittime);
-                    return orderDate >= todayStart && orderDate < todayEnd;
-                }
-                return false;
+                // 员工可以看到当天的所有订单（包括自己接的和待接单的）
+                const orderDate = new Date(item.submittime);
+                return orderDate >= todayStart && orderDate < todayEnd;
             }).sort((a, b) => {
                 // 优先展示未接的订单
                 if (a.status === "待接单" && b.status !== "待接单") return -1;
@@ -539,18 +541,20 @@ async function finishOrder(serialnumber, waketime, phone) {
 // 检查过期订单
 async function checkExpiredOrders() {
     let allOrders = await getOrders();
-    // 获取当前中国时间（UTC+8）
+    // 获取当前时间（UTC）
     const now = new Date();
+    // 转换为中国时间（UTC+8）
     const chinaNow = new Date(now.getTime() + 8 * 60 * 60 * 1000);
     console.log('检查过期订单，当前中国时间:', chinaNow.toLocaleString('zh-CN'));
     let isUpdated = false;
 
     for (const item of allOrders) {
         if (item.status === "进行中") {
+            // 获取订单提交时间
             const submitDate = new Date(item.submittime);
-            // 获取订单提交当天的中国时间
+            // 转换为中国时间
             const chinaSubmitDate = new Date(submitDate.getTime() + 8 * 60 * 60 * 1000);
-            // 获取订单提交当天的日期（年-月-日）
+            // 获取订单提交日期（年-月-日）
             const submitDateStr = chinaSubmitDate.toLocaleDateString();
             // 获取当前中国日期（年-月-日）
             const currentDateStr = chinaNow.toLocaleDateString();
