@@ -552,20 +552,18 @@ async function checkExpiredOrders() {
         if (item.status === "进行中") {
             // 获取订单提交时间（已经是中国时间）
             const submitDate = new Date(item.submittime);
-            // 确保 submitDate 是中国时间
-            const chinaSubmitDate = new Date(submitDate.getTime());
 
             // 获取订单提交日期（年-月-日）
-            const submitYear = chinaSubmitDate.getFullYear();
-            const submitMonth = chinaSubmitDate.getMonth();
-            const submitDay = chinaSubmitDate.getDate();
+            const submitYear = submitDate.getFullYear();
+            const submitMonth = submitDate.getMonth();
+            const submitDay = submitDate.getDate();
 
             // 获取当前中国日期（年-月-日）
             const currentYear = chinaNow.getFullYear();
             const currentMonth = chinaNow.getMonth();
             const currentDay = chinaNow.getDate();
 
-            console.log('订单ID:', item.id, '提交时间:', chinaSubmitDate.toLocaleString('zh-CN'), '当前状态:', item.status);
+            console.log('订单ID:', item.id, '提交时间:', submitDate.toLocaleString('zh-CN'), '当前状态:', item.status);
             console.log('提交日期:', `${submitYear}-${submitMonth + 1}-${submitDay}`, '当前日期:', `${currentYear}-${currentMonth + 1}-${currentDay}`);
 
             // 检查是否是昨天的订单（提交日期早于当前日期）
@@ -627,10 +625,11 @@ async function cleanExpiredOrders() {
     return false;
 }
 
-// 获取当前时间（UTC）
+// 获取当前时间（中国时间 UTC+8）
 function getChinaTime() {
     const now = new Date();
-    return now;
+    // 转换为中国时间（UTC+8）
+    return new Date(now.getTime() + 8 * 60 * 60 * 1000);
 }
 
 // 添加单个订单
