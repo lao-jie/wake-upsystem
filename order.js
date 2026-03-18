@@ -42,12 +42,12 @@ async function loadOrders() {
 
         let displayOrders = [];
         const now = new Date();
-        const chinaNow = new Date(now.getTime() + 8 * 60 * 60 * 1000);
-        const todayStart = new Date(chinaNow.getFullYear(), chinaNow.getMonth(), chinaNow.getDate());
-        const todayEnd = new Date(chinaNow.getFullYear(), chinaNow.getMonth(), chinaNow.getDate() + 1);
+        // 获取今天的开始和结束时间（本地时间）
+        const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+        const todayEnd = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
         // 转换为UTC时间进行比较
-        todayStart.setHours(todayStart.getHours() - 8);
-        todayEnd.setHours(todayEnd.getHours() - 8);
+        const todayStartUTC = new Date(todayStart.getTime() - 8 * 60 * 60 * 1000);
+        const todayEndUTC = new Date(todayEnd.getTime() - 8 * 60 * 60 * 1000);
 
         if (isAdmin) {
             displayOrders = [...ordersWithSerial].sort((a, b) => a.serialnumber - b.serialnumber);
@@ -58,7 +58,7 @@ async function loadOrders() {
                 }
                 // 员工可以看到当天的所有订单（包括自己接的和待接单的）
                 const orderDate = new Date(item.submittime);
-                return orderDate >= todayStart && orderDate < todayEnd;
+                return orderDate >= todayStartUTC && orderDate < todayEndUTC;
             }).sort((a, b) => {
                 // 优先展示未接的订单
                 if (a.status === "待接单" && b.status !== "待接单") return -1;
@@ -541,31 +541,31 @@ async function finishOrder(serialnumber, waketime, phone) {
 // 检查过期订单
 async function checkExpiredOrders() {
     let allOrders = await getOrders();
-    // 获取当前时间（UTC）
+    // 获取当前时间（本地时间，中国电脑就是UTC+8）
     const now = new Date();
-    // 转换为中国时间（UTC+8）
-    const chinaNow = new Date(now.getTime() + 8 * 60 * 60 * 1000);
-    console.log('检查过期订单，当前中国时间:', chinaNow.toLocaleString('zh-CN'));
+    console.log('检查过期订单，当前本地时间:', now.toLocaleString('zh-CN'));
     let isUpdated = false;
 
     for (const item of allOrders) {
         if (item.status === "进行中") {
             // 获取订单提交时间
             const submitDate = new Date(item.submittime);
-            // 确保 submitDate 是中国时间
-            const chinaSubmitDate = new Date(submitDate.getTime());
 
-            // 获取订单提交日期（年-月-日）
-            const submitYear = chinaSubmitDate.getFullYear();
-            const submitMonth = chinaSubmitDate.getMonth();
-            const submitDay = chinaSubmitDate.getDate();
+            // 转换为本地时间（考虑时区）
+            const submitDateLocal = new Date(submitDate.getTime() + 8 * 60 * 60 * 1000);
 
-            // 获取当前中国日期（年-月-日）
-            const currentYear = chinaNow.getFullYear();
-            const currentMonth = chinaNow.getMonth();
-            const currentDay = chinaNow.getDate();
+            // 获取订单提交日期（年-月-日，本地时间）
+            const submitYear = submitDateLocal.getFullYear();
+            const submitMonth = submitDateLocal.getMonth();
+            const submitDay = submitDateLocal.getDate();
 
-            console.log('订单ID:', item.id, '提交时间:', chinaSubmitDate.toLocaleString('zh-CN'), '当前状态:', item.status);
+            // 获取当前日期（年-月-日，本地时间）
+            const currentYear = now.getFullYear();
+            const currentMonth = now.getMonth();
+            const currentDay = now.getDate();
+
+            console.log('订单ID:', item.id, '提交时间（UTC）:', item.submittime);
+            console.log('提交时间（本地）:', submitDateLocal.toLocaleString('zh-CN'), '当前状态:', item.status);
             console.log('提交日期:', `${submitYear}-${submitMonth + 1}-${submitDay}`, '当前日期:', `${currentYear}-${currentMonth + 1}-${currentDay}`);
 
             // 检查是否是昨天的订单（提交日期早于当前日期）
@@ -580,14 +580,12 @@ async function checkExpiredOrders() {
                 await addSalary(item.staffid, item.amount || item.money, now);
                 isUpdated = true;
             } else if (submitDateObj.getTime() === currentDateObj.getTime()) {
-                // 计算提交日期的午夜（中国时间）
+                // 计算提交日期的午夜（本地时间）
                 const submitMidnight = new Date(submitYear, submitMonth, submitDay + 1);
-                // 转换为UTC时间进行比较
-                const submitMidnightUTC = new Date(submitMidnight.getTime() - 8 * 60 * 60 * 1000);
 
-                console.log('订单是今天的，午夜时间（UTC）:', submitMidnightUTC.toISOString(), '当前时间（UTC）:', now.toISOString());
+                console.log('订单是今天的，午夜时间:', submitMidnight.toLocaleString('zh-CN'), '当前时间:', now.toLocaleString('zh-CN'));
 
-                if (now >= submitMidnightUTC && !item.salarysettled) {
+                if (now >= submitMidnight && !item.salarysettled) {
                     console.log('订单已过午夜，需要自动完成');
                     item.status = "已完成";
                     item.salarysettled = true;
@@ -627,24 +625,14 @@ async function cleanExpiredOrders() {
     return false;
 }
 
-// 获取当前时间（中国时间 UTC+8）
+// 获取当前时间（本地时间，中国电脑就是UTC+8）
 function getChinaTime() {
-    const now = new Date();
-    // 转换为中国时间（UTC+8）
-    return new Date(now.getTime() + 8 * 60 * 60 * 1000);
+    return new Date();
 }
 
-// 获取当前时间的 ISO 字符串（中国时间 UTC+8）
+// 获取当前时间的 ISO 字符串（UTC 时间，与 Supabase 兼容）
 function getChinaTimeISO() {
-    const chinaTime = getChinaTime();
-    // 手动构建 ISO 字符串，保持中国时间
-    const year = chinaTime.getFullYear();
-    const month = String(chinaTime.getMonth() + 1).padStart(2, '0');
-    const day = String(chinaTime.getDate()).padStart(2, '0');
-    const hours = String(chinaTime.getHours()).padStart(2, '0');
-    const minutes = String(chinaTime.getMinutes()).padStart(2, '0');
-    const seconds = String(chinaTime.getSeconds()).padStart(2, '0');
-    return `${year}-${month}-${day}T${hours}:${minutes}:${seconds}.000+08:00`;
+    return new Date().toISOString();
 }
 
 // 添加单个订单
