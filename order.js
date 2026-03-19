@@ -556,16 +556,13 @@ async function checkExpiredOrders() {
 
     for (const item of allOrders) {
         if (item.status === "进行中") {
-            // 获取订单提交时间
+            // 获取订单提交时间（JavaScript 会自动将 UTC 时间转换为本地时间）
             const submitDate = new Date(item.submittime);
 
-            // 转换为本地时间（考虑时区）
-            const submitDateLocal = new Date(submitDate.getTime() + 8 * 60 * 60 * 1000);
-
             // 获取订单提交日期（年-月-日，本地时间）
-            const submitYear = submitDateLocal.getFullYear();
-            const submitMonth = submitDateLocal.getMonth();
-            const submitDay = submitDateLocal.getDate();
+            const submitYear = submitDate.getFullYear();
+            const submitMonth = submitDate.getMonth();
+            const submitDay = submitDate.getDate();
 
             // 获取当前日期（年-月-日，本地时间）
             const currentYear = now.getFullYear();
@@ -573,7 +570,7 @@ async function checkExpiredOrders() {
             const currentDay = now.getDate();
 
             console.log('订单ID:', item.id, '提交时间（UTC）:', item.submittime);
-            console.log('提交时间（本地）:', submitDateLocal.toLocaleString('zh-CN'), '当前状态:', item.status);
+            console.log('提交时间（本地）:', submitDate.toLocaleString('zh-CN'), '当前状态:', item.status);
             console.log('提交日期:', `${submitYear}-${submitMonth + 1}-${submitDay}`, '当前日期:', `${currentYear}-${currentMonth + 1}-${currentDay}`);
 
             // 检查是否是昨天的订单（提交日期早于当前日期）
