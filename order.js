@@ -45,9 +45,6 @@ async function loadOrders() {
         // 获取今天的开始和结束时间（本地时间）
         const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
         const todayEnd = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
-        // 转换为UTC时间进行比较
-        const todayStartUTC = new Date(todayStart.getTime() - 8 * 60 * 60 * 1000);
-        const todayEndUTC = new Date(todayEnd.getTime() - 8 * 60 * 60 * 1000);
 
         if (isAdmin) {
             displayOrders = [...ordersWithSerial].sort((a, b) => a.serialnumber - b.serialnumber);
@@ -55,7 +52,8 @@ async function loadOrders() {
             displayOrders = ordersWithSerial.filter(item => {
                 // 检查是否是当天提交的订单
                 const orderDate = new Date(item.submittime);
-                const isTodayOrder = orderDate >= todayStartUTC && orderDate < todayEndUTC;
+                // JavaScript会自动将ISO字符串转换为本地时间
+                const isTodayOrder = orderDate >= todayStart && orderDate < todayEnd;
 
                 if (!isTodayOrder) {
                     return false;
@@ -619,6 +617,7 @@ async function cleanExpiredOrders() {
 
     const recentOrders = allOrders.filter(order => {
         const orderDate = new Date(order.submittime);
+        // JavaScript会自动将ISO字符串转换为本地时间
         return orderDate >= sevenDaysAgo;
     });
 
