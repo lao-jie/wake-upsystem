@@ -17,10 +17,14 @@ async function renderTeamTable() {
 
     let html = "";
     staffList.forEach(staff => {
-        const today = new Date().toLocaleDateString();
+        const now = new Date();
+        const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+        const todayEnd = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
+        
         const todayOrders = allOrders.filter(order =>
-            order.staffId === staff.id &&
-            new Date(order.submitTime).toLocaleDateString() === today
+            order.staffid === staff.id &&
+            new Date(order.submittime) >= todayStart &&
+            new Date(order.submittime) < todayEnd
         );
         const todayCount = todayOrders.length;
 
