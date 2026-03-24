@@ -575,7 +575,7 @@ async function checkExpiredOrders() {
             const submitDateObj = new Date(submitYear, submitMonth, submitDay);
             const currentDateObj = new Date(currentYear, currentMonth, currentDay);
 
-            if (submitDateObj < currentDateObj) {
+            if (submitDateObj < currentDateObj && !item.salarysettled) {
                 console.log('订单是昨天的，需要自动完成');
                 item.status = "已完成";
                 item.salarysettled = true;
