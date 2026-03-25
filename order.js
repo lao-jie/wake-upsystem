@@ -689,6 +689,16 @@ async function deleteSelected() {
     if (!confirm(`确定删除选中的 ${checkedSerials.length} 条订单吗？`)) return;
 
     let allOrders = await getOrders();
+
+    // 检查并处理已结算订单的余额
+    for (const order of allOrders) {
+        if (checkedSerials.includes(order.serialnumber) && order.status === "已完成" && order.salarysettled) {
+            // 从员工余额中减去该订单的金额
+            await addSalary(order.staffid, -(order.amount || order.money), new Date());
+        }
+    }
+
+    // 删除订单
     allOrders = allOrders.filter(item => !checkedSerials.includes(item.serialnumber));
     await saveOrders(allOrders);
 
