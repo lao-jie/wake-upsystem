@@ -360,6 +360,60 @@ async function addSalary(staffId, amount, completedTime = new Date()) {
     }
 }
 
+// ==============================
+// 幂等订单结算（防止凌晨多端重复结算）
+// - 先写入 salary_details（带 settle_key 唯一约束）
+// - 只有写入成功才给员工余额加钱
+// ==============================
+function getOrderSettleKey(order) {
+    // 优先使用订单 id（saveOrders 会确保有 id）
+    if (order && order.id !== undefined && order.id !== null && order.id !== "") {
+        return `order_income:${order.id}`;
+    }
+    // 兜底：使用业务字段拼 key（尽量稳定）
+    const wt = order?.waketime || "";
+    const st = order?.submittime || "";
+    const phone = order?.phone || "";
+    return `order_income_fallback:${st}:${phone}:${wt}`;
+}
+
+async function settleOrderIncomeOnce(order, completedTime = new Date()) {
+    if (!order) return { settled: false, reason: "no_order" };
+    if (!order.staffid) return { settled: false, reason: "no_staff" };
+
+    const amount = parseFloat(order.amount || order.money || 0);
+    if (!Number.isFinite(amount) || amount === 0) {
+        return { settled: false, reason: "bad_amount" };
+    }
+
+    const settleKey = getOrderSettleKey(order);
+    const orderId = order.id ?? null;
+
+    // 1) 先插入结算明细（幂等关键）
+    const detailRes = await addSalaryDetail(
+        order.staffid,
+        amount,
+        "订单收入",
+        "订单完成自动结算",
+        completedTime,
+        { settleKey, orderId }
+    );
+
+    // 已存在（唯一冲突）→ 认为已结算过，不再加余额
+    if (!detailRes.inserted && detailRes.reason === "duplicate") {
+        return { settled: false, reason: "already_settled" };
+    }
+
+    // 2) 只有“明细写入成功”才更新员工余额
+    const ok = await addStaffSalary(order.staffid, amount);
+    if (!ok) {
+        // 余额更新失败时不回滚明细（前端无法原子事务），但至少避免重复加钱
+        return { settled: false, reason: "balance_update_failed" };
+    }
+
+    return { settled: true };
+}
+
 // 打开余额明细弹窗
 async function openSalaryDetailModal(staffId) {
     const modal = document.getElementById("salaryDetailModal");
