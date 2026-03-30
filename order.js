@@ -537,7 +537,7 @@ async function finishOrder(serialnumber, waketime, phone) {
     targetOrder.salarysettled = true;
     // 传递当前时间作为完成时间
     const completedTime = new Date();
-    await addSalary(targetOrder.staffid, targetOrder.amount || targetOrder.money, completedTime);
+    await settleOrderIncomeOnce(targetOrder, completedTime);
 
     await saveOrders(allOrders);
     loadOrders();
@@ -580,7 +580,7 @@ async function checkExpiredOrders() {
                 item.status = "已完成";
                 item.salarysettled = true;
                 // 传递当前时间作为完成时间
-                await addSalary(item.staffid, item.amount || item.money, now);
+                await settleOrderIncomeOnce(item, now);
                 isUpdated = true;
             } else if (submitDateObj.getTime() === currentDateObj.getTime()) {
                 // 计算提交日期的午夜（本地时间）
@@ -593,7 +593,7 @@ async function checkExpiredOrders() {
                     item.status = "已完成";
                     item.salarysettled = true;
                     // 传递当前时间作为完成时间
-                    await addSalary(item.staffid, item.amount || item.money, now);
+                    await settleOrderIncomeOnce(item, now);
                     isUpdated = true;
                 }
             }
