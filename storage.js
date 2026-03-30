@@ -188,48 +188,103 @@ async function getSalaryDetails() {
     return JSON.parse(localStorage.getItem("salaryDetails") || "[]");
 }
 
-async function saveSalaryDetails(details) {
+// 原先的 saveSalaryDetails 会“全表删除再插入”，会引发并发重复/覆盖问题。
+// 余额明细改为“单条插入”，并支持唯一 settle_key 实现幂等防重。
+
+async function insertSalaryDetail(detail) {
     try {
-        const validDetails = details.map(detail => ({
+        const payload = {
             id: detail.id,
             staffid: detail.staffid,
             amount: parseFloat(detail.amount || 0),
             type: detail.type,
             description: detail.description,
-            createdat: detail.createdat || new Date().toISOString()
-        }));
+            createdat: detail.createdat || new Date().toISOString(),
+            // 以下两列需要你在 Supabase 表结构中添加（允许为空）
+            settle_key: detail.settle_key || null,
+            order_id: detail.order_id || null
+        };
 
-        const deleteResult = await supabaseClient.from('salary_details').delete().neq('id', 0);
-        if (deleteResult.error) {
-            throw new Error(`删除余额明细失败：${deleteResult.error.message}`);
-        }
-
-        if (validDetails.length > 0) {
-            const insertResult = await supabaseClient.from('salary_details').insert(validDetails);
-            if (insertResult.error) {
-                throw new Error(`插入余额明细失败：${insertResult.error.message}`);
+        const { error } = await supabaseClient.from('salary_details').insert(payload);
+        if (error) {
+            // 23505 = unique_violation（用于 settle_key 唯一约束）
+            if (error.code === '23505') {
+                return { inserted: false, reason: 'duplicate' };
             }
+            console.error("Supabase 插入余额明细失败：", error);
+            return { inserted: false, reason: 'error' };
         }
 
-        console.log("Supabase 保存余额明细成功");
+        // 同步到本地缓存（插入成功才缓存）
+        const cached = JSON.parse(localStorage.getItem("salaryDetails") || "[]");
+        cached.unshift(payload);
+        localStorage.setItem("salaryDetails", JSON.stringify(cached));
+        return { inserted: true };
     } catch (e) {
-        console.error("Supabase 保存余额明细失败，仅保存到本地：", e);
+        console.error("Supabase 插入余额明细异常：", e);
+        return { inserted: false, reason: 'exception' };
     }
-    localStorage.setItem("salaryDetails", JSON.stringify(details));
 }
 
-// 添加余额变动记录
-async function addSalaryDetail(staffid, amount, type, description, completedTime = new Date()) {
-    const details = await getSalaryDetails();
-
+// 添加余额变动记录（返回 inserted，用于幂等结算判断）
+async function addSalaryDetail(staffid, amount, type, description, completedTime = new Date(), opts = {}) {
     const newDetail = {
-        id: Date.now().toString(),
-        staffid: staffid,
-        amount: amount,
-        type: type, // 类型：订单收入、奖励、惩罚、结算
-        description: description,
-        createdat: completedTime.toISOString()
+        id: (opts.id || `${Date.now()}-${Math.floor(Math.random() * 1000000)}`),
+        staffid,
+        amount,
+        type, // 类型：订单收入、奖励、惩罚、结算
+        description,
+        createdat: completedTime.toISOString(),
+        settle_key: opts.settleKey || null,
+        order_id: opts.orderId || null
     };
-    details.unshift(newDetail);
-    await saveSalaryDetails(details);
+
+    // 优先写入 Supabase；如果失败则仅写本地（失败时不保证幂等）
+    const res = await insertSalaryDetail(newDetail);
+    if (res.inserted) return { inserted: true };
+
+    // 如果是重复（已有 settle_key），直接视为“已存在”
+    if (res.reason === 'duplicate') return { inserted: false, reason: 'duplicate' };
+
+    // 兜底：写本地（无唯一约束，极端并发仍可能重复）
+    const cached = JSON.parse(localStorage.getItem("salaryDetails") || "[]");
+    cached.unshift(newDetail);
+    localStorage.setItem("salaryDetails", JSON.stringify(cached));
+    return { inserted: true, fallback: true };
+}
+
+// 原子性更好的余额更新：只更新单个员工行（避免全表 delete/insert）
+async function addStaffSalary(staffId, delta) {
+    try {
+        const { data, error } = await supabaseClient
+            .from('staff_list')
+            .select('id, salary')
+            .eq('id', staffId)
+            .single();
+        if (error || !data) {
+            console.error("读取员工余额失败：", error);
+            return false;
+        }
+        const nextSalary = (parseFloat(data.salary || 0) + parseFloat(delta || 0));
+        const { error: updateError } = await supabaseClient
+            .from('staff_list')
+            .update({ salary: nextSalary })
+            .eq('id', staffId);
+        if (updateError) {
+            console.error("更新员工余额失败：", updateError);
+            return false;
+        }
+
+        // 同步本地 staffList 缓存
+        const staffList = JSON.parse(localStorage.getItem("staffList") || "[]");
+        const idx = staffList.findIndex(s => s.id === staffId);
+        if (idx !== -1) {
+            staffList[idx].salary = nextSalary;
+            localStorage.setItem("staffList", JSON.stringify(staffList));
+        }
+        return true;
+    } catch (e) {
+        console.error("更新员工余额异常：", e);
+        return false;
+    }
 }
