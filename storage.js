@@ -148,15 +148,56 @@ async function saveStaffList(staffList) {
             salary: parseFloat(staff.salary || 0)
         }));
 
-        const deleteResult = await supabaseClient.from('staff_list').delete().neq('id', 0);
-        if (deleteResult.error) {
-            throw new Error(`删除员工失败：${deleteResult.error.message}`);
+        // 先获取数据库中已有的员工
+        const { data: existingStaff, error: fetchError } = await supabaseClient
+            .from('staff_list')
+            .select('id');
+
+        if (fetchError) {
+            throw new Error(`获取现有员工失败：${fetchError.message}`);
         }
 
+        // 提取现有员工的ID
+        const existingIds = new Set(existingStaff?.map(staff => staff.id) || []);
+        // 提取当前员工的ID
+        const currentIds = new Set(validStaffList.map(staff => staff.id));
+
+        // 找出需要删除的员工ID（数据库中有但当前列表中没有）
+        const staffToDelete = Array.from(existingIds).filter(id => !currentIds.has(id));
+
+        // 批量删除员工
+        if (staffToDelete.length > 0) {
+            const deleteResult = await supabaseClient
+                .from('staff_list')
+                .delete()
+                .in('id', staffToDelete);
+            if (deleteResult.error) {
+                console.error(`批量删除员工失败：${deleteResult.error.message}`);
+            }
+        }
+
+        // 只有在有员工时才进行插入和更新操作
         if (validStaffList.length > 0) {
-            const insertResult = await supabaseClient.from('staff_list').insert(validStaffList);
-            if (insertResult.error) {
-                throw new Error(`插入员工失败：${insertResult.error.message}`);
+            // 分离新员工和现有员工
+            const newStaff = validStaffList.filter(staff => !existingIds.has(staff.id));
+            const existingStaffToUpdate = validStaffList.filter(staff => existingIds.has(staff.id));
+
+            // 批量插入新员工
+            if (newStaff.length > 0) {
+                const insertResult = await supabaseClient.from('staff_list').insert(newStaff);
+                if (insertResult.error) {
+                    throw new Error(`插入新员工失败：${insertResult.error.message}`);
+                }
+            }
+
+            // 批量更新现有员工（使用 upsert）
+            if (existingStaffToUpdate.length > 0) {
+                const updateResult = await supabaseClient
+                    .from('staff_list')
+                    .upsert(existingStaffToUpdate, { onConflict: 'id' });
+                if (updateResult.error) {
+                    console.error(`批量更新员工失败：${updateResult.error.message}`);
+                }
             }
         }
 
