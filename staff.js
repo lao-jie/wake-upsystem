@@ -20,7 +20,7 @@ async function renderTeamTable() {
         const now = new Date();
         const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
         const todayEnd = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
-        
+
         const todayOrders = allOrders.filter(order =>
             order.staffid === staff.id &&
             new Date(order.submittime) >= todayStart &&
@@ -350,11 +350,9 @@ function renderProfileCards(orders) {
 
 // 添加薪资
 async function addSalary(staffId, amount, completedTime = new Date()) {
-    let staffList = await getStaffList();
-    const index = staffList.findIndex(staff => staff.id === staffId);
-    if (index !== -1) {
-        staffList[index].salary = (staffList[index].salary || 0) + amount;
-        await saveStaffList(staffList);
+    // 使用原子性更好的余额更新函数
+    const ok = await addStaffSalary(staffId, amount);
+    if (ok) {
         // 添加余额变动记录
         await addSalaryDetail(staffId, amount, '订单收入', '订单完成自动结算', completedTime);
     }
