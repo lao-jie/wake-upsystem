@@ -938,7 +938,7 @@ async function renderTodayOrdersDetail(container) {
                     <span style="font-weight: 600; color: #1e293b;">${order.phone}</span>
                     <span style="font-size: 12px; padding: 4px 8px; border-radius: 4px; background: ${order.status === '已完成' ? '#dcfce7' : order.status === '待接单' ? '#fef3c7' : '#dbeafe'}; color: ${order.status === '已完成' ? '#166534' : order.status === '待接单' ? '#92400e' : '#1e40af'};">${order.status}</span>
                 </div>
-                <div style="font-size: 13px; color: #64748b;"><i data-lucide="alarm-clock" style="width: 14px; height: 14px; margin-right: 4px;"></i>${order.waketime}</div>
+                <div style="font-size: 13px; color: #64748b;"><i data-lucide="alarm-clock" style="width: 14px; height: 14px; margin-right: 4px;"></i>${typeof formatWakeTimeForDisplay === 'function' ? formatWakeTimeForDisplay(order.waketime) : order.waketime}</div>
                 ${order.note ? `<div style="font-size: 12px; color: #94a3b8; margin-top: 4px;"><i data-lucide="file-text" style="width: 13px; height: 13px; margin-right: 4px;"></i>${order.note}</div>` : ''}
             </div>
         `;
@@ -1193,7 +1193,7 @@ async function renderMyOrdersDetail(container) {
                     <span style="font-weight: 600; color: #1e293b;">${order.phone}</span>
                     <span style="font-size: 12px; padding: 4px 8px; border-radius: 4px; background: ${order.status === '已完成' ? '#dcfce7' : order.status === '待接单' ? '#fef3c7' : '#dbeafe'}; color: ${order.status === '已完成' ? '#166534' : order.status === '待接单' ? '#92400e' : '#1e40af'};">${order.status}</span>
                 </div>
-                <div style="font-size: 13px; color: #64748b;"><i data-lucide="alarm-clock" style="width: 14px; height: 14px; margin-right: 4px;"></i>${order.waketime}</div>
+                <div style="font-size: 13px; color: #64748b;"><i data-lucide="alarm-clock" style="width: 14px; height: 14px; margin-right: 4px;"></i>${typeof formatWakeTimeForDisplay === 'function' ? formatWakeTimeForDisplay(order.waketime) : order.waketime}</div>
                 <div style="font-size: 12px; color: #94a3b8; margin-top: 4px;"><i data-lucide="calendar-days" style="width: 13px; height: 13px; margin-right: 4px;"></i>${order.submittime}</div>
                 ${order.note ? `<div style="font-size: 12px; color: #94a3b8; margin-top: 4px;"><i data-lucide="file-text" style="width: 13px; height: 13px; margin-right: 4px;"></i>${order.note}</div>` : ''}
             </div>
