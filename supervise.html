@@ -1,0 +1,233 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+    <title>老街网创 - 监督界面</title>
+    <link rel="stylesheet" href="styles.css">
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <script src="config.js" defer></script>
+    <script src="utils.js" defer></script>
+    <script src="storage.js" defer></script>
+    <script src="supervise.js" defer></script>
+</head>
+
+<body class="supervise-page">
+    <div class="sidebar">
+        <div class="sidebar-header">
+            <span class="sidebar-brand">老街网创</span>
+            <div style="display: flex; gap: 8px; align-items: center;">
+                <button type="button" class="logout-btn logout-btn-mobile" onclick="logout()" title="退出登录">退出</button>
+            </div>
+        </div>
+
+        <div class="nav-row">
+            <div class="nav-item" onclick="window.location.href='jiaoxing.html'">
+                <span class="icon"><i data-lucide="house"></i></span>
+                <span>首页</span>
+            </div>
+
+            <div class="nav-item active" id="nav-taobao" onclick="toggleSubMenu()">
+                <span class="icon"><i data-lucide="shopping-cart"></i></span>
+                <span>淘宝<span class="supervise-text">监督</span>项目</span>
+                <span class="arrow" id="arrow">▼</span>
+            </div>
+
+            <div class="sub-menu" id="subMenu" style="display:none;">
+                <div class="sub-item" onclick="window.location.href='jiaoxing.html'">叫醒</div>
+                <div class="sub-item active">监督</div>
+            </div>
+
+            <div class="nav-item" onclick="window.location.href='jiaoxing.html'">
+                <span class="icon"><i data-lucide="users"></i></span>
+                <span id="navTeamText">团队管理</span>
+            </div>
+
+            <div class="nav-item" id="nav-notice-setting" style="display:none;" onclick="window.location.href='jiaoxing.html'">
+                <span class="icon"><i data-lucide="settings"></i></span>
+                <span>公告设置</span>
+            </div>
+
+            <div class="nav-item logout-nav-item" onclick="logout()" title="退出登录">
+                <span class="icon"><i data-lucide="log-out"></i></span>
+                <span>退出登录</span>
+            </div>
+        </div>
+    </div>
+
+    <div class="main-content">
+        <div class="supervise-headbar">
+            <h2>淘宝项目监督</h2>
+            <button type="button" class="ghost" onclick="window.location.href='jiaoxing.html'">返回叫醒页</button>
+        </div>
+        <div class="user-info">当前用户：<span id="superviseUserName">-</span></div>
+
+        <div class="supervise-toolbar">
+            <input type="text" id="superviseSearchInput" placeholder="搜索：订单号、项目、监督员">
+            <select id="superviseStatusFilter">
+                <option value="all">全部状态</option>
+                <option value="待接单">待接单</option>
+                <option value="进行中">进行中</option>
+                <option value="已完成">已完成</option>
+            </select>
+            <input type="date" id="superviseDateFilter">
+            <button type="button" onclick="loadSuperviseDashboard()">查询</button>
+            <button type="button" class="ghost" onclick="resetSuperviseFilters()">重置</button>
+        </div>
+
+        <div class="admin-form" id="superviseSummarySection">
+            <div class="supervise-summary-grid">
+                <div class="supervise-summary-card">
+                    <div class="supervise-summary-label">订单总数</div>
+                    <div class="supervise-summary-value" id="superviseTotalCount">0</div>
+                </div>
+                <div class="supervise-summary-card">
+                    <div class="supervise-summary-label">今日订单</div>
+                    <div class="supervise-summary-value" id="superviseTodayCount">0</div>
+                </div>
+                <div class="supervise-summary-card">
+                    <div class="supervise-summary-label">进行中</div>
+                    <div class="supervise-summary-value" id="superviseProcessingCount">0</div>
+                </div>
+                <div class="supervise-summary-card">
+                    <div class="supervise-summary-label">待接单</div>
+                    <div class="supervise-summary-value" id="supervisePendingCount">0</div>
+                </div>
+                <div class="supervise-summary-card">
+                    <div class="supervise-summary-label">已完成</div>
+                    <div class="supervise-summary-value" id="superviseDoneCount">0</div>
+                </div>
+            </div>
+        </div>
+
+        <div class="admin-form supervise-task-form" id="superviseTaskFormSection">
+            <input type="datetime-local" id="svTaskTime">
+            <input type="text" id="svOrderNo" placeholder="订单号">
+            <select id="svProjectName">
+                <option value="">请选择项目</option>
+                <option value="监督早睡">监督早睡</option>
+                <option value="监督早起">监督早起</option>
+                <option value="监督早睡早起">监督早睡早起</option>
+            </select>
+            <select id="svDuration">
+                <option value="一天">一天</option>
+                <option value="七天">七天</option>
+                <option value="半个月">半个月</option>
+                <option value="一个月">一个月</option>
+                <option value="其他时间">其他时间</option>
+            </select>
+            <input type="text" id="svStudentName" placeholder="学员名字">
+            <input type="number" id="svPrice" placeholder="结算价格" step="0.01" min="0">
+            <select id="svSupervisor">
+                <option value="">请选择监督员</option>
+            </select>
+            <button type="button" onclick="addSingleSuperviseTask()">添加监督任务</button>
+        </div>
+
+        <div class="admin-form" id="superviseBatchSection" style="flex-direction: column;">
+            <h3 class="batch-upload-title">批量添加监督任务</h3>
+            <textarea id="superviseBatchText" placeholder="粘贴监督任务文本（示例：&#10;TB20260414001&#10;监督早睡&#10;张三&#10;7天&#10;首单测试&#10;&#10;或单行：TB20260414002 监督早起 李四 3天 复训）"></textarea>
+            <div style="display: flex; flex-wrap: wrap; gap: 12px;">
+                <button type="button" onclick="parseSuperviseBatchOrders()">识别任务</button>
+                <button type="button" id="superviseUploadBtn" disabled onclick="uploadSuperviseOrders()">批量上传</button>
+            </div>
+            <div id="superviseParsePreview" class="preview-box"></div>
+        </div>
+
+        <div class="admin-buttons" id="superviseBatchActions" style="display:flex;">
+            <button type="button" class="danger" onclick="deleteSelectedSupervise()">删除选中</button>
+            <button type="button" onclick="editSelectedSupervise()">修改选中</button>
+        </div>
+
+        <div id="superviseLoadingIndicator" class="loading-indicator" style="display: none;">
+            <div class="loading-indicator__spinner" aria-hidden="true"></div>
+            <span class="loading-indicator__text">加载中...</span>
+        </div>
+
+        <div class="table-wrapper supervise-table-wrapper">
+            <table class="supervise-table">
+                <thead>
+                    <tr>
+                        <th>选择</th>
+                        <th>订单号</th>
+                        <th>项目</th>
+                        <th>时长</th>
+                        <th>学员名字</th>
+                        <th>结算价格</th>
+                        <th>监督员</th>
+                        <th>备注</th>
+                        <th>状态</th>
+                        <th>操作</th>
+                    </tr>
+                </thead>
+                <tbody id="superviseTableBody">
+                    <tr>
+                        <td colspan="10" class="salary-empty-cell">暂无监督数据</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <div class="modal-overlay" id="superviseCalendarModal">
+        <div class="modal-box" style="max-width: 900px;">
+            <div style="display:flex; align-items:center; justify-content:space-between; gap:8px; margin-bottom:8px;">
+                <h3 id="superviseCalendarTitle" style="margin:0; display:none;">监督日志</h3>
+            </div>
+            <div style="display:flex; align-items:center; justify-content:space-between; gap:10px; flex-wrap:wrap; margin-bottom:10px;">
+                <div id="superviseCalendarMonthLabel" style="margin:0; color:#334155; font-weight:600;"></div>
+                <div class="sv-cal-nav">
+                    <button type="button" class="sv-cal-nav-btn" onclick="changeSuperviseCalendarMonth(-1)">上月</button>
+                    <button type="button" class="sv-cal-nav-btn" onclick="changeSuperviseCalendarMonth(1)">下月</button>
+                </div>
+            </div>
+            <div id="superviseCalendarLegend" style="display:flex; gap:14px; font-size:12px; color:#64748b; margin-bottom:10px;">
+                <span>✅ 已完成</span>
+                <span>❌ 未完成</span>
+                <span>⭕ 待提交/未通过</span>
+                <span>📍 今天</span>
+            </div>
+            <div class="sv-log-layout">
+                <div>
+                    <div id="superviseCalendarGrid"></div>
+                </div>
+                <div class="sv-log-uploader">
+                    <h4 style="margin:0 0 8px; color:#334155;">提交监督截图</h4>
+                    <div id="svSelectedDateHint" style="font-size:12px; color:#64748b; margin-bottom:8px;">当前日期（仅当天可提交）：--</div>
+                    <input type="file" id="calendarSuperviseImage" accept="image/*">
+                    <img id="calendarSupervisePreview" alt="截图预览" style="display:none; width:100%; max-height:220px; object-fit:contain; border-radius:8px; border:1px solid rgba(148,163,184,0.35); margin-top:8px;">
+                    <div id="calendarSuperviseAiResult" style="font-size:13px; color:#64748b; margin-top:8px;">选择日期并上传后，点击AI识别并提交</div>
+                    <div class="modal-footer" style="justify-content:flex-start; margin-top:10px;">
+                        <button type="button" class="success" onclick="submitDailySuperviseWithAI()">AI识别并提交</button>
+                    </div>
+                    <div class="modal-footer" id="superviseManualActions" style="display:none; justify-content:flex-start; margin-top:8px;">
+                        <button type="button" class="success" onclick="markSuperviseDailyByAdmin(true)">完成</button>
+                        <button type="button" class="danger" onclick="markSuperviseDailyByAdmin(false)">未完成</button>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="success" id="superviseTaskFinishAction" style="display:none;" onclick="finishSuperviseTask(currentCalendarTaskId)">整单完成</button>
+                <button type="button" class="ghost" onclick="closeSuperviseCalendarModal()">关闭</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="modal-overlay" id="customDurationModal">
+        <div class="modal-box" style="max-width: 420px;">
+            <h3>输入监督时长</h3>
+            <div class="modal-form-item">
+                <label for="customDurationDays">监督时长（单位：天）</label>
+                <input type="number" id="customDurationDays" min="1" step="1" placeholder="请输入天数，例如 5">
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="ghost" onclick="closeCustomDurationModal()">取消</button>
+                <button type="button" class="success" onclick="confirmCustomDuration()">确定</button>
+            </div>
+        </div>
+    </div>
+</body>
+
+</html>

@@ -145,7 +145,10 @@ async function saveStaffList(staffList) {
             id: staff.id,
             name: staff.name,
             password: staff.password,
-            salary: parseFloat(staff.salary || 0)
+            salary: parseFloat(staff.salary || 0),
+            phone: String(staff.phone || "").trim(),
+            salaryMethod: String(staff.salaryMethod || "").trim(),
+            salaryAccount: String(staff.salaryAccount || "").trim()
         }));
 
         // 先获取数据库中已有的员工

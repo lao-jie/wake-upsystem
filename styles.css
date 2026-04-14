@@ -441,6 +441,307 @@ textarea {
         0 8px 28px rgba(13, 148, 136, 0.1);
 }
 
+/* 监督页 */
+.supervise-headbar {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 8px;
+    flex-wrap: wrap;
+}
+
+.supervise-toolbar {
+    margin-bottom: 16px;
+    display: grid;
+    grid-template-columns: minmax(220px, 1fr) 170px 180px auto auto;
+    gap: 10px;
+    align-items: center;
+}
+
+.supervise-toolbar input,
+.supervise-toolbar select {
+    width: 100%;
+    margin: 0;
+}
+
+.supervise-toolbar select {
+    padding: 12px 14px;
+    border: 1px solid rgba(148, 163, 184, 0.45);
+    border-radius: 10px;
+    font-size: 14px;
+    background: #f8fafc;
+    color: #1e293b;
+}
+
+.supervise-summary-grid {
+    display: grid;
+    grid-template-columns: repeat(5, minmax(120px, 1fr));
+    gap: 10px;
+    margin-bottom: 0;
+    width: 100%;
+}
+
+.supervise-summary-card {
+    background: linear-gradient(180deg, #ffffff 0%, #f8fafc 100%);
+    border-radius: 12px;
+    border: 1px solid rgba(148, 163, 184, 0.28);
+    box-shadow: var(--shadow-soft);
+    padding: 14px 12px;
+}
+
+.supervise-summary-label {
+    font-size: 12px;
+    color: #64748b;
+    margin-bottom: 6px;
+}
+
+.supervise-summary-value {
+    color: #0f766e;
+    font-size: 24px;
+    font-weight: 700;
+}
+
+.supervise-table-wrapper {
+    width: 100%;
+}
+
+.supervise-table {
+    min-width: 1400px;
+}
+
+.supervise-table td:nth-child(5) {
+    white-space: normal;
+    word-break: break-word;
+    max-width: 260px;
+}
+
+.supervise-task-form {
+    display: grid;
+    grid-template-columns: 170px 140px 120px 120px 1fr 120px 140px auto;
+    gap: 10px;
+    align-items: center;
+}
+
+.supervise-task-form input,
+.supervise-task-form select {
+    width: 100%;
+    margin: 0;
+    height: 40px;
+    padding: 0 12px;
+    border-radius: 10px;
+    border: 1px solid rgba(148, 163, 184, 0.4);
+    background: #f8fafc;
+    color: #1e293b;
+    box-sizing: border-box;
+    line-height: 40px;
+}
+
+.supervise-task-form input::placeholder {
+    color: rgba(100, 116, 139, 0.72);
+}
+
+.supervise-task-form input:focus,
+.supervise-task-form select:focus {
+    outline: none;
+    border-color: #2dd4bf;
+    box-shadow: 0 0 0 3px rgba(45, 212, 191, 0.18);
+    background: #ffffff;
+}
+
+.supervise-task-form button {
+    margin: 0;
+    height: 40px;
+    min-height: 40px;
+    padding: 0 16px;
+    border-radius: 10px;
+    align-self: stretch;
+}
+
+.supervise-task-form input[type="datetime-local"] {
+    line-height: normal;
+    padding-right: 8px;
+}
+
+#superviseCalendarGrid {
+    display: grid;
+    grid-template-columns: repeat(7, minmax(72px, 1fr));
+    gap: 10px;
+    background: linear-gradient(180deg, rgba(248, 250, 252, 0.95) 0%, rgba(241, 245, 249, 0.95) 100%);
+    border: 1px solid rgba(148, 163, 184, 0.25);
+    border-radius: 14px;
+    padding: 12px;
+    overflow-x: auto;
+}
+
+.sv-cal-weekday {
+    font-size: 12px;
+    color: #0f766e;
+    text-align: center;
+    padding: 6px 0;
+    font-weight: 700;
+    border-radius: 8px;
+    background: linear-gradient(180deg, #ecfdf5 0%, #d1fae5 100%);
+}
+
+.sv-cal-day {
+    border: 1px solid rgba(148, 163, 184, 0.35);
+    border-radius: 12px;
+    min-height: 72px;
+    padding: 8px 6px;
+    text-align: center;
+    font-size: 12px;
+    background: #ffffff;
+    color: #334155;
+    box-shadow: 0 2px 10px rgba(15, 23, 42, 0.05);
+    transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
+}
+
+.sv-cal-day:hover:not(.is-empty) {
+    transform: translateY(-1px);
+    border-color: rgba(45, 212, 191, 0.45);
+    box-shadow: 0 6px 16px rgba(13, 148, 136, 0.12);
+}
+
+.sv-cal-day.is-empty {
+    background: transparent;
+    border-color: transparent;
+    box-shadow: none;
+}
+
+.sv-cal-day .num {
+    font-weight: 700;
+    margin-bottom: 6px;
+    font-size: 13px;
+}
+
+.sv-cal-day .mark {
+    font-size: 17px;
+    line-height: 1;
+    min-height: 18px;
+}
+
+.sv-cal-day.today {
+    border-color: rgba(20, 184, 166, 0.65);
+    box-shadow:
+        inset 0 0 0 2px rgba(20, 184, 166, 0.22),
+        0 6px 16px rgba(13, 148, 136, 0.14);
+}
+
+.sv-cal-day.selected {
+    border-color: rgba(59, 130, 246, 0.7);
+    box-shadow:
+        inset 0 0 0 2px rgba(59, 130, 246, 0.2),
+        0 6px 14px rgba(37, 99, 235, 0.16);
+}
+
+#superviseCalendarLegend {
+    padding: 8px 10px;
+    border-radius: 10px;
+    background: rgba(255, 255, 255, 0.85);
+    border: 1px solid rgba(148, 163, 184, 0.25);
+}
+
+#superviseCalendarMonthLabel {
+    display: inline-flex;
+    align-items: center;
+    padding: 5px 10px;
+    border-radius: 999px;
+    background: linear-gradient(180deg, #ccfbf1 0%, #99f6e4 100%);
+    color: #0f766e;
+    border: 1px solid rgba(20, 184, 166, 0.3);
+}
+
+.sv-cal-nav {
+    display: inline-flex;
+    gap: 8px;
+}
+
+.sv-cal-nav-btn {
+    margin: 0;
+    min-width: 64px;
+    height: 36px;
+    padding: 0 14px;
+    border-radius: 12px;
+    border: 1px solid rgba(148, 163, 184, 0.35);
+    background: linear-gradient(180deg, #f8fafc 0%, #e2e8f0 100%);
+    color: #334155;
+    font-size: 14px;
+    font-weight: 700;
+    box-shadow: 0 2px 8px rgba(15, 23, 42, 0.08);
+}
+
+.sv-cal-nav-btn:hover {
+    transform: translateY(-1px);
+    border-color: rgba(45, 212, 191, 0.45);
+    background: linear-gradient(180deg, #ffffff 0%, #ecfeff 100%);
+    box-shadow: 0 6px 14px rgba(13, 148, 136, 0.12);
+}
+
+.sv-log-layout {
+    display: grid !important;
+    grid-template-columns: 1fr !important;
+    gap: 12px;
+    align-items: start;
+}
+
+.sv-log-uploader {
+    border: 1px solid rgba(148, 163, 184, 0.25);
+    background: rgba(255, 255, 255, 0.9);
+    border-radius: 12px;
+    padding: 10px;
+    min-width: 0;
+}
+
+.sv-log-layout > div {
+    min-width: 0;
+}
+
+.sv-log-uploader input[type="file"] {
+    width: 100%;
+    max-width: 100%;
+    box-sizing: border-box;
+}
+
+#superviseCalendarModal .modal-box {
+    width: min(960px, 92vw);
+    max-height: 88vh;
+    overflow-y: auto;
+}
+
+#superviseCalendarLegend {
+    flex-wrap: wrap;
+}
+
+@media (max-width: 768px) {
+    .supervise-headbar {
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    .supervise-headbar button {
+        width: 100%;
+        margin: 0;
+    }
+
+    .supervise-toolbar {
+        grid-template-columns: 1fr;
+    }
+
+    .supervise-toolbar button {
+        width: 100%;
+        margin: 0;
+    }
+
+    .supervise-task-form {
+        grid-template-columns: 1fr;
+    }
+
+    .supervise-summary-grid {
+        grid-template-columns: repeat(2, minmax(120px, 1fr));
+    }
+}
+
 /* 叫醒页订单表：撑满容器、等分列、单元格居中（覆盖全局 table 的 min-width） */
 #page_wake .table-wrapper {
     width: 100%;
