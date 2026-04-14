@@ -222,6 +222,69 @@ async function saveStaffList(staffList) {
     localStorage.setItem("staffList", JSON.stringify(staffList));
 }
 
+// 按员工ID只更新指定字段（用于账号管理，避免全表 upsert 带来的覆盖/丢字段问题）
+async function updateStaffProfileById(staffId, patch) {
+    const id = String(staffId || "").trim();
+    if (!id) return { ok: false, reason: "invalid_id" };
+    try {
+        const dbPatch = {};
+        if (Object.prototype.hasOwnProperty.call(patch, "password")) {
+            dbPatch.password = String(patch.password || "");
+        }
+        if (Object.prototype.hasOwnProperty.call(patch, "phone")) {
+            dbPatch.phone = String(patch.phone || "").trim();
+        }
+        if (Object.prototype.hasOwnProperty.call(patch, "salaryMethod")) {
+            dbPatch.salarymethod = String(patch.salaryMethod || "").trim();
+        }
+        if (Object.prototype.hasOwnProperty.call(patch, "salaryAccount")) {
+            dbPatch.salaryaccount = String(patch.salaryAccount || "").trim();
+        }
+
+        const keys = Object.keys(dbPatch);
+        if (keys.length === 0) return { ok: false, reason: "empty_patch" };
+
+        const { error: updateError } = await supabaseClient
+            .from('staff_list')
+            .update(dbPatch)
+            .eq('id', id);
+        if (updateError) {
+            console.error("更新员工资料失败：", updateError);
+            return { ok: false, reason: "update_failed", error: updateError };
+        }
+
+        // 回读数据库核验
+        const { data, error: readError } = await supabaseClient
+            .from('staff_list')
+            .select('*')
+            .eq('id', id)
+            .single();
+        if (readError || !data) {
+            console.error("回读员工资料失败：", readError);
+            return { ok: false, reason: "read_failed", error: readError };
+        }
+
+        const normalized = {
+            ...data,
+            phone: data.phone || '',
+            salaryMethod: data.salaryMethod || data.salarymethod || data.salary_method || '',
+            salaryAccount: data.salaryAccount || data.salaryaccount || data.salary_account || ''
+        };
+
+        // 同步本地缓存
+        const cached = JSON.parse(localStorage.getItem("staffList") || "[]");
+        const idx = cached.findIndex((s) => String(s.id) === id);
+        if (idx !== -1) cached[idx] = { ...cached[idx], ...normalized };
+        else cached.push(normalized);
+        localStorage.setItem("staffList", JSON.stringify(cached));
+
+        return { ok: true, data: normalized };
+    } catch (e) {
+        console.error("更新员工资料异常：", e);
+        return { ok: false, reason: "exception", error: e };
+    }
+}
+
 // 余额明细存储
 async function getSalaryDetails() {
     try {
