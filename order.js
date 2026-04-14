@@ -43,6 +43,25 @@ function buildOrdersSignature(orders) {
     ].join("|")).join("||");
 }
 
+async function ensureStaffContactAndAlipayBound() {
+    if (!isStaff) return true;
+
+    const staffList = await getStaffList();
+    const me = (staffList || []).find((staff) => staff.id === user.id);
+    const phone = String(me?.phone || "").trim();
+    const alipay = String(me?.salaryAccount || "").trim();
+
+    if (phone && alipay) return true;
+
+    const msg = "请进入个人中心账号管理中绑定手机号以及支付宝账号";
+    if (typeof showToast === "function") {
+        showToast(msg, "warning");
+    } else {
+        alert(msg);
+    }
+    return false;
+}
+
 // 加载订单
 async function loadOrders() {
     const currentToken = ++latestLoadOrdersToken;
@@ -516,6 +535,10 @@ function renderTable(orders) {
 
 // 接单
 async function takeOrder(serialnumber, waketime, phone) {
+    if (!(await ensureStaffContactAndAlipayBound())) {
+        return;
+    }
+
     let allOrders = await getOrders();
     // 使用serialnumber、waketime和phone的组合来查找订单，确保找到正确的订单
     const targetIndex = allOrders.findIndex(item =>
@@ -546,6 +569,10 @@ async function takeOrder(serialnumber, waketime, phone) {
 
 // 批量接单
 async function batchTakeOrders() {
+    if (!(await ensureStaffContactAndAlipayBound())) {
+        return;
+    }
+
     const checkedBoxes = document.querySelectorAll(".order-checkbox:checked");
     if (checkedBoxes.length === 0) {
         alert("请至少选择一个订单！");
