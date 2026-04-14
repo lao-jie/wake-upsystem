@@ -345,7 +345,9 @@ function renderProfileCards(orders) {
                     `;
                     orders.forEach(order => {
                         const settleStatus = order.salarysettled ? "已结算" : "未结算";
-                        const showTime = order.waketime.includes('T') ? order.waketime.split('T')[1] : order.waketime;
+                        const showTime = typeof formatWakeTimeForDisplay === "function"
+                            ? formatWakeTimeForDisplay(order.waketime)
+                            : (order.waketime.includes('T') ? order.waketime.split('T')[1] : order.waketime);
 
                         html += `
                         <tr style="border-bottom: 1px solid #f1f5f9;">
@@ -400,7 +402,9 @@ function renderProfileCards(orders) {
                 }
 
                 const settleStatus = order.salarysettled ? "已结算" : "未结算";
-                const showTime = order.waketime.includes('T') ? order.waketime.split('T')[1] : order.waketime;
+                const showTime = typeof formatWakeTimeForDisplay === "function"
+                    ? formatWakeTimeForDisplay(order.waketime)
+                    : (order.waketime.includes('T') ? order.waketime.split('T')[1] : order.waketime);
 
                 html += `
                 <div class="order-card">
