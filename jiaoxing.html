@@ -91,19 +91,6 @@
             <h2>控制台首页</h2>
             <div class="user-info">当前用户：<span id="userName"></span></div>
 
-            <!-- 首页公告 -->
-            <div class="notice-section" id="pageNotice_home">
-                <div class="notice-header">
-                    <span class="notice-icon"><i data-lucide="house"></i></span>
-                    <span class="notice-title">首页公告</span>
-                    <button class="notice-edit-btn" id="noticeEditBtn" style="display: none;"
-                        onclick="editNotice()">编辑</button>
-                </div>
-                <div class="notice-content" id="noticeContent_home">
-                    <p>暂无公告</p>
-                </div>
-            </div>
-
             <!-- 角色切换按钮（仅管理员可见） -->
             <div id="roleSwitchArea">
                 <button onclick="switchUser('admin')">切换到管理员</button>
@@ -131,17 +118,6 @@
         <!-- 叫醒页面 -->
         <div id="page_wake" class="page">
             <h2 id="wakePageTitle">叫醒订单管理</h2>
-
-            <!-- 叫醒页面公告 -->
-            <div class="notice-section" id="pageNotice_wake">
-                <div class="notice-header">
-                    <span class="notice-icon"><i data-lucide="alarm-clock"></i></span>
-                    <span class="notice-title">叫醒页面公告</span>
-                </div>
-                <div class="notice-content" id="noticeContent_wake">
-                    <p>暂无公告</p>
-                </div>
-            </div>
 
             <!-- 搜索区域 -->
             <div style="margin-bottom: 16px; display: flex; gap: 8px; flex-wrap: wrap; align-items: center;">
@@ -222,32 +198,10 @@
         <!-- 监督页面（预留） -->
         <div id="page_supervise" class="page">
             <h2>监督页面（待开发）</h2>
-
-            <!-- 监督页面公告 -->
-            <div class="notice-section" id="pageNotice_supervise">
-                <div class="notice-header">
-                    <span class="notice-icon"><i data-lucide="eye"></i></span>
-                    <span class="notice-title">监督页面公告</span>
-                </div>
-                <div class="notice-content" id="noticeContent_supervise">
-                    <p>暂无公告</p>
-                </div>
-            </div>
         </div>
 
         <!-- 团队管理/个人中心页面 -->
         <div id="page_team" class="page">
-            <!-- 个人中心公告 -->
-            <div class="notice-section" id="pageNotice_team">
-                <div class="notice-header">
-                    <span class="notice-icon"><i data-lucide="user-round"></i></span>
-                    <span class="notice-title">个人中心公告</span>
-                </div>
-                <div class="notice-content" id="noticeContent_team">
-                    <p>暂无公告</p>
-                </div>
-            </div>
-
             <!-- 管理员：添加员工按钮 + 团队管理表格 -->
             <div style="margin-bottom: 16px; display: none;" id="addStaffBtnContainer">
                 <button class="success" onclick="openAddStaffModal()">添加新员工</button>
