@@ -216,9 +216,6 @@ function showPage(page) {
             wakePageTitle.innerText = isStaff ? "接单大厅" : "叫醒订单管理";
         }
         loadOrders();
-    } else if (page === "supervise") {
-        document.getElementById("nav-taobao").classList.add("active");
-        document.getElementById("sub-supervise").classList.add("active");
     } else if (page === "noticeSetting") {
         document.getElementById("nav-notice-setting").classList.add("active");
         const noticeSettingUserName = document.getElementById("noticeSettingUserName");
@@ -709,6 +706,35 @@ function skipPageNoticeForToday() {
 
 // ==================== 账号管理功能 ====================
 
+async function updateCurrentStaffProfile(patch) {
+    const staffList = await getStaffList();
+    const currentStaffIndex = staffList.findIndex(s => String(s.id) === String(user.id));
+    if (currentStaffIndex === -1) {
+        throw new Error("当前员工不存在，无法保存");
+    }
+
+    const merged = {
+        ...staffList[currentStaffIndex],
+        ...patch
+    };
+    staffList[currentStaffIndex] = merged;
+    await saveStaffList(staffList);
+
+    // 写入后回读核验，避免“本地显示成功但云端没写入”
+    const latest = await getStaffList();
+    const latestMe = latest.find(s => String(s.id) === String(user.id));
+    if (!latestMe) {
+        throw new Error("保存后未找到当前员工记录");
+    }
+    Object.keys(patch).forEach((k) => {
+        const expected = String(merged[k] ?? "").trim();
+        const actual = String(latestMe[k] ?? "").trim();
+        if (expected !== actual) {
+            throw new Error(`字段 ${k} 未成功写入数据库`);
+        }
+    });
+}
+
 // 打开账号管理弹窗
 function openAccountSettings() {
     const modal = document.getElementById('accountSettingsModal');
@@ -735,9 +761,9 @@ function closeAccountSettingsModal() {
 }
 
 // 加载账号设置
-function loadAccountSettings() {
-    // 从localStorage加载员工数据中读取
-    const staffList = JSON.parse(localStorage.getItem("staffList") || "[]");
+async function loadAccountSettings() {
+    // 优先从数据库读取，失败时函数内部会回退本地缓存
+    const staffList = await getStaffList();
     const currentStaff = staffList.find(s => s.id === user.id);
 
     if (currentStaff) {
@@ -762,7 +788,7 @@ function loadAccountSettings() {
 }
 
 // 修改密码
-function changePassword() {
+async function changePassword() {
     const oldPasswordInput = document.getElementById('oldPassword');
     const newPasswordInput = document.getElementById('newPassword');
     const confirmPasswordInput = document.getElementById('confirmPassword');
@@ -789,7 +815,7 @@ function changePassword() {
     }
 
     // 验证旧密码
-    const staffList = JSON.parse(localStorage.getItem("staffList") || "[]");
+    const staffList = await getStaffList();
     const currentStaffIndex = staffList.findIndex(s => s.id === user.id);
 
     if (currentStaffIndex === -1) {
@@ -804,7 +830,7 @@ function changePassword() {
 
     // 更新密码
     staffList[currentStaffIndex].password = newPwd;
-    localStorage.setItem("staffList", JSON.stringify(staffList));
+    await saveStaffList(staffList);
 
     // 清空输入框
     oldPasswordInput.value = '';
@@ -815,7 +841,7 @@ function changePassword() {
 }
 
 // 绑定手机号
-function bindPhone() {
+async function bindPhone() {
     const userPhoneInput = document.getElementById('userPhone');
     const phone = userPhoneInput.value.trim();
 
@@ -829,20 +855,16 @@ function bindPhone() {
         return;
     }
 
-    // 更新员工数据
-    const staffList = JSON.parse(localStorage.getItem("staffList") || "[]");
-    const currentStaffIndex = staffList.findIndex(s => s.id === user.id);
-
-    if (currentStaffIndex !== -1) {
-        staffList[currentStaffIndex].phone = phone;
-        localStorage.setItem("staffList", JSON.stringify(staffList));
+    try {
+        await updateCurrentStaffProfile({ phone });
+        showToast('手机号绑定成功！', 'success');
+    } catch (e) {
+        showToast(`手机号绑定失败：${e.message}`, 'danger');
     }
-
-    showToast('手机号绑定成功！', 'success');
 }
 
 // 保存薪资结算方式
-function saveSalaryMethod() {
+async function saveSalaryMethod() {
     const salaryMethodInput = document.getElementById('salaryMethod');
     const salaryAccountInput = document.getElementById('salaryAccount');
 
@@ -854,17 +876,15 @@ function saveSalaryMethod() {
         return;
     }
 
-    // 更新员工数据
-    const staffList = JSON.parse(localStorage.getItem("staffList") || "[]");
-    const currentStaffIndex = staffList.findIndex(s => s.id === user.id);
-
-    if (currentStaffIndex !== -1) {
-        staffList[currentStaffIndex].salaryMethod = method;
-        staffList[currentStaffIndex].salaryAccount = account;
-        localStorage.setItem("staffList", JSON.stringify(staffList));
+    try {
+        await updateCurrentStaffProfile({
+            salaryMethod: method,
+            salaryAccount: account
+        });
+        showToast('薪资结算方式保存成功！', 'success');
+    } catch (e) {
+        showToast(`薪资结算方式保存失败：${e.message}`, 'danger');
     }
-
-    showToast('薪资结算方式保存成功！', 'success');
 }
 
 // ==================== 小组件详情功能 ====================
@@ -988,7 +1008,7 @@ function closeChangePasswordModal() {
 }
 
 // 提交修改密码
-function submitChangePassword() {
+async function submitChangePassword() {
     const oldPwd = document.getElementById('cpOldPassword').value.trim();
     const newPwd = document.getElementById('cpNewPassword').value.trim();
     const confirmPwd = document.getElementById('cpConfirmPassword').value.trim();
@@ -1011,7 +1031,7 @@ function submitChangePassword() {
     }
 
     // 验证旧密码
-    const staffList = JSON.parse(localStorage.getItem("staffList") || "[]");
+    const staffList = await getStaffList();
     const currentStaffIndex = staffList.findIndex(s => s.id === user.id);
 
     if (currentStaffIndex === -1) {
@@ -1024,23 +1044,24 @@ function submitChangePassword() {
         return;
     }
 
-    // 更新密码
-    staffList[currentStaffIndex].password = newPwd;
-    localStorage.setItem("staffList", JSON.stringify(staffList));
-
-    closeChangePasswordModal();
-    showToast('密码修改成功！', 'success');
+    try {
+        await updateCurrentStaffProfile({ password: newPwd });
+        closeChangePasswordModal();
+        showToast('密码修改成功！', 'success');
+    } catch (e) {
+        showToast(`密码修改失败：${e.message}`, 'danger');
+    }
 }
 
 // 打开绑定手机号弹窗
-function openBindPhoneModal() {
+async function openBindPhoneModal() {
     closeAccountManagementModal();
     const modal = document.getElementById('bindPhoneModal');
     if (modal) {
         modal.style.display = 'flex';
     }
     // 加载已有手机号
-    const staffList = JSON.parse(localStorage.getItem("staffList") || "[]");
+    const staffList = await getStaffList();
     const currentStaff = staffList.find(s => s.id === user.id);
     if (currentStaff && currentStaff.phone) {
         document.getElementById('bpUserPhone').value = currentStaff.phone;
@@ -1056,7 +1077,7 @@ function closeBindPhoneModal() {
 }
 
 // 提交绑定手机号
-function submitBindPhone() {
+async function submitBindPhone() {
     const phone = document.getElementById('bpUserPhone').value.trim();
 
     if (!phone) {
@@ -1069,28 +1090,24 @@ function submitBindPhone() {
         return;
     }
 
-    // 更新员工数据
-    const staffList = JSON.parse(localStorage.getItem("staffList") || "[]");
-    const currentStaffIndex = staffList.findIndex(s => s.id === user.id);
-
-    if (currentStaffIndex !== -1) {
-        staffList[currentStaffIndex].phone = phone;
-        localStorage.setItem("staffList", JSON.stringify(staffList));
+    try {
+        await updateCurrentStaffProfile({ phone });
+        closeBindPhoneModal();
+        showToast('手机号绑定成功！', 'success');
+    } catch (e) {
+        showToast(`手机号绑定失败：${e.message}`, 'danger');
     }
-
-    closeBindPhoneModal();
-    showToast('手机号绑定成功！', 'success');
 }
 
 // 打开薪资结算方式弹窗
-function openSalaryMethodModal() {
+async function openSalaryMethodModal() {
     closeAccountManagementModal();
     const modal = document.getElementById('salaryMethodModal');
     if (modal) {
         modal.style.display = 'flex';
     }
     // 加载已有账号
-    const staffList = JSON.parse(localStorage.getItem("staffList") || "[]");
+    const staffList = await getStaffList();
     const currentStaff = staffList.find(s => s.id === user.id);
     if (currentStaff && currentStaff.salaryAccount) {
         document.getElementById('smSalaryAccount').value = currentStaff.salaryAccount;
@@ -1106,7 +1123,7 @@ function closeSalaryMethodModal() {
 }
 
 // 提交薪资结算方式
-function submitSalaryMethod() {
+async function submitSalaryMethod() {
     const account = document.getElementById('smSalaryAccount').value.trim();
 
     if (!account) {
@@ -1114,18 +1131,16 @@ function submitSalaryMethod() {
         return;
     }
 
-    // 更新员工数据
-    const staffList = JSON.parse(localStorage.getItem("staffList") || "[]");
-    const currentStaffIndex = staffList.findIndex(s => s.id === user.id);
-
-    if (currentStaffIndex !== -1) {
-        staffList[currentStaffIndex].salaryMethod = 'alipay';
-        staffList[currentStaffIndex].salaryAccount = account;
-        localStorage.setItem("staffList", JSON.stringify(staffList));
+    try {
+        await updateCurrentStaffProfile({
+            salaryMethod: 'alipay',
+            salaryAccount: account
+        });
+        closeSalaryMethodModal();
+        showToast('薪资结算方式保存成功！', 'success');
+    } catch (e) {
+        showToast(`薪资结算方式保存失败：${e.message}`, 'danger');
     }
-
-    closeSalaryMethodModal();
-    showToast('薪资结算方式保存成功！', 'success');
 }
 
 // 渲染余额明细
