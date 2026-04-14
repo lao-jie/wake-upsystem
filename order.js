@@ -9,6 +9,24 @@ let latestLoadOrdersToken = 0;
 let renderFrameId = null;
 let lastSavedOrdersSignature = "";
 
+function formatWakeTimeDisplay(waketime) {
+    const raw = String(waketime || "").trim();
+    if (!raw) return "-";
+
+    // 兼容 ISO / 带时区 / 纯时间字符串，统一展示为 HH:mm
+    const hhmmMatch = raw.match(/(\d{2}):(\d{2})/);
+    if (hhmmMatch) {
+        return `${hhmmMatch[1]}:${hhmmMatch[2]}`;
+    }
+
+    const d = new Date(raw);
+    if (!Number.isNaN(d.getTime())) {
+        return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+    }
+
+    return raw;
+}
+
 function buildOrdersSignature(orders) {
     return (orders || []).map((o) => [
         o.id || "",
@@ -179,7 +197,7 @@ function renderOrders(orders) {
                                 actionHtml = `<span class="status-badge ${statusClass}">${item.status}</span>`;
                             }
 
-                            const showTime = item.waketime.includes('T') ? item.waketime.split('T')[1] : item.waketime;
+                            const showTime = formatWakeTimeDisplay(item.waketime);
 
                             html += `
                         <tr>
@@ -248,7 +266,7 @@ function renderCards(orders) {
                             actionHtml = `<span class="status-badge ${statusClass}">${item.status}</span>`;
                         }
 
-                        const showTime = item.waketime.includes('T') ? item.waketime.split('T')[1] : item.waketime;
+                        const showTime = formatWakeTimeDisplay(item.waketime);
 
                         html += `
                         <tr>
@@ -288,7 +306,7 @@ function renderCards(orders) {
                     actionHtml = `<span class="status-badge ${statusClass}">${item.status}</span>`;
                 }
 
-                const showTime = item.waketime.includes('T') ? item.waketime.split('T')[1] : item.waketime;
+                const showTime = formatWakeTimeDisplay(item.waketime);
 
                 html += `
                 <div class="order-card">
@@ -407,7 +425,7 @@ function renderTable(orders) {
                     actionBtn = "已完成";
                 }
 
-                const showTime = item.waketime.includes('T') ? item.waketime.split('T')[1] : item.waketime;
+                const showTime = formatWakeTimeDisplay(item.waketime);
 
                 html += `
                 <tr>
@@ -475,7 +493,7 @@ function renderTable(orders) {
                 actionBtn = "已完成";
             }
 
-            const showTime = item.waketime.includes('T') ? item.waketime.split('T')[1] : item.waketime;
+            const showTime = formatWakeTimeDisplay(item.waketime);
 
             html += `
     <tr>
@@ -808,7 +826,7 @@ function searchOrders() {
             return true;
         }
         // 搜索时间
-        const waketime = order.waketime && order.waketime.includes('T') ? order.waketime.split('T')[1] : order.waketime;
+        const waketime = formatWakeTimeDisplay(order.waketime);
         if (waketime && waketime.toLowerCase().includes(searchTerm)) {
             return true;
         }
@@ -1181,8 +1199,8 @@ async function parseBatchOrders() {
         parsedBatchOrders = built;
 
         parsedBatchOrders.sort((a, b) => {
-            const t1 = a.waketime.split("T")[1];
-            const t2 = b.waketime.split("T")[1];
+            const t1 = formatWakeTimeDisplay(a.waketime);
+            const t2 = formatWakeTimeDisplay(b.waketime);
             const c = t1.localeCompare(t2);
             if (c !== 0) return c;
             return new Date(a.submittime) - new Date(b.submittime);
@@ -1190,7 +1208,7 @@ async function parseBatchOrders() {
 
         let html = "<div>✅ 识别完成：</div>";
         parsedBatchOrders.forEach((it, i) => {
-            html += `<div>第${i + 1}单：${it.waketime.split("T")[1]} ${it.phone} 备注：${it.note}</div>`;
+            html += `<div>第${i + 1}单：${formatWakeTimeDisplay(it.waketime)} ${it.phone} 备注：${it.note}</div>`;
         });
         if (warnings.length) {
             html += '<div style="margin-top:10px;color:#b45309;font-size:13px;">⚠ 部分提示（已跳过无效项）：<br>' + warnings.map(w => `· ${w}`).join("<br>") + "</div>";
