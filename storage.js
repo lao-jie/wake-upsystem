@@ -223,7 +223,7 @@ async function saveStaffList(staffList) {
 }
 
 // 按员工ID只更新指定字段（用于账号管理，避免全表 upsert 带来的覆盖/丢字段问题）
-async function updateStaffProfileById(staffId, patch, fallbackName = "") {
+async function updateStaffProfileById(staffId, patch) {
     const id = String(staffId || "").trim();
     if (!id) return { ok: false, reason: "invalid_id" };
     try {
@@ -244,7 +244,7 @@ async function updateStaffProfileById(staffId, patch, fallbackName = "") {
         const keys = Object.keys(dbPatch);
         if (keys.length === 0) return { ok: false, reason: "empty_patch" };
 
-        const { data: updatedRowsById, error: updateError } = await supabaseClient
+        const { data: updatedRows, error: updateError } = await supabaseClient
             .from('staff_list')
             .update(dbPatch)
             .eq('id', id)
@@ -254,39 +254,11 @@ async function updateStaffProfileById(staffId, patch, fallbackName = "") {
             return { ok: false, reason: "update_failed", error: updateError };
         }
 
-        let updatedRows = Array.isArray(updatedRowsById) ? updatedRowsById : [];
-        let targetRow = updatedRows[0] || null;
-
-        // 兼容：若按 id 未命中，尝试按 name 命中一条（某些旧数据登录ID与员工表ID不一致）
-        if (!targetRow && String(fallbackName || "").trim()) {
-            const { data: updatedRowsByName, error: updateByNameError } = await supabaseClient
-                .from('staff_list')
-                .update(dbPatch)
-                .eq('name', String(fallbackName).trim())
-                .select('*');
-            if (updateByNameError) {
-                console.error("按姓名更新员工资料失败：", updateByNameError);
-                return { ok: false, reason: "update_by_name_failed", error: updateByNameError };
-            }
-            updatedRows = Array.isArray(updatedRowsByName) ? updatedRowsByName : [];
-            targetRow = updatedRows[0] || null;
-        }
-
-        if (!targetRow) {
+        if (!Array.isArray(updatedRows) || updatedRows.length === 0) {
             return { ok: false, reason: "no_row_updated" };
         }
 
-        // 回读数据库核验
-        const { data, error: readError } = await supabaseClient
-            .from('staff_list')
-            .select('*')
-            .eq('id', targetRow.id)
-            .single();
-        if (readError || !data) {
-            console.error("回读员工资料失败：", readError);
-            return { ok: false, reason: "read_failed", error: readError };
-        }
-
+        const data = updatedRows[0];
         const normalized = {
             ...data,
             phone: data.phone || '',
