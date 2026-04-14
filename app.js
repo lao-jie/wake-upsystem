@@ -707,27 +707,13 @@ function skipPageNoticeForToday() {
 // ==================== 账号管理功能 ====================
 
 async function updateCurrentStaffProfile(patch) {
-    const staffList = await getStaffList();
-    const currentStaffIndex = staffList.findIndex(s => String(s.id) === String(user.id));
-    if (currentStaffIndex === -1) {
-        throw new Error("当前员工不存在，无法保存");
+    const result = await updateStaffProfileById(user.id, patch);
+    if (!result.ok || !result.data) {
+        throw new Error(result.reason || "资料保存失败");
     }
-
-    const merged = {
-        ...staffList[currentStaffIndex],
-        ...patch
-    };
-    staffList[currentStaffIndex] = merged;
-    await saveStaffList(staffList);
-
-    // 写入后回读核验，避免“本地显示成功但云端没写入”
-    const latest = await getStaffList();
-    const latestMe = latest.find(s => String(s.id) === String(user.id));
-    if (!latestMe) {
-        throw new Error("保存后未找到当前员工记录");
-    }
+    const latestMe = result.data;
     Object.keys(patch).forEach((k) => {
-        const expected = String(merged[k] ?? "").trim();
+        const expected = String(patch[k] ?? "").trim();
         const actual = String(latestMe[k] ?? "").trim();
         if (expected !== actual) {
             throw new Error(`字段 ${k} 未成功写入数据库`);
