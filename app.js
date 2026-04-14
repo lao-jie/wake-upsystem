@@ -239,7 +239,7 @@ function showPageNoticeOnPage(page) {
     if (noticeSection && contentEl) {
         if (notice) {
             contentEl.innerHTML = `<p>${escapeHtml(notice)}</p>`;
-            noticeSection.style.display = 'none';
+            noticeSection.style.display = 'block';
         } else {
             contentEl.innerHTML = '<p>暂无公告</p>';
             noticeSection.style.display = 'none';
@@ -312,10 +312,15 @@ window.onload = async function () {
         document.getElementById("navTeamText").innerText = "个人中心";
     }
 
+    // 先同步云端公告，保证手机与电脑一致
+    await syncPageNoticesFromCloud();
+
     // 初始化公告
     initNotice();
     // 初始化公告设置页面预览
     loadNoticeSettingsPreview();
+    showPageNoticeOnPage(currentPage);
+    checkAndShowPageNotice(currentPage);
     renderLucideIcons();
 };
 
@@ -472,6 +477,7 @@ function escapeHtml(text) {
 }
 
 // ==================== 多页面公告功能 ====================
+const PAGE_NOTICE_TABLE = 'page_notices';
 
 // 当前编辑的页面
 let currentEditPage = '';
@@ -483,6 +489,35 @@ const pageNames = {
     'supervise': '监督页面',
     'team': '个人中心'
 };
+
+function formatNoticeTime(value) {
+    const d = new Date(value);
+    if (Number.isNaN(d.getTime())) return '--';
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+}
+
+async function syncPageNoticesFromCloud() {
+    try {
+        const { data, error } = await supabaseClient
+            .from(PAGE_NOTICE_TABLE)
+            .select('page, content, updatedat');
+        if (error || !Array.isArray(data)) return;
+
+        let latestTime = '';
+        data.forEach((item) => {
+            if (!item || !item.page) return;
+            localStorage.setItem(`pageNotice_${item.page}`, item.content || '');
+            if (item.updatedat && (!latestTime || item.updatedat > latestTime)) {
+                latestTime = item.updatedat;
+            }
+        });
+        if (latestTime) {
+            localStorage.setItem('noticeUpdateTime', formatNoticeTime(latestTime));
+        }
+    } catch (e) {
+        console.error('同步云端公告失败：', e);
+    }
+}
 
 // 加载公告设置预览
 function loadNoticeSettingsPreview() {
@@ -529,7 +564,7 @@ function closeEditPageNoticeModal() {
 }
 
 // 保存页面公告
-function savePageNotice() {
+async function savePageNotice() {
     const textarea = document.getElementById('pageNoticeTextarea');
     const content = textarea.value.trim();
 
@@ -538,8 +573,31 @@ function savePageNotice() {
         return;
     }
 
-    // 保存到localStorage
+    // 保存到 localStorage（兜底）
     localStorage.setItem(`pageNotice_${currentEditPage}`, content);
+    localStorage.setItem('noticeUpdateTime', formatNoticeTime(new Date().toISOString()));
+
+    // 同步到 Supabase，解决跨设备看不到公告
+    try {
+        const { error } = await supabaseClient
+            .from(PAGE_NOTICE_TABLE)
+            .upsert(
+                {
+                    page: currentEditPage,
+                    content,
+                    updatedby: user?.id || 'unknown',
+                    updatedat: new Date().toISOString()
+                },
+                { onConflict: 'page' }
+            );
+        if (error) {
+            throw error;
+        }
+    } catch (e) {
+        console.error('保存云端公告失败：', e);
+        showToast(`云端公告保存失败：${e.message || '请检查数据库权限'}`, 'danger');
+        return;
+    }
 
     // 记录已读状态重置（让员工重新看到）
     localStorage.removeItem(`pageNoticeRead_${currentEditPage}_${user.id}`);
@@ -557,12 +615,22 @@ function savePageNotice() {
 }
 
 // 清除页面公告
-function clearPageNotice() {
+async function clearPageNotice() {
     if (!confirm('确定要清除这个公告吗？')) {
         return;
     }
 
     localStorage.removeItem(`pageNotice_${currentEditPage}`);
+    try {
+        await supabaseClient
+            .from(PAGE_NOTICE_TABLE)
+            .delete()
+            .eq('page', currentEditPage);
+    } catch (e) {
+        console.error('清除云端公告失败：', e);
+        showToast(`云端公告清除失败：${e.message || '请检查数据库权限'}`, 'danger');
+        return;
+    }
     loadNoticeSettingsPreview();
     closeEditPageNoticeModal();
 
