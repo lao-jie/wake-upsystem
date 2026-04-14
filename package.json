@@ -1,0 +1,19 @@
+{
+  "name": "wake-up-system",
+  "version": "1.0.0",
+  "description": "叫醒订单管理系统",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node server.js"
+  },
+  "dependencies": {
+    "express": "^4.18.2",
+    "axios": "^1.6.2",
+    "dotenv": "^16.3.1"
+  },
+  "devDependencies": {},
+  "keywords": ["wake-up", "order-management", "supabase"],
+  "author": "",
+  "license": "MIT"
+}
