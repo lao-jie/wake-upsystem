@@ -479,6 +479,7 @@ const PAGE_NOTICE_TABLE = 'page_notices';
 
 // 当前编辑的页面
 let currentEditPage = '';
+let lastNoticePopupSignature = '';
 
 // 页面名称映射
 const pageNames = {
@@ -636,8 +637,15 @@ function checkAndShowPageNotice(page) {
     const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
     const skippedDate = localStorage.getItem(skipTodayKey);
     const skippedToday = skippedDate === todayStr;
+    const noticeUpdateTime = localStorage.getItem('noticeUpdateTime') || '';
+    const signature = `${page}|${todayStr}|${noticeUpdateTime}|${notice || ''}`;
 
     if (notice && !skippedToday) {
+        // 防止初始化阶段重复触发（showPage + onload）导致同一公告连弹两次
+        if (signature === lastNoticePopupSignature) {
+            return;
+        }
+        lastNoticePopupSignature = signature;
         showPageNotice(page, notice);
     }
 }
