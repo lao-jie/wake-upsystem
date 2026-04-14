@@ -316,8 +316,6 @@ window.onload = async function () {
     initNotice();
     // 初始化公告设置页面预览
     loadNoticeSettingsPreview();
-    // 进入当前页时检查是否需要弹窗公告
-    checkAndShowPageNotice(currentPage);
     renderLucideIcons();
 };
 
