@@ -127,9 +127,15 @@ async function getStaffList() {
             .select('*');
 
         if (!error && data) {
+            const normalized = data.map((staff) => ({
+                ...staff,
+                phone: staff.phone || '',
+                salaryMethod: staff.salaryMethod || staff.salarymethod || staff.salary_method || '',
+                salaryAccount: staff.salaryAccount || staff.salaryaccount || staff.salary_account || ''
+            }));
             // 同步到本地存储
-            localStorage.setItem("staffList", JSON.stringify(data));
-            return data;
+            localStorage.setItem("staffList", JSON.stringify(normalized));
+            return normalized;
         } else if (error) {
             console.error("Supabase 读取员工失败：", error);
         }
@@ -140,6 +146,7 @@ async function getStaffList() {
 }
 
 async function saveStaffList(staffList) {
+    let savedToCloud = false;
     try {
         const validStaffList = staffList.map(staff => ({
             id: staff.id,
@@ -147,8 +154,8 @@ async function saveStaffList(staffList) {
             password: staff.password,
             salary: parseFloat(staff.salary || 0),
             phone: String(staff.phone || "").trim(),
-            salaryMethod: String(staff.salaryMethod || "").trim(),
-            salaryAccount: String(staff.salaryAccount || "").trim()
+            salarymethod: String(staff.salaryMethod || "").trim(),
+            salaryaccount: String(staff.salaryAccount || "").trim()
         }));
 
         // 先获取数据库中已有的员工
@@ -204,9 +211,13 @@ async function saveStaffList(staffList) {
             }
         }
 
+        savedToCloud = true;
         console.log("Supabase 保存员工成功");
     } catch (e) {
         console.error("Supabase 保存员工失败，仅保存到本地：", e);
+    }
+    if (!savedToCloud) {
+        console.warn("员工信息本次未写入云端，仅保存在本地缓存。");
     }
     localStorage.setItem("staffList", JSON.stringify(staffList));
 }
