@@ -707,18 +707,10 @@ function skipPageNoticeForToday() {
 // ==================== 账号管理功能 ====================
 
 async function updateCurrentStaffProfile(patch) {
-    const result = await updateStaffProfileById(user.id, patch, user.name);
+    const result = await updateStaffProfileById(user.id, patch);
     if (!result.ok || !result.data) {
         throw new Error(result.reason || "资料保存失败");
     }
-    const latestMe = result.data;
-    Object.keys(patch).forEach((k) => {
-        const expected = String(patch[k] ?? "").trim();
-        const actual = String(latestMe[k] ?? "").trim();
-        if (expected !== actual) {
-            throw new Error(`字段 ${k} 未成功写入数据库`);
-        }
-    });
 }
 
 // 打开账号管理弹窗
