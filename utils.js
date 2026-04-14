@@ -39,6 +39,26 @@ const normalizeTime = (timeStr) => {
     return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
 };
 
+// 展示用叫醒时间格式（统一成 HH:mm，去掉秒和时区）
+function formatWakeTimeForDisplay(waketime) {
+    const raw = String(waketime || "").trim();
+    if (!raw) return "-";
+
+    // 优先提取时间部分（支持 07:20:00+00:00 / 2026-04-15T07:20:00+00:00）
+    const timeMatch = raw.match(/(?:T|\s)?(\d{1,2}):(\d{2})(?::\d{2})?(?:[+-]\d{2}:?\d{2}|Z)?$/i);
+    if (timeMatch) {
+        return `${String(Number(timeMatch[1])).padStart(2, "0")}:${timeMatch[2]}`;
+    }
+
+    // 兜底：标准日期可解析时按本地时区格式化
+    const d = new Date(raw);
+    if (!Number.isNaN(d.getTime())) {
+        return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+    }
+
+    return raw;
+}
+
 // 生成固定序号
 function generateFixedSerial(orders) {
     // 按日期分组
