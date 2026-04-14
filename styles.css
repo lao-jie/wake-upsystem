@@ -972,9 +972,9 @@ body.is-staff #roleSwitchArea {
     transition: opacity 0.3s var(--ease-out), transform 0.3s var(--ease-out);
     z-index: 2000;
     max-width: calc(100vw - 40px);
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
+    white-space: normal;
+    overflow-wrap: anywhere;
+    word-break: break-word;
     backdrop-filter: blur(16px);
     -webkit-backdrop-filter: blur(16px);
     font-weight: 500;
@@ -1390,6 +1390,11 @@ body.is-staff.is-mobile #staffProfileArea #profileOrderCards {
 
     .toast {
         top: 64px;
+        width: calc(100vw - 24px);
+        max-width: calc(100vw - 24px);
+        padding: 12px 14px;
+        font-size: 13px;
+        line-height: 1.5;
     }
 
     body.is-staff.is-mobile #page_wake .order-card-body {
