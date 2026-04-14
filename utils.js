@@ -21,10 +21,22 @@ function calculateAmountByTime(timeStr) {
     return PRICE_RULE["08:01-24:00"];
 }
 
-// 归一化时间格式
+// 归一化时间格式（HH:mm，供批量识别等使用）
 const normalizeTime = (timeStr) => {
-    const [h, m] = timeStr.split(':').map(Number);
-    return `${String(h).padStart(2, '0')}:${String(m || 0).padStart(2, '0')}`;
+    if (timeStr == null || timeStr === "") {
+        throw new Error("时间为空");
+    }
+    const s = String(timeStr).trim().replace(/：/g, ":");
+    const parts = s.split(":");
+    if (parts.length < 2) {
+        throw new Error(`无法解析时间: ${timeStr}`);
+    }
+    const h = parseInt(parts[0], 10);
+    const m = parseInt(parts[1], 10);
+    if (Number.isNaN(h) || Number.isNaN(m) || h < 0 || h > 23 || m < 0 || m > 59) {
+        throw new Error(`无效时间: ${timeStr}`);
+    }
+    return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
 };
 
 // 生成固定序号

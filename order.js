@@ -1,5 +1,33 @@
+const PERF_DEBUG = false;
+function perfLog(...args) {
+    if (PERF_DEBUG) {
+        console.log(...args);
+    }
+}
+
+let latestLoadOrdersToken = 0;
+let renderFrameId = null;
+let lastSavedOrdersSignature = "";
+
+function buildOrdersSignature(orders) {
+    return (orders || []).map((o) => [
+        o.id || "",
+        o.serialnumber || "",
+        o.waketime || "",
+        o.phone || "",
+        o.note || "",
+        Number(o.amount || o.money || 0).toFixed(2),
+        o.status || "",
+        o.staffid || "",
+        o.staffname || "",
+        o.salarysettled ? "1" : "0",
+        o.submittime || ""
+    ].join("|")).join("||");
+}
+
 // 加载订单
 async function loadOrders() {
+    const currentToken = ++latestLoadOrdersToken;
     // 显示加载状态
     const loadingElement = document.getElementById('loadingIndicator');
     if (loadingElement) {
@@ -32,12 +60,17 @@ async function loadOrders() {
         // 生成序号
         const ordersWithSerial = generateFixedSerial(allOrders);
 
-        // 只有当订单发生变化时才保存到数据库
-        const localOrders = JSON.parse(localStorage.getItem("wakeOrders") || "[]");
-        const hasChanges = JSON.stringify(ordersWithSerial) !== JSON.stringify(localOrders);
+        // 只有当订单发生变化时才保存到数据库（避免每次都做重序列化比对）
+        if (!lastSavedOrdersSignature) {
+            lastSavedOrdersSignature = localStorage.getItem("wakeOrdersSignature") || "";
+        }
+        const currentSignature = buildOrdersSignature(ordersWithSerial);
+        const hasChanges = currentSignature !== lastSavedOrdersSignature;
 
         if (hasChanges) {
             await saveOrders(ordersWithSerial);
+            lastSavedOrdersSignature = currentSignature;
+            localStorage.setItem("wakeOrdersSignature", currentSignature);
         }
 
         let displayOrders = [];
@@ -49,10 +82,10 @@ async function loadOrders() {
         if (isAdmin) {
             displayOrders = [...ordersWithSerial].sort((a, b) => a.serialnumber - b.serialnumber);
         } else if (isStaff) {
+            // 员工只能看到当天提交的订单
             displayOrders = ordersWithSerial.filter(item => {
                 // 检查是否是当天提交的订单
                 const orderDate = new Date(item.submittime);
-                // JavaScript会自动将ISO字符串转换为本地时间
                 const isTodayOrder = orderDate >= todayStart && orderDate < todayEnd;
 
                 if (!isTodayOrder) {
@@ -74,6 +107,10 @@ async function loadOrders() {
             });
         }
 
+        if (currentToken !== latestLoadOrdersToken) {
+            return;
+        }
+
         // 保存原始订单数据用于搜索
         originalOrders = displayOrders;
         renderOrders(displayOrders);
@@ -81,7 +118,7 @@ async function loadOrders() {
         console.error('加载订单失败:', error);
     } finally {
         // 隐藏加载状态
-        if (loadingElement) {
+        if (loadingElement && currentToken === latestLoadOrdersToken) {
             loadingElement.style.display = 'none';
         }
     }
@@ -89,26 +126,33 @@ async function loadOrders() {
 
 // 渲染订单
 function renderOrders(orders) {
-    console.log('渲染订单:', orders.length, '个订单，移动端:', mobileMQ.matches, '员工:', isStaff);
-    // 确保无论是否为移动端，都能正确渲染订单
-    try {
-        if (isStaff && mobileMQ.matches) {
-            console.log('渲染移动端卡片');
-            renderCards(orders);
-        } else {
-            console.log('渲染桌面端表格');
-            renderTable(orders);
-        }
-    } catch (error) {
-        console.error('渲染订单失败:', error);
-        // 降级处理：尝试使用表格渲染
+    perfLog('渲染订单:', orders.length, '个订单，移动端:', mobileMQ.matches, '员工:', isStaff);
+
+    // 合并同一帧内的多次渲染请求，减少抖动和重排
+    if (renderFrameId) {
+        cancelAnimationFrame(renderFrameId);
+    }
+    renderFrameId = requestAnimationFrame(() => {
+        renderFrameId = null;
+        // 确保无论是否为移动端，都能正确渲染订单
         try {
-            console.log('降级渲染为表格');
-            const tableContainer = document.getElementById("orderTable");
-            if (tableContainer) {
-                let html = "";
-                if (orders.length > 0) {
-                    html += `
+            if (isStaff && mobileMQ.matches) {
+                perfLog('渲染移动端卡片');
+                renderCards(orders);
+            } else {
+                perfLog('渲染桌面端表格');
+                renderTable(orders);
+            }
+        } catch (error) {
+            console.error('渲染订单失败:', error);
+            // 降级处理：尝试使用表格渲染
+            try {
+                perfLog('降级渲染为表格');
+                const tableContainer = document.getElementById("orderTable");
+                if (tableContainer) {
+                    let html = "";
+                    if (orders.length > 0) {
+                        html += `
                     <tr>
                         <th>序号</th>
                         <th>叫醒时间</th>
@@ -117,26 +161,27 @@ function renderOrders(orders) {
                         <th>状态</th>
                         <th>金额</th>
                         <th>操作</th>
+                        <th>提交时间</th>
                     </tr>
-                    `;
-                    orders.forEach(item => {
-                        let statusClass = "";
-                        switch (item.status) {
-                            case "待接单": statusClass = "status-pending"; break;
-                            case "进行中": statusClass = "status-processing"; break;
-                            case "已完成": statusClass = "status-done"; break;
-                        }
+                        `;
+                        orders.forEach(item => {
+                            let statusClass = "";
+                            switch (item.status) {
+                                case "待接单": statusClass = "status-pending"; break;
+                                case "进行中": statusClass = "status-processing"; break;
+                                case "已完成": statusClass = "status-done"; break;
+                            }
 
-                        let actionHtml = "";
-                        if (isStaff && item.status === "待接单") {
-                            actionHtml = `<button class="warning" onclick="takeOrder(${item.serialnumber}, '${item.waketime}', '${item.phone}')">接单</button>`;
-                        } else {
-                            actionHtml = `<span class="status-badge ${statusClass}">${item.status}</span>`;
-                        }
+                            let actionHtml = "";
+                            if (isStaff && item.status === "待接单") {
+                                actionHtml = `<button class="warning" onclick="takeOrder(${item.serialnumber}, '${item.waketime}', '${item.phone}')">接单</button>`;
+                            } else {
+                                actionHtml = `<span class="status-badge ${statusClass}">${item.status}</span>`;
+                            }
 
-                        const showTime = item.waketime.includes('T') ? item.waketime.split('T')[1] : item.waketime;
+                            const showTime = item.waketime.includes('T') ? item.waketime.split('T')[1] : item.waketime;
 
-                        html += `
+                            html += `
                         <tr>
                             <td>${item.serialnumber}</td>
                             <td>${showTime}</td>
@@ -145,31 +190,33 @@ function renderOrders(orders) {
                             <td><span class="status-badge ${statusClass}">${item.status}</span></td>
                             <td>${(item.amount || item.money || 0).toFixed(2)} 元</td>
                             <td>${actionHtml}</td>
+                            <td>${formatTime(item.submittime)}</td>
                         </tr>
-                        `;
-                    });
-                } else {
-                    html = `<tr><td colspan="7" style="text-align: center; padding: 20px; color: #64748b;">暂无订单</td></tr>`;
+                            `;
+                        });
+                    } else {
+                        html = `<tr><td colspan="8" style="text-align: center; padding: 20px; color: #64748b;">暂无订单</td></tr>`;
+                    }
+                    tableContainer.innerHTML = html;
                 }
-                tableContainer.innerHTML = html;
+            } catch (fallbackError) {
+                console.error('降级渲染也失败:', fallbackError);
             }
-        } catch (fallbackError) {
-            console.error('降级渲染也失败:', fallbackError);
         }
-    }
+    });
 }
 
 // 渲染卡片（移动端）
 function renderCards(orders) {
     try {
-        console.log('渲染移动端卡片，订单数量:', orders.length);
+        perfLog('渲染移动端卡片，订单数量:', orders.length);
         const container = document.getElementById("orderCards");
-        console.log('订单卡片容器:', container);
+        perfLog('订单卡片容器:', container);
 
         if (!container) {
             // 如果没有找到容器，尝试使用表格容器
             const tableContainer = document.getElementById("orderTable");
-            console.log('表格容器:', tableContainer);
+            perfLog('表格容器:', tableContainer);
             if (tableContainer) {
                 // 渲染简单的订单列表
                 let html = "";
@@ -183,6 +230,7 @@ function renderCards(orders) {
                         <th>状态</th>
                         <th>金额</th>
                         <th>操作</th>
+                        <th>提交时间</th>
                     </tr>
                     `;
                     orders.forEach(item => {
@@ -211,11 +259,12 @@ function renderCards(orders) {
                             <td><span class="status-badge ${statusClass}">${item.status}</span></td>
                             <td>${(item.amount || item.money || 0).toFixed(2)} 元</td>
                             <td>${actionHtml}</td>
+                            <td>${formatTime(item.submittime)}</td>
                         </tr>
                         `;
                     });
                 } else {
-                    html = `<tr><td colspan="7" style="text-align: center; padding: 20px; color: #64748b;">暂无订单</td></tr>`;
+                    html = `<tr><td colspan="8" style="text-align: center; padding: 20px; color: #64748b;">暂无订单</td></tr>`;
                 }
                 tableContainer.innerHTML = html;
             }
@@ -275,7 +324,7 @@ function renderCards(orders) {
         }
 
         container.innerHTML = html;
-        console.log('移动端卡片渲染完成');
+        perfLog('移动端卡片渲染完成');
     } catch (error) {
         console.error("渲染订单卡片失败：", error);
     }
@@ -312,20 +361,23 @@ function renderTable(orders) {
             </tr>
             <tr class="date-collapse-content" id="collapse-admin-${date}" style="display: none;">
                 <td colspan="10" style="padding: 0;">
-                    <div style="padding: 12px;">
-                        <table style="width: 100%; border-collapse: collapse; min-width: 1000px;">
+                    <div class="order-detail-wrap">
+                        <table class="order-detail-table">
+                            <colgroup>
+                                <col><col><col><col><col><col><col><col><col><col>
+                            </colgroup>
                             <thead>
                                 <tr>
-                                    <th style="padding: 12px; text-align: left; font-size: 13px; font-weight: 600; color: #64748b; text-transform: uppercase; letter-spacing: 0.5px; border-bottom: 2px solid #e2e8f0;">选择</th>
-                                    <th style="padding: 12px; text-align: left; font-size: 13px; font-weight: 600; color: #64748b; text-transform: uppercase; letter-spacing: 0.5px; border-bottom: 2px solid #e2e8f0;">序号</th>
-                                    <th style="padding: 12px; text-align: left; font-size: 13px; font-weight: 600; color: #64748b; text-transform: uppercase; letter-spacing: 0.5px; border-bottom: 2px solid #e2e8f0;">叫醒时间</th>
-                                    <th style="padding: 12px; text-align: left; font-size: 13px; font-weight: 600; color: #64748b; text-transform: uppercase; letter-spacing: 0.5px; border-bottom: 2px solid #e2e8f0;">电话</th>
-                                    <th style="padding: 12px; text-align: left; font-size: 13px; font-weight: 600; color: #64748b; text-transform: uppercase; letter-spacing: 0.5px; border-bottom: 2px solid #e2e8f0;">备注</th>
-                                    <th style="padding: 12px; text-align: left; font-size: 13px; font-weight: 600; color: #64748b; text-transform: uppercase; letter-spacing: 0.5px; border-bottom: 2px solid #e2e8f0;">叫醒员</th>
-                                    <th style="padding: 12px; text-align: left; font-size: 13px; font-weight: 600; color: #64748b; text-transform: uppercase; letter-spacing: 0.5px; border-bottom: 2px solid #e2e8f0;">状态</th>
-                                    <th style="padding: 12px; text-align: left; font-size: 13px; font-weight: 600; color: #64748b; text-transform: uppercase; letter-spacing: 0.5px; border-bottom: 2px solid #e2e8f0;">金额</th>
-                                    <th style="padding: 12px; text-align: left; font-size: 13px; font-weight: 600; color: #64748b; text-transform: uppercase; letter-spacing: 0.5px; border-bottom: 2px solid #e2e8f0;">操作</th>
-                                    <th style="padding: 12px; text-align: left; font-size: 13px; font-weight: 600; color: #64748b; text-transform: uppercase; letter-spacing: 0.5px; border-bottom: 2px solid #e2e8f0;">提交时间</th>
+                                    <th>选择</th>
+                                    <th>序号</th>
+                                    <th>叫醒时间</th>
+                                    <th>电话</th>
+                                    <th>备注</th>
+                                    <th>叫醒员</th>
+                                    <th>状态</th>
+                                    <th>金额</th>
+                                    <th>操作</th>
+                                    <th>提交时间</th>
                                 </tr>
                             </thead>
                     `;
@@ -358,17 +410,17 @@ function renderTable(orders) {
                 const showTime = item.waketime.includes('T') ? item.waketime.split('T')[1] : item.waketime;
 
                 html += `
-                <tr style="border-bottom: 1px solid #f1f5f9;">
-                    <td style="padding: 12px;"><input type="checkbox" class="order-checkbox" value="${item.serialnumber}" ${item.status !== "待接单" ? "data-status='processed'" : ""}></td>
-                    <td style="padding: 12px; font-weight: 600; color: #2563eb;">${item.serialnumber}</td>
-                    <td style="padding: 12px;">${showTime}</td>
-                    <td style="padding: 12px;">${item.phone}</td>
-                    <td style="padding: 12px;">${item.note || '-'}</td>
-                    <td style="padding: 12px;">${item.staffname || '-'}</td>
-                    <td style="padding: 12px;"><span class="status-badge ${statusClass}">${item.status}</span></td>
-                    <td style="padding: 12px;">${(item.amount || item.money).toFixed(2)} 元</td>
-                    <td style="padding: 12px;">${actionBtn}</td>
-                    <td style="padding: 12px;">${formatTime(item.submittime)}</td>
+                <tr>
+                    <td><input type="checkbox" class="order-checkbox" value="${item.serialnumber}" ${item.status !== "待接单" ? "data-status='processed'" : ""}></td>
+                    <td class="serial-number">${item.serialnumber}</td>
+                    <td>${showTime}</td>
+                    <td>${item.phone}</td>
+                    <td>${item.note || '-'}</td>
+                    <td>${item.staffname || '-'}</td>
+                    <td><span class="status-badge ${statusClass}">${item.status}</span></td>
+                    <td>${(item.amount || item.money).toFixed(2)} 元</td>
+                    <td>${actionBtn}</td>
+                    <td>${formatTime(item.submittime)}</td>
                 </tr>
                 `;
             });
@@ -385,16 +437,16 @@ function renderTable(orders) {
         html += `
             <thead>
                 <tr>
-                    <th style="padding: 12px; text-align: left; font-size: 13px; font-weight: 600; color: #64748b; text-transform: uppercase; letter-spacing: 0.5px; border-bottom: 2px solid #e2e8f0;">选择</th>
-                    <th style="padding: 12px; text-align: left; font-size: 13px; font-weight: 600; color: #64748b; text-transform: uppercase; letter-spacing: 0.5px; border-bottom: 2px solid #e2e8f0;">序号</th>
-                    <th style="padding: 12px; text-align: left; font-size: 13px; font-weight: 600; color: #64748b; text-transform: uppercase; letter-spacing: 0.5px; border-bottom: 2px solid #e2e8f0;">叫醒时间</th>
-                    <th style="padding: 12px; text-align: left; font-size: 13px; font-weight: 600; color: #64748b; text-transform: uppercase; letter-spacing: 0.5px; border-bottom: 2px solid #e2e8f0;">电话</th>
-                    <th style="padding: 12px; text-align: left; font-size: 13px; font-weight: 600; color: #64748b; text-transform: uppercase; letter-spacing: 0.5px; border-bottom: 2px solid #e2e8f0;">备注</th>
-                    <th style="padding: 12px; text-align: left; font-size: 13px; font-weight: 600; color: #64748b; text-transform: uppercase; letter-spacing: 0.5px; border-bottom: 2px solid #e2e8f0;">叫醒员</th>
-                    <th style="padding: 12px; text-align: left; font-size: 13px; font-weight: 600; color: #64748b; text-transform: uppercase; letter-spacing: 0.5px; border-bottom: 2px solid #e2e8f0;">状态</th>
-                    <th style="padding: 12px; text-align: left; font-size: 13px; font-weight: 600; color: #64748b; text-transform: uppercase; letter-spacing: 0.5px; border-bottom: 2px solid #e2e8f0;">金额</th>
-                    <th style="padding: 12px; text-align: left; font-size: 13px; font-weight: 600; color: #64748b; text-transform: uppercase; letter-spacing: 0.5px; border-bottom: 2px solid #e2e8f0;">操作</th>
-                    <th style="padding: 12px; text-align: left; font-size: 13px; font-weight: 600; color: #64748b; text-transform: uppercase; letter-spacing: 0.5px; border-bottom: 2px solid #e2e8f0;">提交时间</th>
+                    <th>选择</th>
+                    <th>序号</th>
+                    <th>叫醒时间</th>
+                    <th>电话</th>
+                    <th>备注</th>
+                    <th>叫醒员</th>
+                    <th>状态</th>
+                    <th>金额</th>
+                    <th>操作</th>
+                    <th>提交时间</th>
                 </tr>
             </thead>
         `;
@@ -786,6 +838,243 @@ function clearSearch() {
     renderOrders(originalOrders || []);
 }
 
+const AI_ORDER_PARSE_SYSTEM_PROMPT = `你是叫醒订单识别助手。用户粘贴微信群/表格/备忘录里的多行文本，你要只提取「叫醒订单」，忽略无关闲聊、广告、空行。
+
+【输出要求】
+- 仅输出一个 JSON 数组，不要 markdown、不要代码块、不要解释、不要注释。
+- 每个元素表示「同一行或同一条连续文案里、同一个手机号」的一批叫醒；字段均为合法 JSON。
+
+【字段】
+- phone: 字符串，11 位中国大陆手机号，仅数字（去掉空格、短横线、+86 等后剩下的 11 位）。
+- wakeTime: 可选，单个叫醒时刻，必须是 24 小时制字符串 HH:mm（如 07:20、09:05）。
+- wakeTimes: 可选，字符串数组；同一行同一号码有多个叫醒点时，把所有点都放进这里，每项均为 HH:mm。
+- wakeDate: 可选，字符串 YYYY-MM-DD；仅当原文明确「明天/后天/大后天/具体日期」对应叫醒日时才填，否则不要填（系统会用当天）。
+- note: 字符串，除电话与时间外的提醒内容；没有则 ""。
+
+【识别规则】
+1. 一行里只有一个号码、多个时间（如「13900001111 7:00 7:20 7:40」「10点 10点20 10点40 189xxx」），只输出 1 个对象，多个时刻全部进 wakeTimes，不要拆成多个对象。
+2. 原文换行后再次出现同一号码，视为另一批订单，单独输出对象（各自时间与备注）。
+3. 若同时有 wakeTime 与 wakeTimes，合并所有时刻并去重，不要丢 wakeTime。
+4. 电话与时间顺序可互换；可带圆圈序号①、破折号、逗号、中文逗号，一律忽略。
+5. 中文时间必须换算为 HH:mm：早上七点半→07:30、早9点30/早9:30→09:30、上午8点→08:00、中午12点→12:00、下午2点→14:00、下午2点半→14:30、晚上8点15→20:15、今晚9点→21:00、零点/凌晨0点30→00:30、凌晨3点→03:00、8點整→08:00。
+6. 「明天早上7点」：wakeDate 用明天日期，wakeTime 用 07:00；只有「明天」没有钟点则不要臆造时间。
+7. 备注里若包含与叫醒无关的长说明，保留简短可执行信息即可；不要把手机号写进 note。
+
+【输出示例 1】
+输入一行：18953772567 10点 10点20 10点40
+输出：[{"phone":"18953772567","wakeTimes":["10:00","10:20","10:40"],"note":""}]
+
+【输出示例 2】
+输入：今天9:45，17371992416
+输出：[{"phone":"17371992416","wakeTime":"09:45","note":""}]
+
+【输出示例 3】
+输入两行同一号码不同时间：
+18900001111 7:00 第一条
+18900001111 8:30 第二条
+输出：[{"phone":"18900001111","wakeTime":"07:00","note":"第一条"},{"phone":"18900001111","wakeTime":"08:30","note":"第二条"}]`;
+
+function extractJsonArrayFromAiContent(raw) {
+    if (raw == null || typeof raw !== "string") {
+        throw new Error("模型返回为空");
+    }
+    let t = raw.trim();
+    const fenced = t.match(/^```(?:json)?\s*([\s\S]*?)\s*```$/i);
+    if (fenced) {
+        t = fenced[1].trim();
+    } else if (t.startsWith("```")) {
+        t = t.replace(/^```[^\n]*\n?/, "").replace(/\n?```\s*$/i, "").trim();
+    }
+    try {
+        const parsed = JSON.parse(t);
+        if (!Array.isArray(parsed)) {
+            throw new Error("识别结果必须是 JSON 数组");
+        }
+        return parsed;
+    } catch (e) {
+        const idx = t.indexOf("[");
+        const last = t.lastIndexOf("]");
+        if (idx !== -1 && last > idx) {
+            try {
+                const parsed = JSON.parse(t.slice(idx, last + 1));
+                if (!Array.isArray(parsed)) {
+                    throw new Error("识别结果必须是 JSON 数组");
+                }
+                return parsed;
+            } catch (e2) {
+                throw new Error("无法解析 JSON：" + (e.message || e));
+            }
+        }
+        throw new Error("无法解析 JSON：" + (e.message || e));
+    }
+}
+
+function normalizePhoneForAiBatch(phone) {
+    const digits = String(phone ?? "").replace(/\D/g, "");
+    if (/^1[3-9]\d{9}$/.test(digits)) {
+        return digits;
+    }
+    return "";
+}
+
+function collectWakeTimesFromAiObject(o) {
+    const list = [];
+    const pushOne = (s) => {
+        const v = String(s ?? "").trim().replace(/：/g, ":");
+        if (v) {
+            list.push(v);
+        }
+    };
+    if (Array.isArray(o.wakeTimes)) {
+        o.wakeTimes.forEach(pushOne);
+    }
+    if (Array.isArray(o.wake_times)) {
+        o.wake_times.forEach(pushOne);
+    }
+    const single = o.wakeTime ?? o.waketime ?? o.wake_time;
+    if (single != null && String(single).trim() !== "") {
+        const s = String(single).trim().replace(/：/g, ":");
+        const matches = s.match(/\d{1,2}:\d{2}/g);
+        if (matches && matches.length > 1) {
+            matches.forEach(pushOne);
+        } else {
+            pushOne(single);
+        }
+    }
+    const seen = new Set();
+    const unique = [];
+    for (const item of list) {
+        const key = item.replace(/：/g, ":");
+        if (!seen.has(key)) {
+            seen.add(key);
+            unique.push(item);
+        }
+    }
+    return unique;
+}
+
+function padHm(h, m) {
+    if (Number.isNaN(h) || Number.isNaN(m) || h < 0 || h > 23 || m < 0 || m > 59) {
+        return null;
+    }
+    return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
+}
+
+function adjustHourByMeridiem(h, ctx) {
+    if (/下午|晚上|午后|今晚/.test(ctx)) {
+        if (h >= 1 && h <= 11) {
+            return h + 12;
+        }
+    }
+    return h;
+}
+
+function parseChineseClockToken(token, lineContext) {
+    const ctx = lineContext || token || "";
+    let t = String(token ?? "").trim().replace(/：/g, ":");
+    if (!t) {
+        return null;
+    }
+    t = t.replace(
+        /^(?:今天|明日|明天|今早|明早|早晨|早上|早|上午|中午|下午|晚上|午后|今晚|凌晨)+/,
+        ""
+    );
+
+    let mm;
+    if ((mm = t.match(/^(?:零点|0点)(?:(\d{1,2})分?)?$/))) {
+        const min = mm[1] != null && mm[1] !== "" ? parseInt(mm[1], 10) : 0;
+        return padHm(0, Number.isNaN(min) ? 0 : min);
+    }
+    if ((mm = t.match(/^(\d{1,2})点半$/)) || (mm = t.match(/^(\d{1,2})点30$/))) {
+        const h0 = parseInt(mm[1], 10);
+        if (Number.isNaN(h0)) {
+            return null;
+        }
+        return padHm(adjustHourByMeridiem(h0, ctx), 30);
+    }
+    if ((mm = t.match(/^(\d{1,2})点整$/)) || (mm = t.match(/^(\d{1,2})点$/))) {
+        const h0 = parseInt(mm[1], 10);
+        if (Number.isNaN(h0)) {
+            return null;
+        }
+        return padHm(adjustHourByMeridiem(h0, ctx), 0);
+    }
+    if ((mm = t.match(/^(\d{1,2})点(\d{1,2})分?$/))) {
+        const h0 = parseInt(mm[1], 10);
+        const m0 = parseInt(mm[2], 10);
+        if (Number.isNaN(h0) || Number.isNaN(m0)) {
+            return null;
+        }
+        return padHm(adjustHourByMeridiem(h0, ctx), m0);
+    }
+    return null;
+}
+
+function coerceTimeToHHmm(token, lineContext) {
+    const t = String(token ?? "").trim().replace(/：/g, ":");
+    if (!t) {
+        return null;
+    }
+    try {
+        return normalizeTime(t);
+    } catch (_) {
+        /* fall through */
+    }
+    const fromCn = parseChineseClockToken(t, lineContext || t);
+    if (fromCn) {
+        return fromCn;
+    }
+    const colonHit = t.match(/\d{1,2}:\d{2}/);
+    if (colonHit) {
+        try {
+            return normalizeTime(colonHit[0]);
+        } catch (_) {
+            /* fall through */
+        }
+    }
+    return null;
+}
+
+/** 把「和/与/、」及纯空格隔开的多个时间片拆开（不拆单个 HH:mm） */
+function expandTimeStringsBeforeNormalize(rawList) {
+    const splitRe = /(?:和|与|以及|再到|然后|各|[/、，,;|｜])+/;
+    const out = [];
+    for (const raw of rawList) {
+        const s = String(raw).trim();
+        if (!s) {
+            continue;
+        }
+        const bySep = s.split(splitRe).map((x) => x.trim()).filter(Boolean);
+        if (bySep.length > 1) {
+            bySep.forEach((p) => out.push(p));
+            continue;
+        }
+        const bySpace = s.split(/\s+/).filter(Boolean);
+        if (bySpace.length > 1 && bySpace.every((p) => /点|[:：]/.test(p))) {
+            bySpace.forEach((p) => out.push(p));
+            continue;
+        }
+        out.push(s);
+    }
+    return out;
+}
+
+function pickWakeDateStr(o, fallbackDateStr) {
+    const raw = o.wakeDate ?? o.date ?? o.wakeupDate ?? o.wake_date;
+    if (raw == null) {
+        return fallbackDateStr;
+    }
+    const s = String(raw).trim();
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(s)) {
+        return fallbackDateStr;
+    }
+    const d = new Date(`${s}T12:00:00`);
+    if (Number.isNaN(d.getTime())) {
+        return fallbackDateStr;
+    }
+    return s;
+}
+
 // 批量识别订单
 async function parseBatchOrders() {
     const text = document.getElementById("batchText").value.trim();
@@ -796,6 +1085,7 @@ async function parseBatchOrders() {
 
     document.getElementById("parsePreview").innerHTML = "🤖 识别中...";
     document.getElementById("batchUploadBtn").disabled = true;
+    parsedBatchOrders = [];
 
     try {
         // 直接调用AI API
@@ -810,47 +1100,89 @@ async function parseBatchOrders() {
                 messages: [
                     {
                         role: "system",
-                        content: "你是一个叫醒订单识别助手。从文本里提取每一条订单，输出严格JSON数组，不要其他任何内容。每条必须包含：- phone: 11位手机号 - wakeTime: 时间，格式如 07:20 - note: 备注，没有填空"
+                        content: AI_ORDER_PARSE_SYSTEM_PROMPT
                     },
                     {
                         role: "user",
-                        content: text
+                        content:
+                            "以下为待识别文本。只提取其中的叫醒订单，忽略闲聊与无关内容；输出必须是 JSON 数组。\n\n<<<ORDER_TEXT\n" +
+                            text +
+                            "\nORDER_TEXT>>>"
                     }
                 ],
-                temperature: 0.1
+                temperature: 0.05,
+                top_p: 0.75,
+                max_tokens: 8192
             })
         });
 
         const data = await res.json();
         if (data.error) {
-            throw new Error(data.error);
+            const errMsg = typeof data.error === "string" ? data.error : JSON.stringify(data.error);
+            throw new Error(errMsg);
+        }
+        if (!data.choices || !data.choices[0] || !data.choices[0].message) {
+            throw new Error("模型返回格式异常");
         }
 
         const resultText = data.choices[0].message.content;
-        const orders = JSON.parse(resultText);
+        const orders = extractJsonArrayFromAiContent(resultText);
 
         const today = new Date();
         const dateStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
 
-        parsedBatchOrders = orders.map(o => {
-            const time = normalizeTime(o.wakeTime);
-            return {
-                waketime: `${dateStr}T${time}`,
-                phone: o.phone,
-                note: o.note || "-",
-                amount: calculateAmountByTime(time),
-                status: "待接单",
-                serialnumber: null,
-                staffid: "",
-                staffname: "",
-                salarysettled: false,
-                submittime: getChinaTimeISO()
-            };
+        const built = [];
+        const warnings = [];
+
+        orders.forEach((o, idx) => {
+            const phone = normalizePhoneForAiBatch(o.phone);
+            if (!phone) {
+                warnings.push(`第 ${idx + 1} 条原始记录：手机号无效，已跳过`);
+                return;
+            }
+            let rawTimes = collectWakeTimesFromAiObject(o);
+            rawTimes = expandTimeStringsBeforeNormalize(rawTimes);
+            if (rawTimes.length === 0) {
+                warnings.push(`第 ${idx + 1} 条原始记录（${phone}）：未解析到叫醒时间，已跳过`);
+                return;
+            }
+            const noteRaw = o.note != null ? String(o.note).trim() : "";
+            const note = noteRaw === "" ? "-" : noteRaw;
+            const dateForRow = pickWakeDateStr(o, dateStr);
+            const lineHint = [noteRaw, o.wakeTime, o.waketime, o.wake_time, Array.isArray(o.wakeTimes) ? o.wakeTimes.join(" ") : ""]
+                .filter((x) => x != null && String(x).trim() !== "")
+                .join(" ");
+
+            rawTimes.forEach((timeRaw) => {
+                const time = coerceTimeToHHmm(timeRaw, lineHint);
+                if (!time) {
+                    warnings.push(`号码 ${phone}：时刻「${timeRaw}」无法解析，已跳过`);
+                    return;
+                }
+                built.push({
+                    waketime: `${dateForRow}T${time}`,
+                    phone,
+                    note,
+                    amount: calculateAmountByTime(time),
+                    status: "待接单",
+                    serialnumber: null,
+                    staffid: "",
+                    staffname: "",
+                    salarysettled: false,
+                    submittime: getChinaTimeISO()
+                });
+            });
         });
 
+        if (built.length === 0) {
+            throw new Error("没有生成任何有效订单，请检查文本或重试识别");
+        }
+
+        parsedBatchOrders = built;
+
         parsedBatchOrders.sort((a, b) => {
-            const t1 = a.waketime.split('T')[1];
-            const t2 = b.waketime.split('T')[1];
+            const t1 = a.waketime.split("T")[1];
+            const t2 = b.waketime.split("T")[1];
             const c = t1.localeCompare(t2);
             if (c !== 0) return c;
             return new Date(a.submittime) - new Date(b.submittime);
@@ -858,14 +1190,17 @@ async function parseBatchOrders() {
 
         let html = "<div>✅ 识别完成：</div>";
         parsedBatchOrders.forEach((it, i) => {
-            html += `<div>第${i + 1}单：${it.waketime.split('T')[1]} ${it.phone} 备注：${it.note}</div>`;
+            html += `<div>第${i + 1}单：${it.waketime.split("T")[1]} ${it.phone} 备注：${it.note}</div>`;
         });
+        if (warnings.length) {
+            html += '<div style="margin-top:10px;color:#b45309;font-size:13px;">⚠ 部分提示（已跳过无效项）：<br>' + warnings.map(w => `· ${w}`).join("<br>") + "</div>";
+        }
         document.getElementById("parsePreview").innerHTML = html;
-        document.getElementById("batchUploadBtn").disabled = false;
-
     } catch (e) {
+        parsedBatchOrders = [];
         document.getElementById("parsePreview").innerHTML = "❌ 识别失败：" + e.message;
-        document.getElementById("batchUploadBtn").disabled = true;
+    } finally {
+        document.getElementById("batchUploadBtn").disabled = parsedBatchOrders.length === 0;
     }
 }
 

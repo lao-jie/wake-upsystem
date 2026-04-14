@@ -10,10 +10,148 @@ async function initStaffData() {
     }
 }
 
+let teamSearchKeyword = "";
+
+function handleTeamSearch(keyword) {
+    teamSearchKeyword = (keyword || "").trim().toLowerCase();
+    renderTeamTable();
+}
+
+function submitTeamSearch() {
+    const input = document.getElementById("teamSearchInput");
+    if (!input) return;
+    handleTeamSearch(input.value);
+}
+
+function clearTeamSearch() {
+    const input = document.getElementById("teamSearchInput");
+    if (!input) return;
+    input.value = "";
+    handleTeamSearch("");
+}
+
+function handleTeamSearchKeydown(event) {
+    if (event.key === "Enter") {
+        event.preventDefault();
+        submitTeamSearch();
+    }
+}
+
+function getSelectedTeamStaffIds() {
+    return Array.from(document.querySelectorAll(".staff-checkbox:checked"))
+        .map((checkbox) => checkbox.value);
+}
+
+function selectAllTeamStaff() {
+    const checkboxes = document.querySelectorAll(".staff-checkbox");
+    checkboxes.forEach((checkbox) => {
+        checkbox.checked = true;
+    });
+}
+
+function clearSelectedTeamStaff() {
+    const checkboxes = document.querySelectorAll(".staff-checkbox");
+    checkboxes.forEach((checkbox) => {
+        checkbox.checked = false;
+    });
+}
+
+function invertSelectedTeamStaff() {
+    const checkboxes = document.querySelectorAll(".staff-checkbox");
+    checkboxes.forEach((checkbox) => {
+        checkbox.checked = !checkbox.checked;
+    });
+}
+
+async function settleSelectedTeamStaff() {
+    const selectedIds = getSelectedTeamStaffIds();
+    if (selectedIds.length === 0) {
+        showToast("请先选中要结算的员工。", "warning");
+        return;
+    }
+
+    if (!confirm(`确定一键结算已选中的 ${selectedIds.length} 位员工吗？结算后余额会清零。`)) {
+        return;
+    }
+
+    let staffList = await getStaffList();
+    let settledCount = 0;
+    let settledAmount = 0;
+
+    for (const staffId of selectedIds) {
+        const index = staffList.findIndex(staff => staff.id === staffId);
+        if (index === -1) continue;
+
+        const amount = parseFloat(staffList[index].salary || 0);
+        if (!Number.isFinite(amount) || amount <= 0) continue;
+
+        staffList[index].salary = 0;
+        settledCount++;
+        settledAmount += amount;
+
+        // 添加余额变动记录（结算为负数）
+        await addSalaryDetail(staffId, -amount, '结算', '管理员批量结算');
+    }
+
+    await saveStaffList(staffList);
+    renderTeamTable();
+
+    if (settledCount === 0) {
+        showToast("已选员工暂无可结算余额。", "warning");
+        return;
+    }
+
+    showToast(`批量结算完成：${settledCount} 人，合计 ${settledAmount.toFixed(2)} 元。`, "success");
+}
+
+async function rewardSelectedTeamStaff() {
+    const selectedIds = getSelectedTeamStaffIds();
+    if (selectedIds.length === 0) {
+        showToast("请先选中要奖励的员工。", "warning");
+        return;
+    }
+
+    const rewardAmount = prompt("请输入每位已选员工的奖励金额（元）：", "10");
+    if (rewardAmount === null) return;
+
+    const amount = parseFloat(rewardAmount);
+    if (!Number.isFinite(amount) || amount <= 0) {
+        showToast("请输入有效的正数金额。", "warning");
+        return;
+    }
+
+    let staffList = await getStaffList();
+    let rewardCount = 0;
+    let totalReward = 0;
+
+    for (const staffId of selectedIds) {
+        const index = staffList.findIndex(staff => staff.id === staffId);
+        if (index === -1) continue;
+
+        staffList[index].salary = parseFloat(staffList[index].salary || 0) + amount;
+        rewardCount++;
+        totalReward += amount;
+
+        await addSalaryDetail(staffId, amount, '奖励', '管理员批量奖励');
+    }
+
+    await saveStaffList(staffList);
+    renderTeamTable();
+
+    if (rewardCount === 0) {
+        showToast("未找到可奖励员工。", "warning");
+        return;
+    }
+
+    showToast(`批量奖励完成：${rewardCount} 人，合计 ${totalReward.toFixed(2)} 元。`, "success");
+}
+
 // 渲染团队管理表格
 async function renderTeamTable() {
     const staffList = await getStaffList();
     const allOrders = await getOrders();
+    const localStaffList = JSON.parse(localStorage.getItem("staffList") || "[]");
+    const localStaffMap = new Map(localStaffList.map(staff => [staff.id, staff]));
 
     let html = "";
     staffList.forEach(staff => {
@@ -29,14 +167,24 @@ async function renderTeamTable() {
         const todayCount = todayOrders.length;
 
         const totalSalary = (staff.salary || 0).toFixed(2);
+        const localStaff = localStaffMap.get(staff.id) || {};
+        const phone = (staff.phone || localStaff.phone || "").trim();
+        const salaryAccount = (staff.salaryAccount || localStaff.salaryAccount || "").trim();
+        const phoneText = phone || "未绑定";
+        const salaryAccountText = salaryAccount || "未绑定";
+        const searchText = `${staff.id} ${staff.name} ${phoneText} ${salaryAccountText}`.toLowerCase();
+        if (teamSearchKeyword && !searchText.includes(teamSearchKeyword)) {
+            return;
+        }
 
+        const safeId = String(staff.id).replace(/\\/g, "\\\\").replace(/'/g, "\\'");
         const actionBtns = `
         <div class="action-btn-group">
-            <button onclick="resetStaffPassword('${staff.id}')">重置密码</button>
-            <button class="success" onclick="settleStaffSalary('${staff.id}')">结算</button>
-            <button class="warning" onclick="rewardStaff('${staff.id}')">奖励</button>
-            <button class="danger" onclick="punishStaff('${staff.id}')">惩罚</button>
-            <button onclick="openSalaryDetailModal('${staff.id}')">余额明细</button>
+            <button type="button" onclick="resetStaffPassword('${safeId}')">重置密码</button>
+            <button type="button" class="success" onclick="settleStaffSalary('${safeId}')">结算</button>
+            <button type="button" class="warning" onclick="rewardStaff('${safeId}')">奖励</button>
+            <button type="button" class="danger" onclick="punishStaff('${safeId}')">惩罚</button>
+            <button type="button" onclick="openSalaryDetailModal('${safeId}')">余额明细</button>
         </div>`;
 
         html += `
@@ -44,13 +192,18 @@ async function renderTeamTable() {
             <td><input type="checkbox" class="staff-checkbox" value="${staff.id}"></td>
             <td>${staff.id}</td>
             <td>${staff.name}</td>
-            <td>${staff.password}</td>
+            <td>${phoneText}</td>
+            <td>${salaryAccountText}</td>
             <td>${todayCount}</td>
             <td>${totalSalary}</td>
             <td>${actionBtns}</td>
         </tr>`;
     });
-    document.getElementById("teamTable").innerHTML = html;
+    document.getElementById("teamTable").innerHTML = html || `
+        <tr>
+            <td colspan="8" style="text-align:center; color:#64748b; padding:20px;">未匹配到员工数据</td>
+        </tr>
+    `;
 }
 
 // 重置员工密码
@@ -63,7 +216,7 @@ async function resetStaffPassword(staffId) {
         staffList[index].password = newPwd;
         await saveStaffList(staffList);
         renderTeamTable();
-        alert(`员工【${staffList[index].name}】密码已重置为：${newPwd}`);
+        showToast(`已重置员工「${staffList[index].name}」的登录密码，请通过安全渠道告知对方。`, "success");
     }
 }
 
@@ -140,94 +293,33 @@ async function renderProfilePage() {
     const allOrders = await getOrders();
     const myOrders = allOrders.filter(order => order.staffid === user.id);
 
+    // 设置用户姓名
+    const profileUserName = document.getElementById("profileUserName");
+    if (profileUserName) {
+        profileUserName.innerText = user.name;
+    }
+
+    // 获取员工列表
+    const staffList = await getStaffList();
+    const myInfo = staffList.find(staff => staff.id === user.id) || { salary: 0 };
+
+    // 设置用户手机号
+    const profileUserPhone = document.getElementById("profileUserPhone");
+    if (profileUserPhone) {
+        if (myInfo.phone) {
+            profileUserPhone.innerText = myInfo.phone;
+        } else {
+            profileUserPhone.innerText = "未绑定手机号";
+        }
+    }
+
     const today = new Date().toLocaleDateString();
     const todayCount = myOrders.filter(order =>
         new Date(order.submittime).toLocaleDateString() === today
     ).length;
     document.getElementById("todayOrderCount").innerText = todayCount;
 
-    const staffList = await getStaffList();
-    const myInfo = staffList.find(staff => staff.id === user.id) || { salary: 0 };
     document.getElementById("totalBalance").innerText = myInfo.salary.toFixed(2);
-
-    // 无论是否为移动端，都尝试渲染订单
-    try {
-        if (isStaff && mobileMQ.matches) {
-            renderProfileCards(myOrders);
-        } else {
-            // 按日期分组订单
-            const ordersByDate = {};
-            myOrders.forEach(order => {
-                const orderDate = new Date(order.submittime).toLocaleDateString();
-                if (!ordersByDate[orderDate]) {
-                    ordersByDate[orderDate] = [];
-                }
-                ordersByDate[orderDate].push(order);
-            });
-
-            let html = "";
-            // 按日期倒序排列
-            const dates = Object.keys(ordersByDate).sort((a, b) => new Date(b) - new Date(a));
-
-            dates.forEach(date => {
-                const dateOrders = ordersByDate[date];
-                html += `
-                <tr class="date-collapse-header">
-                    <td colspan="6" style="padding: 0;">
-                        <div class="date-header" onclick="toggleDateCollapse('table-${date}')">
-                            <span class="date-title">${date}（${dateOrders.length}单）</span>
-                            <span class="date-arrow">▶</span>
-                        </div>
-                    </td>
-                </tr>
-                <tr class="date-collapse-content" id="collapse-table-${date}" style="display: none;">
-                    <td colspan="6" style="padding: 0;">
-                        <div style="padding: 12px;">
-                            <table style="width: 100%; border-collapse: collapse;">
-                                <thead>
-                                    <tr>
-                                        <th style="padding: 12px; text-align: left; font-size: 13px; font-weight: 600; color: #64748b; text-transform: uppercase; letter-spacing: 0.5px; border-bottom: 2px solid #e2e8f0; width: 60px;">序号</th>
-                                        <th style="padding: 12px; text-align: left; font-size: 13px; font-weight: 600; color: #64748b; text-transform: uppercase; letter-spacing: 0.5px; border-bottom: 2px solid #e2e8f0;">叫醒时间</th>
-                                        <th style="padding: 12px; text-align: left; font-size: 13px; font-weight: 600; color: #64748b; text-transform: uppercase; letter-spacing: 0.5px; border-bottom: 2px solid #e2e8f0;">电话</th>
-                                        <th style="padding: 12px; text-align: left; font-size: 13px; font-weight: 600; color: #64748b; text-transform: uppercase; letter-spacing: 0.5px; border-bottom: 2px solid #e2e8f0;">金额（元）</th>
-                                        <th style="padding: 12px; text-align: left; font-size: 13px; font-weight: 600; color: #64748b; text-transform: uppercase; letter-spacing: 0.5px; border-bottom: 2px solid #e2e8f0;">状态</th>
-                                        <th style="padding: 12px; text-align: left; font-size: 13px; font-weight: 600; color: #64748b; text-transform: uppercase; letter-spacing: 0.5px; border-bottom: 2px solid #e2e8f0;">结算状态</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                        `;
-
-                dateOrders.forEach(order => {
-                    const settleStatus = order.salarysettled ? "已结算" : "未结算";
-                    html += `
-                    <tr style="border-bottom: 1px solid #f1f5f9;">
-                        <td style="padding: 12px; width: 60px;">${order.serialnumber}</td>
-                        <td style="padding: 12px;">${order.waketime.split('T')[1]}</td>
-                        <td style="padding: 12px;">${order.phone}</td>
-                        <td style="padding: 12px;">${(order.amount || order.money).toFixed(2)}</td>
-                        <td style="padding: 12px;"><span class="status-badge ${order.status === '待接单' ? 'status-pending' : order.status === '进行中' ? 'status-processing' : 'status-done'}">${order.status}</span></td>
-                        <td style="padding: 12px;">${settleStatus}</td>
-                    </tr>
-                    `;
-                });
-
-                html += `
-                                </tbody>
-                            </table>
-                        </div>
-                    </td>
-                </tr>
-                `;
-            });
-
-            document.getElementById("profileOrderTable").innerHTML = html || `<tr><td colspan="6" style="text-align: center; padding: 20px; color: #64748b;">暂无订单</td></tr>`;
-        }
-    } catch (error) {
-        console.error("渲染个人中心失败：", error);
-        // 即使渲染失败，也要确保基本信息显示
-        document.getElementById("todayOrderCount").innerText = todayCount;
-        document.getElementById("totalBalance").innerText = myInfo.salary.toFixed(2);
-    }
 }
 
 // 渲染个人中心卡片（移动端）
@@ -435,7 +527,7 @@ async function openSalaryDetailModal(staffId) {
     let html = "";
     if (staffDetails.length > 0) {
         staffDetails.forEach(detail => {
-            const amountClass = detail.amount >= 0 ? "color: #10b981; font-weight: 600;" : "color: #ef4444; font-weight: 600;";
+            const amountClass = detail.amount >= 0 ? "salary-amount salary-amount--pos" : "salary-amount salary-amount--neg";
             const amountText = detail.amount >= 0 ? `+${detail.amount.toFixed(2)}` : detail.amount.toFixed(2);
 
             let typeText = "";
@@ -450,13 +542,13 @@ async function openSalaryDetailModal(staffId) {
             <tr>
                 <td>${formatTime(detail.createdat)}</td>
                 <td>${typeText}</td>
-                <td style="${amountClass}">${amountText}</td>
+                <td class="${amountClass}">${amountText}</td>
                 <td>${detail.description}</td>
             </tr>
             `;
         });
     } else {
-        html = `<tr><td colspan="4" style="text-align: center; padding: 20px; color: #64748b;">暂无余额变动记录</td></tr>`;
+        html = `<tr><td colspan="4" class="salary-empty-cell">暂无余额变动记录</td></tr>`;
     }
 
     tableBody.innerHTML = html;
@@ -497,7 +589,7 @@ async function saveNewStaff() {
 
     closeAddStaffModal();
     renderTeamTable();
-    alert(`员工【${name}】添加成功！账号：${id}，密码：${password}`);
+    showToast(`员工「${name}」已添加（账号：${id}）。请通过安全渠道将初始密码告知本人，勿在公开场合展示。`, "success");
 }
 
 // 打开添加员工弹窗

@@ -8,6 +8,7 @@
     <title>老街网创 - 叫醒订单管理</title>
     <link rel="stylesheet" href="styles.css">
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
     <script src="config.js" defer></script>
     <script src="utils.js" defer></script>
     <script src="storage.js" defer></script>
@@ -20,17 +21,39 @@
 
     <!-- 左侧导航 -->
     <div class="sidebar">
-        <div class="sidebar-header">老街网创</div>
+        <div class="sidebar-header">
+            <span class="sidebar-brand">老街网创</span>
+            <div style="display: flex; gap: 8px; align-items: center;">
+                <!-- 亮度调节按钮 -->
+                <button type="button" class="brightness-btn" id="brightnessBtn" title="亮度调节">🌙</button>
+                <!-- 手机端退出按钮 -->
+                <button type="button" class="logout-btn logout-btn-mobile" onclick="logout()" title="退出登录">退出</button>
+            </div>
+        </div>
+
+        <!-- 亮度调节弹出面板 -->
+        <div class="brightness-popup" id="brightnessPopup">
+            <div style="font-size: 13px; color: #64748b; margin-bottom: 10px; font-weight: 600;">
+                亮度调节
+            </div>
+            <input type="range" id="brightnessSliderPopup" min="50" max="120" value="100" style="width: 100%;">
+            <div
+                style="display: flex; justify-content: space-between; margin-top: 8px; font-size: 11px; color: #94a3b8;">
+                <span>50%</span>
+                <span id="brightnessValuePopup">100%</span>
+                <span>120%</span>
+            </div>
+        </div>
 
         <div class="nav-row">
             <div class="nav-item" id="nav-home" onclick="showPage('home')">
-                <span class="icon">🏠</span>
+                <span class="icon"><i data-lucide="house"></i></span>
                 <span>首页</span>
             </div>
 
             <div class="nav-item" id="nav-taobao" onclick="toggleSubMenu()">
-                <span class="icon">🛒</span>
-                <span>淘宝监督项目</span>
+                <span class="icon"><i data-lucide="shopping-cart"></i></span>
+                <span>淘宝<span class="supervise-text">监督</span>项目</span>
                 <span class="arrow" id="arrow">▼</span>
             </div>
 
@@ -42,6 +65,18 @@
             <div class="nav-item" id="nav-team" onclick="showPage('team')">
                 <span class="icon">👥</span>
                 <span id="navTeamText">团队管理</span>
+            </div>
+
+            <!-- 公告设置（仅管理员可见） -->
+            <div class="nav-item" id="nav-notice-setting" style="display: none;" onclick="showPage('noticeSetting')">
+                <span class="icon"><i data-lucide="settings"></i></span>
+                <span>公告设置</span>
+            </div>
+
+            <!-- 电脑端退出按钮（在个人中心下方） -->
+            <div class="nav-item logout-nav-item" onclick="logout()" title="退出登录">
+                <span class="icon"><i data-lucide="log-out"></i></span>
+                <span>退出登录</span>
             </div>
         </div>
     </div>
@@ -55,6 +90,20 @@
         <div id="page_home" class="page">
             <h2>控制台首页</h2>
             <div class="user-info">当前用户：<span id="userName"></span></div>
+
+            <!-- 首页公告 -->
+            <div class="notice-section" id="pageNotice_home">
+                <div class="notice-header">
+                    <span class="notice-icon"><i data-lucide="house"></i></span>
+                    <span class="notice-title">首页公告</span>
+                    <button class="notice-edit-btn" id="noticeEditBtn" style="display: none;"
+                        onclick="editNotice()">编辑</button>
+                </div>
+                <div class="notice-content" id="noticeContent_home">
+                    <p>暂无公告</p>
+                </div>
+            </div>
+
             <!-- 角色切换按钮（仅管理员可见） -->
             <div id="roleSwitchArea">
                 <button onclick="switchUser('admin')">切换到管理员</button>
@@ -63,11 +112,36 @@
             </div>
         </div>
 
+        <!-- 编辑公告弹窗 -->
+        <div class="modal-overlay" id="editNoticeModal">
+            <div class="modal-box">
+                <h3>编辑公告</h3>
+                <div class="modal-form-item">
+                    <label for="noticeTextarea">公告内容</label>
+                    <textarea id="noticeTextarea" placeholder="请输入公告内容..."
+                        style="min-height: 150px; resize: vertical;"></textarea>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="ghost" onclick="closeEditNoticeModal()">取消</button>
+                    <button type="button" onclick="saveNotice()" class="success">保存</button>
+                </div>
+            </div>
+        </div>
+
         <!-- 叫醒页面 -->
         <div id="page_wake" class="page">
-            <h2 id="wakePageTitle"
-                style="text-align: center; font-size: 24px; color: #1e293b; margin-bottom: 24px; font-weight: 600;">
-                叫醒订单管理</h2>
+            <h2 id="wakePageTitle">叫醒订单管理</h2>
+
+            <!-- 叫醒页面公告 -->
+            <div class="notice-section" id="pageNotice_wake">
+                <div class="notice-header">
+                    <span class="notice-icon"><i data-lucide="alarm-clock"></i></span>
+                    <span class="notice-title">叫醒页面公告</span>
+                </div>
+                <div class="notice-content" id="noticeContent_wake">
+                    <p>暂无公告</p>
+                </div>
+            </div>
 
             <!-- 搜索区域 -->
             <div style="margin-bottom: 16px; display: flex; gap: 8px; flex-wrap: wrap; align-items: center;">
@@ -86,12 +160,13 @@
 
             <!-- 管理员：批量识别上传区域（员工不可见） -->
             <div id="batchUploadArea" class="admin-form" style="display:none; flex-direction: column;">
-                <h3 style="margin: 0 0 12px 0; font-size: 16px; color: #1e293b;">AI 批量识别上传</h3>
+                <h3 class="batch-upload-title">AI 批量识别上传</h3>
                 <textarea id="batchText" placeholder="粘贴订单文本（示例：
 ① 15277143265 7:20
-② 早上七点半，18108510863
-③ 17506529179 8:05
-④ 13590847631，8點整，提醒我去大信坐車
+② 同一行多时刻：18953772567 10:00 10:20 10:40（一个号码对应多条订单）
+③ 早上七点半，18108510863
+④ 17506529179 8:05
+⑤ 13590847631，8點整，提醒我去大信坐車
 ...">① 15277143265 7:20
 ② 早上七点半，18108510863
 ③ 17506529179 8:05
@@ -107,7 +182,8 @@
 ⑬ 18953772567 11点20
 ⑭ 18953772567 11点40
 ⑮ 18953772567 12点
-⑯ 18953772567 12点半</textarea>
+⑯ 18953772567 12点半
+⑰ 13900001111 8:00 8:30 9:00（同号一行多时刻→生成3条订单）</textarea>
                 <div style="display: flex; flex-wrap: wrap; gap: 12px;">
                     <button onclick="parseBatchOrders()">识别订单</button>
                     <button id="batchUploadBtn" disabled onclick="uploadBatchOrders()">批量上传</button>
@@ -127,14 +203,9 @@
             </div>
 
             <!-- 加载指示器 -->
-            <div id="loadingIndicator" style="display: none; text-align: center; padding: 20px; background-color: #f8fafc; border-radius: 6px; margin-bottom: 16px;">
-                <div style="display: inline-block; width: 20px; height: 20px; border: 2px solid #e2e8f0; border-top-color: #2563eb; border-radius: 50%; animation: spin 1s linear infinite;"></div>
-                <span style="margin-left: 8px; color: #64748b;">加载中...</span>
-                <style>
-                    @keyframes spin {
-                        to { transform: rotate(360deg); }
-                    }
-                </style>
+            <div id="loadingIndicator" class="loading-indicator" style="display: none;">
+                <div class="loading-indicator__spinner" aria-hidden="true"></div>
+                <span class="loading-indicator__text">加载中...</span>
             </div>
 
             <!-- 员工端：卡片列表（管理员端不显示） -->
@@ -142,7 +213,7 @@
 
             <!-- 订单表格 -->
             <div class="table-wrapper">
-                <table>
+                <table class="order-list-table">
                     <tbody id="orderTable"></tbody>
                 </table>
             </div>
@@ -151,12 +222,31 @@
         <!-- 监督页面（预留） -->
         <div id="page_supervise" class="page">
             <h2>监督页面（待开发）</h2>
+
+            <!-- 监督页面公告 -->
+            <div class="notice-section" id="pageNotice_supervise">
+                <div class="notice-header">
+                    <span class="notice-icon"><i data-lucide="eye"></i></span>
+                    <span class="notice-title">监督页面公告</span>
+                </div>
+                <div class="notice-content" id="noticeContent_supervise">
+                    <p>暂无公告</p>
+                </div>
+            </div>
         </div>
 
         <!-- 团队管理/个人中心页面 -->
         <div id="page_team" class="page">
-            <h2 id="teamPageTitle">团队管理</h2>
-            <div class="user-info">当前用户：<span id="teamUserName"></span></div>
+            <!-- 个人中心公告 -->
+            <div class="notice-section" id="pageNotice_team">
+                <div class="notice-header">
+                    <span class="notice-icon"><i data-lucide="user-round"></i></span>
+                    <span class="notice-title">个人中心公告</span>
+                </div>
+                <div class="notice-content" id="noticeContent_team">
+                    <p>暂无公告</p>
+                </div>
+            </div>
 
             <!-- 管理员：添加员工按钮 + 团队管理表格 -->
             <div style="margin-bottom: 16px; display: none;" id="addStaffBtnContainer">
@@ -165,6 +255,20 @@
 
             <!-- 管理员：团队管理表格 -->
             <div id="teamManagerArea" style="display: none;">
+                <div class="team-search-bar">
+                    <input type="text" id="teamSearchInput" placeholder="搜索员工：账号 / 姓名 / 手机号 / 支付宝账号"
+                        oninput="handleTeamSearch(this.value)" onkeydown="handleTeamSearchKeydown(event)">
+                    <div class="team-search-actions">
+                        <button type="button" onclick="submitTeamSearch()">搜索</button>
+                        <button type="button" class="ghost" onclick="clearTeamSearch()">清空</button>
+                    </div>
+                </div>
+                <div class="team-batch-actions">
+                    <button type="button" class="team-batch-btn team-batch-btn--neutral" onclick="selectAllTeamStaff()">一键选中</button>
+                    <button type="button" class="team-batch-btn team-batch-btn--neutral" onclick="clearSelectedTeamStaff()">取消选中</button>
+                    <button type="button" class="team-batch-btn team-batch-btn--reward" onclick="rewardSelectedTeamStaff()">一键奖励</button>
+                    <button type="button" class="success" onclick="settleSelectedTeamStaff()">一键结算</button>
+                </div>
                 <div class="table-wrapper">
                     <table>
                         <thead>
@@ -172,7 +276,8 @@
                                 <th>选择</th>
                                 <th>员工账号</th>
                                 <th>员工姓名</th>
-                                <th>密码</th>
+                                <th>手机号</th>
+                                <th>支付宝账号</th>
                                 <th>今日接单数</th>
                                 <th>累计余额（元）</th>
                                 <th>操作</th>
@@ -185,30 +290,302 @@
 
             <!-- 员工：个人中心 -->
             <div id="staffProfileArea" style="display: none;">
-                <!-- 个人统计 -->
-                <div class="admin-form" style="margin-bottom: 16px;">
-                    <div
-                        style="flex: 1; padding: 12px; border: 1px solid #e2e8f0; border-radius: 6px; margin-bottom: 8px;">
-                        <div style="font-size: 14px; color: #64748b;">今日接单数</div>
-                        <div style="font-size: 24px; font-weight: 600; color: #2563eb;" id="todayOrderCount">0</div>
+                <!-- 用户信息卡片 -->
+                <div class="profile-user-card">
+                    <div class="profile-avatar">
+                        <span class="profile-avatar-icon"><i data-lucide="user-round"></i></span>
                     </div>
-                    <div style="flex: 1; padding: 12px; border: 1px solid #e2e8f0; border-radius: 6px; cursor: pointer;"
-                        id="balanceCard">
-                        <div style="font-size: 14px; color: #64748b;">累计余额</div>
-                        <div style="font-size: 24px; font-weight: 600; color: #2563eb;" id="totalBalance">0.00</div>
-                        <div style="font-size: 12px; color: #94a3b8; margin-top: 4px;">点击查看明细</div>
+                    <div class="profile-user-info">
+                        <div class="profile-user-name" id="profileUserName"></div>
+                        <div class="profile-user-role" id="profileUserPhone">未绑定手机号</div>
                     </div>
                 </div>
 
-                <!-- 个人订单列表 -->
-                <div class="table-wrapper" id="profileTableWrapper">
-                    <table>
-                        <tbody id="profileOrderTable"></tbody>
-                    </table>
+                <!-- 个人统计 -->
+                <div class="profile-stats-card">
+                    <div class="profile-stat-item" onclick="showWidgetDetail('todayOrders')">
+                        <div class="profile-stat-icon"><i data-lucide="clipboard-list"></i></div>
+                        <div class="profile-stat-content">
+                            <div class="profile-stat-label">今日接单</div>
+                            <div class="profile-stat-value" id="todayOrderCount">0</div>
+                        </div>
+                        <div class="profile-stat-arrow">›</div>
+                    </div>
+                    <div class="profile-stat-item" onclick="showWidgetDetail('balance')">
+                        <div class="profile-stat-icon"><i data-lucide="wallet"></i></div>
+                        <div class="profile-stat-content">
+                            <div class="profile-stat-label">累计余额</div>
+                            <div class="profile-stat-value" id="totalBalance">0.00</div>
+                        </div>
+                        <div class="profile-stat-arrow">›</div>
+                    </div>
+                </div>
+
+                <!-- 小组件区域 -->
+                <div class="widget-section">
+                    <div class="widget-title">更多服务</div>
+                    <div class="widget-grid">
+                        <div class="widget-item" onclick="showWidgetDetail('myOrders')">
+                            <div class="widget-icon"><i data-lucide="file-text"></i></div>
+                            <div class="widget-name">我的订单</div>
+                        </div>
+                        <div class="widget-item" onclick="openAccountManagement()">
+                            <div class="widget-icon"><i data-lucide="settings"></i></div>
+                            <div class="widget-name">账号管理</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 小组件详情弹窗 -->
+                <div class="modal-overlay" id="widgetDetailModal">
+                    <div class="modal-box widget-detail-box">
+                        <div class="widget-detail-header">
+                            <button class="widget-detail-close" onclick="closeWidgetDetailModal()"><i data-lucide="x"></i></button>
+                            <h3 id="widgetDetailTitle">详情</h3>
+                        </div>
+                        <div class="widget-detail-content" id="widgetDetailContent">
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 账号管理详情弹窗 -->
+                <div class="modal-overlay" id="accountManagementModal">
+                    <div class="modal-box widget-detail-box">
+                        <div class="widget-detail-header">
+                            <button class="widget-detail-close" onclick="closeAccountManagementModal()"><i data-lucide="x"></i></button>
+                            <h3>账号管理</h3>
+                        </div>
+                        <div class="account-management-list">
+                            <div class="account-management-item" onclick="openChangePasswordModal()">
+                                <div class="account-management-icon"><i data-lucide="lock-keyhole"></i></div>
+                                <div class="account-management-text">修改密码</div>
+                                <div class="account-management-arrow">›</div>
+                            </div>
+                            <div class="account-management-item" onclick="openBindPhoneModal()">
+                                <div class="account-management-icon"><i data-lucide="smartphone"></i></div>
+                                <div class="account-management-text">绑定手机号</div>
+                                <div class="account-management-arrow">›</div>
+                            </div>
+                            <div class="account-management-item" onclick="openSalaryMethodModal()">
+                                <div class="account-management-icon"><i data-lucide="wallet"></i></div>
+                                <div class="account-management-text">薪资结算方式</div>
+                                <div class="account-management-arrow">›</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 修改密码弹窗 -->
+                <div class="modal-overlay" id="changePasswordModal">
+                    <div class="modal-box">
+                        <div class="widget-detail-header">
+                            <button class="widget-detail-close" onclick="closeChangePasswordModal()"><i data-lucide="x"></i></button>
+                            <h3>修改密码</h3>
+                        </div>
+                        <div class="modal-form-item">
+                            <label>旧密码</label>
+                            <input type="password" id="cpOldPassword" placeholder="请输入旧密码">
+                        </div>
+                        <div class="modal-form-item">
+                            <label>新密码</label>
+                            <input type="password" id="cpNewPassword" placeholder="请输入新密码">
+                        </div>
+                        <div class="modal-form-item">
+                            <label>确认新密码</label>
+                            <input type="password" id="cpConfirmPassword" placeholder="请确认新密码">
+                        </div>
+                        <div class="modal-footer">
+                            <button type="button" class="ghost" onclick="closeChangePasswordModal()">取消</button>
+                            <button type="button" onclick="submitChangePassword()" class="success">确认修改</button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 绑定手机号弹窗 -->
+                <div class="modal-overlay" id="bindPhoneModal">
+                    <div class="modal-box">
+                        <div class="widget-detail-header">
+                            <button class="widget-detail-close" onclick="closeBindPhoneModal()"><i data-lucide="x"></i></button>
+                            <h3>绑定手机号</h3>
+                        </div>
+                        <div class="modal-form-item">
+                            <label>手机号</label>
+                            <input type="text" id="bpUserPhone" placeholder="请输入手机号">
+                        </div>
+                        <div class="modal-footer">
+                            <button type="button" class="ghost" onclick="closeBindPhoneModal()">取消</button>
+                            <button type="button" onclick="submitBindPhone()" class="success">确认绑定</button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 薪资结算方式弹窗 -->
+                <div class="modal-overlay" id="salaryMethodModal">
+                    <div class="modal-box">
+                        <div class="widget-detail-header">
+                            <button class="widget-detail-close" onclick="closeSalaryMethodModal()"><i data-lucide="x"></i></button>
+                            <h3>薪资结算方式</h3>
+                        </div>
+                        <div class="modal-form-item">
+                            <label>结算方式</label>
+                            <div class="salary-method-option">
+                                <span class="salary-method-icon"><i data-lucide="credit-card"></i></span>
+                                <span class="salary-method-name">支付宝</span>
+                                <span class="salary-method-check"><i data-lucide="check"></i></span>
+                            </div>
+                        </div>
+                        <div class="modal-form-item">
+                            <label>支付宝账号</label>
+                            <input type="text" id="smSalaryAccount" placeholder="请输入支付宝账号">
+                        </div>
+                        <div class="modal-footer">
+                            <button type="button" class="ghost" onclick="closeSalaryMethodModal()">取消</button>
+                            <button type="button" onclick="submitSalaryMethod()" class="success">保存</button>
+                        </div>
+                    </div>
                 </div>
 
                 <!-- 个人订单卡片列表（移动端） -->
-                <div id="profileOrderCards" class="order-cards"></div>
+                <div id="profileOrderCards" class="order-cards" style="display: none;"></div>
+            </div>
+        </div>
+
+        <!-- 账号管理弹窗 -->
+        <div class="modal-overlay" id="accountSettingsModal">
+            <div class="modal-box">
+                <h3>账号管理</h3>
+
+                <div class="modal-form-item">
+                    <label>修改密码</label>
+                    <input type="password" id="oldPassword" placeholder="请输入旧密码">
+                </div>
+                <div class="modal-form-item">
+                    <input type="password" id="newPassword" placeholder="请输入新密码">
+                </div>
+                <div class="modal-form-item">
+                    <input type="password" id="confirmPassword" placeholder="请确认新密码">
+                </div>
+                <div style="margin-bottom: 16px;">
+                    <button onclick="changePassword()" class="btn btn-primary" style="width: 100%;">修改密码</button>
+                </div>
+
+                <div style="height: 1px; background: rgba(255,255,255,0.1); margin: 20px 0;"></div>
+
+                <div class="modal-form-item">
+                    <label>绑定手机号</label>
+                    <input type="text" id="userPhone" placeholder="请输入手机号">
+                </div>
+                <div style="margin-bottom: 16px;">
+                    <button onclick="bindPhone()" class="btn btn-primary" style="width: 100%;">绑定手机号</button>
+                </div>
+
+                <div style="height: 1px; background: rgba(255,255,255,0.1); margin: 20px 0;"></div>
+
+                <div class="modal-form-item">
+                    <label>薪资结算方式</label>
+                    <select id="salaryMethod" style="width: 100%;">
+                        <option value="alipay">支付宝</option>
+                        <option value="wechat">微信</option>
+                        <option value="bank">银行卡</option>
+                    </select>
+                </div>
+                <div class="modal-form-item">
+                    <input type="text" id="salaryAccount" placeholder="请输入账号（支付宝/微信/银行卡号）">
+                </div>
+                <div style="margin-bottom: 16px;">
+                    <button onclick="saveSalaryMethod()" class="btn btn-primary" style="width: 100%;">保存结算方式</button>
+                </div>
+
+                <div class="modal-footer">
+                    <button type="button" class="ghost" onclick="closeAccountSettingsModal()">关闭</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- 公告设置页面 -->
+        <div id="page_noticeSetting" class="page">
+            <h2>公告设置</h2>
+            <div class="user-info">当前用户：<span id="noticeSettingUserName"></span></div>
+
+            <div class="admin-form" style="margin-bottom: 20px;">
+                <h3 style="margin-bottom: 16px; color: #1e293b; font-size: 16px;"><i data-lucide="file-pen-line"></i> 设置各页面公告</h3>
+
+                <!-- 首页公告 -->
+                <div class="notice-setting-item">
+                    <div class="notice-setting-header">
+                        <span class="notice-setting-icon"><i data-lucide="house"></i></span>
+                        <span class="notice-setting-title">首页公告</span>
+                        <button class="notice-setting-btn" onclick="openPageNoticeModal('home')">编辑</button>
+                    </div>
+                    <div class="notice-setting-preview" id="noticePreview_home">未设置</div>
+                </div>
+
+                <!-- 叫醒页面公告 -->
+                <div class="notice-setting-item">
+                    <div class="notice-setting-header">
+                        <span class="notice-setting-icon"><i data-lucide="alarm-clock"></i></span>
+                        <span class="notice-setting-title">叫醒页面公告</span>
+                        <button class="notice-setting-btn" onclick="openPageNoticeModal('wake')">编辑</button>
+                    </div>
+                    <div class="notice-setting-preview" id="noticePreview_wake">未设置</div>
+                </div>
+
+                <!-- 监督页面公告 -->
+                <div class="notice-setting-item">
+                    <div class="notice-setting-header">
+                        <span class="notice-setting-icon"><i data-lucide="eye"></i></span>
+                        <span class="notice-setting-title">监督页面公告</span>
+                        <button class="notice-setting-btn" onclick="openPageNoticeModal('supervise')">编辑</button>
+                    </div>
+                    <div class="notice-setting-preview" id="noticePreview_supervise">未设置</div>
+                </div>
+
+                <!-- 个人中心公告 -->
+                <div class="notice-setting-item">
+                    <div class="notice-setting-header">
+                        <span class="notice-setting-icon"><i data-lucide="user-round"></i></span>
+                        <span class="notice-setting-title">个人中心公告</span>
+                        <button class="notice-setting-btn" onclick="openPageNoticeModal('team')">编辑</button>
+                    </div>
+                    <div class="notice-setting-preview" id="noticePreview_team">未设置</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 员工页面公告弹窗 -->
+    <div class="modal-overlay" id="pageNoticeModal">
+        <div class="modal-box page-notice-box">
+            <button type="button" class="page-notice-close" onclick="closePageNoticeModal()"><i data-lucide="x"></i></button>
+            <div class="page-notice-top">
+                <div class="page-notice-icon" id="pageNoticeIcon" data-lucide="megaphone"></div>
+                <h3 id="pageNoticeTitle">公告</h3>
+            </div>
+            <div class="page-notice-meta">
+                <span class="page-notice-tag" id="pageNoticeTag">系统公告</span>
+                <span class="page-notice-time" id="pageNoticeTime">发布时间：--</span>
+            </div>
+            <div class="page-notice-content" id="pageNoticeContent"></div>
+            <div class="modal-footer page-notice-footer">
+                <button type="button" class="ghost" onclick="closePageNoticeModal()">我知道了</button>
+                <button type="button" onclick="skipPageNoticeForToday()" class="success">今日不再显示</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 编辑页面公告弹窗 -->
+    <div class="modal-overlay" id="editPageNoticeModal">
+        <div class="modal-box" style="max-width: 500px;">
+            <h3 id="editPageNoticeTitle">编辑公告</h3>
+            <div class="modal-form-item">
+                <label for="pageNoticeTextarea">公告内容</label>
+                <textarea id="pageNoticeTextarea" placeholder="请输入公告内容..."
+                    style="min-height: 150px; resize: vertical;"></textarea>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="ghost" onclick="clearPageNotice()">清除公告</button>
+                <button type="button" class="ghost" onclick="closeEditPageNoticeModal()">取消</button>
+                <button type="button" onclick="savePageNotice()" class="success">保存</button>
             </div>
         </div>
     </div>
@@ -230,8 +607,8 @@
                 <input type="password" id="newStaffPwd" placeholder="请输入员工密码">
             </div>
             <div class="modal-footer">
-                <button onclick="closeAddStaffModal()" style="background-color: #64748b;">取消</button>
-                <button onclick="saveNewStaff()" class="success">确认添加</button>
+                <button type="button" class="ghost" onclick="closeAddStaffModal()">取消</button>
+                <button type="button" onclick="saveNewStaff()" class="success">确认添加</button>
             </div>
         </div>
     </div>
@@ -240,37 +617,29 @@
     <div class="modal-overlay" id="salaryDetailModal">
         <div class="modal-box" style="width: 90vw; max-width: 500px; max-height: 80vh; overflow-y: auto;">
             <h3 id="salaryDetailTitle">余额明细</h3>
-            <div style="margin-bottom: 16px;">
-                <div style="font-size: 14px; color: #64748b;">当前余额</div>
-                <div style="font-size: 24px; font-weight: 600; color: #2563eb;" id="currentBalance">0.00</div>
+            <div class="salary-summary-block">
+                <div class="profile-stat-label">当前余额</div>
+                <div class="profile-stat-value" id="currentBalance">0.00</div>
             </div>
-            <div style="margin-bottom: 16px; overflow-x: auto; max-height: 50vh;">
-                <table style="width: 100%; border-collapse: collapse; min-width: 400px;">
-                    <thead style="position: sticky; top: 0; background-color: #f8fafc;">
+            <div class="salary-table-scroll">
+                <table class="salary-embed-table">
+                    <thead>
                         <tr>
-                            <th
-                                style="padding: 12px; text-align: left; font-size: 13px; font-weight: 600; color: #64748b; text-transform: uppercase; letter-spacing: 0.5px; border-bottom: 2px solid #e2e8f0;">
-                                日期</th>
-                            <th
-                                style="padding: 12px; text-align: left; font-size: 13px; font-weight: 600; color: #64748b; text-transform: uppercase; letter-spacing: 0.5px; border-bottom: 2px solid #e2e8f0;">
-                                类型</th>
-                            <th
-                                style="padding: 12px; text-align: left; font-size: 13px; font-weight: 600; color: #64748b; text-transform: uppercase; letter-spacing: 0.5px; border-bottom: 2px solid #e2e8f0;">
-                                金额（元）</th>
-                            <th
-                                style="padding: 12px; text-align: left; font-size: 13px; font-weight: 600; color: #64748b; text-transform: uppercase; letter-spacing: 0.5px; border-bottom: 2px solid #e2e8f0;">
-                                描述</th>
+                            <th>日期</th>
+                            <th>类型</th>
+                            <th>金额（元）</th>
+                            <th>描述</th>
                         </tr>
                     </thead>
                     <tbody id="salaryDetailTable">
                         <tr>
-                            <td colspan="4" style="text-align: center; padding: 20px; color: #64748b;">暂无余额变动记录</td>
+                            <td colspan="4" class="salary-empty-cell">暂无余额变动记录</td>
                         </tr>
                     </tbody>
                 </table>
             </div>
             <div class="modal-footer">
-                <button onclick="closeSalaryDetailModal()" style="background-color: #64748b;">关闭</button>
+                <button type="button" class="ghost" onclick="closeSalaryDetailModal()">关闭</button>
             </div>
         </div>
     </div>
