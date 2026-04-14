@@ -312,10 +312,15 @@ window.onload = async function () {
         document.getElementById("navTeamText").innerText = "个人中心";
     }
 
+    // 先从云端同步公告到本地（否则员工端只弹窗会读不到）
+    await syncPageNoticesFromCloud();
+
     // 初始化公告
     initNotice();
     // 初始化公告设置页面预览
     loadNoticeSettingsPreview();
+    // 进入当前页时检查是否需要弹窗公告
+    checkAndShowPageNotice(currentPage);
     renderLucideIcons();
 };
 
@@ -473,6 +478,8 @@ function escapeHtml(text) {
 
 // ==================== 多页面公告功能 ====================
 
+const PAGE_NOTICE_TABLE = 'page_notices';
+
 // 当前编辑的页面
 let currentEditPage = '';
 
@@ -483,6 +490,36 @@ const pageNames = {
     'supervise': '监督页面',
     'team': '个人中心'
 };
+
+function formatNoticeTime(value) {
+    const d = new Date(value);
+    if (Number.isNaN(d.getTime())) return '--';
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+}
+
+// 从 Supabase 同步公告到本地缓存（用于跨设备显示弹窗）
+async function syncPageNoticesFromCloud() {
+    try {
+        const { data, error } = await supabaseClient
+            .from(PAGE_NOTICE_TABLE)
+            .select('page, content, updatedat');
+        if (error || !Array.isArray(data)) return;
+
+        let latest = '';
+        data.forEach((row) => {
+            if (!row || !row.page) return;
+            localStorage.setItem(`pageNotice_${row.page}`, row.content || '');
+            if (row.updatedat && (!latest || row.updatedat > latest)) {
+                latest = row.updatedat;
+            }
+        });
+        if (latest) {
+            localStorage.setItem('noticeUpdateTime', formatNoticeTime(latest));
+        }
+    } catch (e) {
+        console.error('同步云端公告失败：', e);
+    }
+}
 
 // 加载公告设置预览
 function loadNoticeSettingsPreview() {
@@ -540,6 +577,26 @@ function savePageNotice() {
 
     // 保存到localStorage
     localStorage.setItem(`pageNotice_${currentEditPage}`, content);
+    localStorage.setItem('noticeUpdateTime', formatNoticeTime(new Date().toISOString()));
+
+    // 同步写入 Supabase（跨设备可见）
+    supabaseClient
+        .from(PAGE_NOTICE_TABLE)
+        .upsert(
+            {
+                page: currentEditPage,
+                content,
+                updatedby: user?.id || 'unknown',
+                updatedat: new Date().toISOString()
+            },
+            { onConflict: 'page' }
+        )
+        .then(({ error }) => {
+            if (error) {
+                console.error('保存云端公告失败：', error);
+                showToast(`云端公告保存失败：${error.message || '请检查数据库权限'}`, 'danger');
+            }
+        });
 
     // 记录已读状态重置（让员工重新看到）
     localStorage.removeItem(`pageNoticeRead_${currentEditPage}_${user.id}`);
