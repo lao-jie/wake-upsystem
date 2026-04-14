@@ -10,21 +10,12 @@ let renderFrameId = null;
 let lastSavedOrdersSignature = "";
 
 function formatWakeTimeDisplay(waketime) {
+    if (typeof formatWakeTimeForDisplay === "function") {
+        return formatWakeTimeForDisplay(waketime);
+    }
     const raw = String(waketime || "").trim();
-    if (!raw) return "-";
-
-    // 兼容 ISO / 带时区 / 纯时间字符串，统一展示为 HH:mm
-    const hhmmMatch = raw.match(/(\d{2}):(\d{2})/);
-    if (hhmmMatch) {
-        return `${hhmmMatch[1]}:${hhmmMatch[2]}`;
-    }
-
-    const d = new Date(raw);
-    if (!Number.isNaN(d.getTime())) {
-        return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
-    }
-
-    return raw;
+    const hhmmMatch = raw.match(/(\d{1,2}):(\d{2})/);
+    return hhmmMatch ? `${String(Number(hhmmMatch[1])).padStart(2, "0")}:${hhmmMatch[2]}` : raw || "-";
 }
 
 function buildOrdersSignature(orders) {
