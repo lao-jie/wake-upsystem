@@ -707,7 +707,7 @@ function skipPageNoticeForToday() {
 // ==================== 账号管理功能 ====================
 
 async function updateCurrentStaffProfile(patch) {
-    const result = await updateStaffProfileById(user.id, patch);
+    const result = await updateStaffProfileById(user.id, patch, user.name);
     if (!result.ok || !result.data) {
         throw new Error(result.reason || "资料保存失败");
     }
