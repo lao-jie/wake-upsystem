@@ -74,6 +74,7 @@ function initUser() {
 }
 
 let currentPage = "home";
+let lastNoticePopupSignature = "";
 
 const { user, allUsers } = initUser();
 const isAdmin = user.role === "admin";
@@ -477,7 +478,6 @@ const PAGE_NOTICE_TABLE = 'page_notices';
 
 // 当前编辑的页面
 let currentEditPage = '';
-let lastNoticePopupSignature = '';
 
 // 页面名称映射
 const pageNames = {
