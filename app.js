@@ -246,7 +246,10 @@ function showPageNoticeOnPage(page) {
 }
 
 // 页面基础（必须放在 currentPage 声明之后）
-showPage("home");
+// 检查URL参数，决定显示哪个页面
+const urlParams = new URLSearchParams(window.location.search);
+const targetPage = urlParams.get('page') || "home";
+showPage(targetPage);
 
 if (isAdmin) {
     document.getElementById("adminUploadArea").style.display = "flex";
