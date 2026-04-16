@@ -740,6 +740,289 @@ textarea {
     .supervise-summary-grid {
         grid-template-columns: repeat(2, minmax(120px, 1fr));
     }
+
+    .supervise-page .main-content {
+        padding: 12px;
+    }
+
+    .supervise-page .supervise-toolbar {
+        gap: 8px;
+    }
+
+    .supervise-page .supervise-toolbar input,
+    .supervise-page .supervise-toolbar select,
+    .supervise-page .supervise-toolbar button {
+        min-height: 40px;
+    }
+
+    /* 员工手机端监督大厅：搜索区简化为叫醒页同款（输入框 + 搜索 + 清空） */
+    .supervise-page.supervise-staff .supervise-toolbar {
+        grid-template-columns: 1fr auto auto;
+        align-items: center;
+    }
+
+    .supervise-page.supervise-staff .supervise-toolbar select,
+    .supervise-page.supervise-staff .supervise-toolbar input[type="date"] {
+        display: none;
+    }
+
+    .supervise-page.supervise-staff .supervise-toolbar button {
+    min-width: 74px;
+    padding-left: 12px;
+    padding-right: 12px;
+}
+
+/* 员工界面手机端：隐藏当前用户显示 */
+.supervise-page.supervise-staff.is-mobile .user-info {
+    display: none;
+}
+
+body.is-staff.is-mobile #userInfo {
+    display: none;
+}
+
+    /* 员工监督大厅：表格改卡片 */
+    .supervise-page.supervise-staff .supervise-table-wrapper {
+        background: transparent;
+        border: none;
+        box-shadow: none;
+        overflow: visible;
+    }
+
+    .supervise-page.supervise-staff .supervise-table {
+        min-width: 0;
+        width: 100%;
+    }
+
+    .supervise-page.supervise-staff .supervise-table thead {
+        display: none;
+    }
+
+    .supervise-page.supervise-staff .supervise-table tbody,
+    .supervise-page.supervise-staff .supervise-table tr,
+    .supervise-page.supervise-staff .supervise-table td {
+        display: block;
+        width: 100%;
+        box-sizing: border-box;
+    }
+
+    .supervise-page.supervise-staff .supervise-table tr {
+        background: linear-gradient(180deg, #ffffff 0%, #f8fafc 100%);
+        border: 1px solid rgba(148, 163, 184, 0.25);
+        border-radius: 14px;
+        padding: 12px;
+        margin-bottom: 10px;
+        box-shadow: 0 3px 10px rgba(15, 23, 42, 0.08);
+    }
+
+    .supervise-page.supervise-staff .supervise-table td {
+        border: none;
+        padding: 4px 0;
+        font-size: 13px;
+    }
+
+    .supervise-page.supervise-staff .supervise-table td:nth-child(1) {
+        display: none;
+    }
+
+    .supervise-page.supervise-staff .supervise-table td:nth-child(2)::before { content: "订单号："; color: #64748b; }
+    .supervise-page.supervise-staff .supervise-table td:nth-child(3)::before { content: "项目："; color: #64748b; }
+    .supervise-page.supervise-staff .supervise-table td:nth-child(4)::before { content: "时长："; color: #64748b; }
+    .supervise-page.supervise-staff .supervise-table td:nth-child(5)::before { content: "学员："; color: #64748b; }
+    .supervise-page.supervise-staff .supervise-table td:nth-child(6)::before { content: "结算："; color: #64748b; }
+    .supervise-page.supervise-staff .supervise-table td:nth-child(7)::before { content: "监督员："; color: #64748b; }
+    .supervise-page.supervise-staff .supervise-table td:nth-child(8)::before { content: "备注："; color: #64748b; }
+    .supervise-page.supervise-staff .supervise-table td:nth-child(9)::before { content: "状态："; color: #64748b; }
+    .supervise-page.supervise-staff .supervise-table td:nth-child(10)::before { content: "操作："; color: #64748b; }
+
+    .supervise-page.supervise-staff .supervise-table td:nth-child(10) {
+        margin-top: 8px;
+    }
+
+    .supervise-page.supervise-staff .supervise-table td:nth-child(10) button {
+        width: 100%;
+        margin: 0 0 8px 0;
+    }
+
+    .supervise-page.supervise-staff .supervise-table td:nth-child(10) button:last-child {
+        margin-bottom: 0;
+    }
+
+    .supervise-page.supervise-staff .supervise-mobile-cards {
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+    }
+
+    .supervise-page.supervise-staff .supervise-mobile-cards .order-card {
+        margin-bottom: 0;
+    }
+
+    .supervise-page.supervise-staff .supervise-mobile-cards .svm-card-header {
+        align-items: flex-start;
+        gap: 10px;
+    }
+
+    .supervise-page.supervise-staff .supervise-mobile-cards .svm-card-title {
+        flex: 1;
+        min-width: 0;
+        display: block;
+    }
+
+    .supervise-page.supervise-staff .supervise-mobile-cards .svm-orderno {
+        font-size: 16px;
+        font-weight: 700;
+        color: #0f766e;
+        line-height: 1.4;
+        word-break: break-word;
+    }
+
+    .supervise-page.supervise-staff .supervise-mobile-cards .svm-project {
+        margin-top: 4px;
+        font-size: 16px;
+        font-weight: 700;
+        color: #334155;
+        line-height: 1.45;
+        word-break: break-word;
+    }
+
+    .supervise-page.supervise-staff .supervise-mobile-cards .svm-card-meta {
+        display: flex;
+        flex-direction: column;
+        align-items: flex-end;
+        gap: 6px;
+        flex: 0 0 auto;
+        white-space: nowrap;
+    }
+
+    .supervise-page.supervise-staff .supervise-mobile-cards .svm-card-meta .order-money {
+        font-size: 16px;
+        font-weight: 700;
+        color: #0f172a;
+    }
+
+    .supervise-page.supervise-staff .supervise-mobile-cards .svm-card-body .order-kv {
+        grid-template-columns: 52px 1fr;
+        gap: 8px;
+    }
+
+    .supervise-page.supervise-staff .supervise-mobile-cards .svm-card-body .order-kv .v {
+        text-align: left;
+        word-break: break-word;
+        line-height: 1.55;
+    }
+
+    .supervise-page.supervise-staff .supervise-mobile-cards .svm-note-kv .v {
+        display: -webkit-box;
+        -webkit-box-orient: vertical;
+        -webkit-line-clamp: 4;
+        line-clamp: 4;
+        overflow: hidden;
+    }
+
+    .supervise-page.supervise-staff .supervise-mobile-cards .order-card-footer {
+        align-items: flex-start;
+    }
+
+    .supervise-page.supervise-staff .supervise-mobile-cards .order-card-footer > div:last-child {
+        width: auto;
+        display: flex;
+        flex-direction: column;
+        align-items: flex-end;
+        gap: 8px;
+    }
+
+    .supervise-page.supervise-staff .supervise-mobile-cards .order-card-footer button {
+        width: auto;
+        min-width: 120px;
+        margin: 0;
+        padding-left: 16px;
+        padding-right: 16px;
+    }
+
+    .supervise-page.supervise-staff .supervise-mobile-cards .svm-start-date {
+        color: #64748b;
+        font-size: 14px;
+        font-weight: 600;
+        line-height: 1.4;
+    }
+
+    /* 监督日志弹窗手机适配 */
+    #superviseCalendarModal .modal-box {
+        width: calc(100vw - 12px);
+        max-width: calc(100vw - 12px);
+        max-height: 92vh;
+        padding: 12px;
+        border-radius: 12px;
+    }
+
+    #superviseCalendarLegend {
+        font-size: 11px !important;
+        gap: 8px !important;
+        padding: 6px 8px;
+    }
+
+    #superviseCalendarGrid {
+        grid-template-columns: repeat(7, minmax(38px, 1fr));
+        gap: 6px;
+        padding: 8px;
+    }
+
+    .sv-cal-weekday {
+        font-size: 11px;
+        padding: 4px 0;
+    }
+
+    .sv-cal-day {
+        min-height: 56px;
+        border-radius: 10px;
+        padding: 6px 4px;
+    }
+
+    .sv-cal-day .num {
+        font-size: 12px;
+        margin-bottom: 4px;
+    }
+
+    .sv-cal-day .mark {
+        font-size: 15px;
+        min-height: 16px;
+    }
+
+    .sv-cal-nav {
+        width: 100%;
+        justify-content: space-between;
+    }
+
+    .sv-cal-nav-btn {
+        flex: 1;
+        min-width: 0;
+        height: 34px;
+    }
+
+    .sv-log-layout {
+        gap: 10px;
+    }
+
+    .sv-log-uploader {
+        padding: 10px;
+    }
+
+    .sv-log-uploader .modal-footer {
+        display: grid;
+        grid-template-columns: 1fr;
+        gap: 8px;
+    }
+
+    .supervise-page.supervise-admin #superviseManualActions {
+        display: grid !important;
+        grid-template-columns: 1fr 1fr;
+        gap: 8px;
+    }
+
+    #superviseTaskFinishAction {
+        width: 100%;
+    }
 }
 
 /* 叫醒页订单表：撑满容器、等分列、单元格居中（覆盖全局 table 的 min-width） */
@@ -3033,4 +3316,122 @@ textarea {
     font-size: 20px;
     color: #22c55e;
     font-weight: 700;
+}
+
+/* 监督页员工卡片（全端通用，移动端规则会在上方继续细化） */
+.supervise-page.supervise-staff .supervise-mobile-cards {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.supervise-page.supervise-staff .supervise-mobile-cards .svm-card-header {
+    align-items: flex-start;
+    gap: 10px;
+}
+
+.supervise-page.supervise-staff .supervise-mobile-cards .svm-card-title {
+    flex: 1;
+    min-width: 0;
+    display: block;
+}
+
+.supervise-page.supervise-staff .supervise-mobile-cards .svm-orderno {
+    font-size: 16px;
+    font-weight: 700;
+    color: #0f766e;
+    line-height: 1.4;
+    word-break: break-word;
+}
+
+.supervise-page.supervise-staff .supervise-mobile-cards .svm-project {
+    margin-top: 4px;
+    font-size: 18px;
+    font-weight: 700;
+    color: #334155;
+    line-height: 1.45;
+    word-break: break-word;
+}
+
+.supervise-page.supervise-staff .supervise-mobile-cards .svm-card-meta .order-money {
+    font-size: 18px;
+    font-weight: 700;
+    color: #0f172a;
+}
+
+.supervise-page.supervise-staff .supervise-mobile-cards .svm-card-meta {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 6px;
+    flex: 0 0 auto;
+    white-space: nowrap;
+}
+
+.supervise-page.supervise-staff .supervise-mobile-cards .svm-card-body .order-kv {
+    grid-template-columns: 60px 1fr;
+    gap: 8px;
+}
+
+.supervise-page.supervise-staff .supervise-mobile-cards .svm-card-body .order-kv .v {
+    text-align: left;
+    word-break: break-word;
+    line-height: 1.55;
+}
+
+.supervise-page.supervise-staff .supervise-mobile-cards .svm-note-kv .v {
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 4;
+    line-clamp: 4;
+    overflow: hidden;
+}
+
+.supervise-page.supervise-staff .supervise-mobile-cards .svm-start-date {
+    color: #64748b;
+    font-size: 14px;
+    font-weight: 600;
+    line-height: 1.4;
+}
+
+/* 进度按钮样式 */
+.progress-btn:hover {
+    transform: translateY(-3px) !important;
+    box-shadow:
+        0 6px 20px rgba(6, 182, 212, 0.28),
+        0 2px 8px rgba(14, 116, 144, 0.2) !important;
+}
+
+/* 进度模态框样式 */
+#progressModal .modal-box {
+    background: #ffffff;
+    border-radius: 12px;
+    box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+}
+
+#progressModal .modal-header h3 {
+    color: #1e293b;
+    font-size: 18px;
+    font-weight: 600;
+    margin: 0;
+}
+
+#progressModal .modal-footer button {
+    padding: 8px 16px;
+    border-radius: 6px;
+    font-size: 14px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+#progressModal .modal-footer button.ghost {
+    background: transparent;
+    border: 1px solid #cbd5e1;
+    color: #64748b;
+}
+
+#progressModal .modal-footer button.ghost:hover {
+    background: #f8fafc;
+    border-color: #94a3b8;
 }

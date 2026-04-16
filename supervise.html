@@ -45,7 +45,8 @@
                 <span id="navTeamText">团队管理</span>
             </div>
 
-            <div class="nav-item" id="nav-notice-setting" style="display:none;" onclick="window.location.href='jiaoxing.html'">
+            <div class="nav-item" id="nav-notice-setting" style="display:none;"
+                onclick="window.location.href='jiaoxing.html'">
                 <span class="icon"><i data-lucide="settings"></i></span>
                 <span>公告设置</span>
             </div>
@@ -64,7 +65,7 @@
         <div class="user-info">当前用户：<span id="superviseUserName">-</span></div>
 
         <div class="supervise-toolbar">
-            <input type="text" id="superviseSearchInput" placeholder="搜索：订单号、项目、监督员">
+            <input type="text" id="superviseSearchInput" placeholder="搜索：订单号、项目、学员、监督员">
             <select id="superviseStatusFilter">
                 <option value="all">全部状态</option>
                 <option value="待接单">待接单</option>
@@ -72,8 +73,8 @@
                 <option value="已完成">已完成</option>
             </select>
             <input type="date" id="superviseDateFilter">
-            <button type="button" onclick="loadSuperviseDashboard()">查询</button>
-            <button type="button" class="ghost" onclick="resetSuperviseFilters()">重置</button>
+            <button type="button" onclick="submitSuperviseSearch()">搜索</button>
+            <button type="button" class="ghost" onclick="clearSuperviseSearch()">清空</button>
         </div>
 
         <div class="admin-form" id="superviseSummarySection">
@@ -127,7 +128,8 @@
 
         <div class="admin-form" id="superviseBatchSection" style="flex-direction: column;">
             <h3 class="batch-upload-title">批量添加监督任务</h3>
-            <textarea id="superviseBatchText" placeholder="粘贴监督任务文本（示例：&#10;TB20260414001&#10;监督早睡&#10;张三&#10;7天&#10;首单测试&#10;&#10;或单行：TB20260414002 监督早起 李四 3天 复训）"></textarea>
+            <textarea id="superviseBatchText"
+                placeholder="粘贴监督任务文本（示例：&#10;TB20260414001&#10;监督早睡&#10;张三&#10;7天&#10;首单测试&#10;&#10;或单行：TB20260414002 监督早起 李四 3天 复训）"></textarea>
             <div style="display: flex; flex-wrap: wrap; gap: 12px;">
                 <button type="button" onclick="parseSuperviseBatchOrders()">识别任务</button>
                 <button type="button" id="superviseUploadBtn" disabled onclick="uploadSuperviseOrders()">批量上传</button>
@@ -144,6 +146,8 @@
             <div class="loading-indicator__spinner" aria-hidden="true"></div>
             <span class="loading-indicator__text">加载中...</span>
         </div>
+
+        <div id="superviseMobileCards" class="supervise-mobile-cards" style="display:none;"></div>
 
         <div class="table-wrapper supervise-table-wrapper">
             <table class="supervise-table">
@@ -175,17 +179,20 @@
             <div style="display:flex; align-items:center; justify-content:space-between; gap:8px; margin-bottom:8px;">
                 <h3 id="superviseCalendarTitle" style="margin:0; display:none;">监督日志</h3>
             </div>
-            <div style="display:flex; align-items:center; justify-content:space-between; gap:10px; flex-wrap:wrap; margin-bottom:10px;">
+            <div
+                style="display:flex; align-items:center; justify-content:space-between; gap:10px; flex-wrap:wrap; margin-bottom:10px;">
                 <div id="superviseCalendarMonthLabel" style="margin:0; color:#334155; font-weight:600;"></div>
                 <div class="sv-cal-nav">
                     <button type="button" class="sv-cal-nav-btn" onclick="changeSuperviseCalendarMonth(-1)">上月</button>
                     <button type="button" class="sv-cal-nav-btn" onclick="changeSuperviseCalendarMonth(1)">下月</button>
                 </div>
             </div>
-            <div id="superviseCalendarLegend" style="display:flex; gap:14px; font-size:12px; color:#64748b; margin-bottom:10px;">
+            <div id="superviseCalendarLegend"
+                style="display:flex; gap:14px; flex-wrap:wrap; font-size:12px; color:#64748b; margin-bottom:10px;">
                 <span>✅ 已完成</span>
+                <span>🔸 仅通过部分（如早睡早起只传了 1 张）</span>
                 <span>❌ 未完成</span>
-                <span>⭕ 待提交/未通过</span>
+                <span>⭕ 待提交</span>
                 <span>📍 今天</span>
             </div>
             <div class="sv-log-layout">
@@ -194,21 +201,28 @@
                 </div>
                 <div class="sv-log-uploader">
                     <h4 style="margin:0 0 8px; color:#334155;">提交监督截图</h4>
-                    <div id="svSelectedDateHint" style="font-size:12px; color:#64748b; margin-bottom:8px;">当前日期（仅当天可提交）：--</div>
+                    <div id="svSelectedDateHint" style="font-size:12px; color:#64748b; margin-bottom:8px;">
+                        当前日期（仅当天可提交）：--</div>
                     <input type="file" id="calendarSuperviseImage" accept="image/*">
-                    <img id="calendarSupervisePreview" alt="截图预览" style="display:none; width:100%; max-height:220px; object-fit:contain; border-radius:8px; border:1px solid rgba(148,163,184,0.35); margin-top:8px;">
-                    <div id="calendarSuperviseAiResult" style="font-size:13px; color:#64748b; margin-top:8px;">选择日期并上传后，点击AI识别并提交</div>
+                    <p id="svScreenshotSpecHint"
+                        style="font-size:12px; color:#64748b; margin:8px 0 0; line-height:1.55;">规范说明将随本单监督项目自动切换。</p>
+                    <img id="calendarSupervisePreview" alt="截图预览"
+                        style="display:none; width:100%; max-height:220px; object-fit:contain; border-radius:8px; border:1px solid rgba(148,163,184,0.35); margin-top:8px;">
+                    <div id="calendarSuperviseAiResult" style="font-size:13px; color:#64748b; margin-top:8px;">上传截图后，点击
+                        AI 识别并提交</div>
                     <div class="modal-footer" style="justify-content:flex-start; margin-top:10px;">
                         <button type="button" class="success" onclick="submitDailySuperviseWithAI()">AI识别并提交</button>
                     </div>
-                    <div class="modal-footer" id="superviseManualActions" style="display:none; justify-content:flex-start; margin-top:8px;">
+                    <div class="modal-footer" id="superviseManualActions"
+                        style="display:none; justify-content:flex-start; margin-top:8px;">
                         <button type="button" class="success" onclick="markSuperviseDailyByAdmin(true)">完成</button>
                         <button type="button" class="danger" onclick="markSuperviseDailyByAdmin(false)">未完成</button>
                     </div>
                 </div>
             </div>
             <div class="modal-footer">
-                <button type="button" class="success" id="superviseTaskFinishAction" style="display:none;" onclick="finishSuperviseTask(currentCalendarTaskId)">整单完成</button>
+                <button type="button" class="success" id="superviseTaskFinishAction" style="display:none;"
+                    onclick="finishSuperviseTask(currentCalendarTaskId)">整单完成</button>
                 <button type="button" class="ghost" onclick="closeSuperviseCalendarModal()">关闭</button>
             </div>
         </div>
@@ -224,6 +238,24 @@
             <div class="modal-footer">
                 <button type="button" class="ghost" onclick="closeCustomDurationModal()">取消</button>
                 <button type="button" class="success" onclick="confirmCustomDuration()">确定</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 进度详情模态框 -->
+    <div class="modal-overlay" id="progressModal">
+        <div class="modal-box" style="max-width: 500px;">
+            <div class="modal-header"
+                style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
+                <h3>进度详情</h3>
+                <button type="button" class="modal-close" onclick="closeProgressModal()"
+                    style="background: none; border: none; font-size: 20px; cursor: pointer; color: #64748b;">✕</button>
+            </div>
+            <div id="progressModalContent">
+                <!-- 动态内容将通过JavaScript填充 -->
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="ghost" onclick="closeProgressModal()">关闭</button>
             </div>
         </div>
     </div>

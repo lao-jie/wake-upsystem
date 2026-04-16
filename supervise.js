@@ -16,6 +16,8 @@ let superviseIsStaff = false;
 
     superviseIsAdmin = currentSuperviseUser.role === "admin";
     superviseIsStaff = currentSuperviseUser.role === "staff";
+    document.body.classList.toggle("supervise-admin", superviseIsAdmin);
+    document.body.classList.toggle("supervise-staff", superviseIsStaff);
     const navTeamText = document.getElementById("navTeamText");
     if (navTeamText) navTeamText.textContent = superviseIsAdmin ? "团队管理" : "个人中心";
     const noticeNav = document.getElementById("nav-notice-setting");
@@ -24,6 +26,20 @@ let superviseIsStaff = false;
     if (window.lucide && typeof window.lucide.createIcons === "function") {
         window.lucide.createIcons();
     }
+
+    // 检测是否为移动设备
+    const isMobile = window.innerWidth <= 768;
+    document.body.classList.toggle("is-mobile", isMobile);
+
+    // 监听窗口大小变化
+    window.addEventListener("resize", function () {
+        const isMobile = window.innerWidth <= 768;
+        if (isMobile) {
+            document.body.classList.add("is-mobile");
+        } else {
+            document.body.classList.remove("is-mobile");
+        }
+    });
 })();
 
 function logout() {
@@ -52,6 +68,8 @@ let lastDurationValue = "一天";
 let currentCalendarTaskId = "";
 let currentCalendarMonthCursor = null;
 let selectedLogDate = "";
+
+const SUPERVISE_SCREENSHOT_AI_SYSTEM = `你是监督「聊天截图」的严格核验助手，只做 OCR 与逻辑判断。必须只输出一个 JSON 对象，不要 markdown 代码块，不要解释性正文。所有布尔值必须是 JSON 的 true/false。若看不清、不确定或截图不符合条件，对应项一律填 false。`;
 
 const SUPERVISE_AI_SYSTEM_PROMPT = `你是监督任务识别助手。用户会给出监督任务文本，你只提取监督任务信息。
 
@@ -486,17 +504,80 @@ function getDailyLogs(row) {
     return row?.dailylogs && typeof row.dailylogs === "object" ? row.dailylogs : {};
 }
 
+/** 监督早睡早起：两张图（早睡+早起各一张）；其余项目一张图。 */
+function getSuperviseScreenshotSlotProjects(project) {
+    const p = String(project || "").trim();
+    if (p === "监督早睡早起") return ["监督早睡", "监督早起"];
+    return [p || ""];
+}
+
+function getSuperviseScreenshotSlotCount(project) {
+    return getSuperviseScreenshotSlotProjects(project).length;
+}
+
+function normalizeSuperviseDaySlotsArray(log, slotCount) {
+    const arr = new Array(slotCount).fill(null);
+    if (!log || typeof log !== "object") return arr;
+    if (Array.isArray(log.slots)) {
+        log.slots.forEach((s, i) => {
+            if (i < slotCount) arr[i] = s;
+        });
+        return arr;
+    }
+    if (slotCount === 1 && log.passed === true) {
+        arr[0] = { passed: true, reason: String(log.reason || ""), legacy: true };
+        return arr;
+    }
+    if (slotCount === 2 && log.passed === true && !Array.isArray(log.slots)) {
+        arr[0] = { passed: true, reason: "历史单条记录", legacy: true };
+        arr[1] = { passed: true, reason: "历史单条记录", legacy: true };
+        return arr;
+    }
+    return arr;
+}
+
+function isDailyLogFullyPassed(log, project) {
+    if (!log || typeof log !== "object") return false;
+    if (log.source === "admin_manual" && log.passed === true) return true;
+    const n = getSuperviseScreenshotSlotCount(project);
+    const slots = normalizeSuperviseDaySlotsArray(log, n);
+    return slots.every((s) => s && s.passed === true);
+}
+
+function getDayCalendarMarkState(log, project) {
+    if (isDailyLogFullyPassed(log, project)) return "done";
+    if (!log || typeof log !== "object") return "none";
+    if (log.source === "admin_manual" && log.passed === false) return "failed";
+    const n = getSuperviseScreenshotSlotCount(project);
+    const slots = normalizeSuperviseDaySlotsArray(log, n);
+    if (n === 1) {
+        if (slots[0] && slots[0].passed === false) return "failed";
+        return "none";
+    }
+    const attempted = slots.every((s) => s != null);
+    const anyPass = slots.some((s) => s && s.passed === true);
+    if (attempted && !isDailyLogFullyPassed(log, project)) return "failed";
+    if (anyPass || slots.some((s) => s)) return "partial";
+    return "none";
+}
+
 function getCompletedDays(row) {
     const logs = getDailyLogs(row);
-    return Object.values(logs).filter((entry) => entry && entry.passed === true).length;
+    const project = row?.project || "";
+    return Object.values(logs).filter((entry) => entry && isDailyLogFullyPassed(entry, project)).length;
 }
 
 function getTodayDailyStateText(row) {
     const today = getLocalDateString();
     const logs = getDailyLogs(row);
     const todayLog = logs[today];
+    const project = row?.project || "";
     if (!todayLog) return "待提交";
-    return todayLog.passed === true ? "已完成" : "未完成";
+    if (isDailyLogFullyPassed(todayLog, project)) return "已完成";
+    const st = getDayCalendarMarkState(todayLog, project);
+    if (st === "partial") return "待补图";
+    if (st === "failed") return "未完成";
+    return "待提交";
 }
 
 function updateSuperviseTaskStatusByLogs(row) {
@@ -533,6 +614,16 @@ function getSuperviseFilters() {
     return { keyword, status, date };
 }
 
+function submitSuperviseSearch() {
+    loadSuperviseDashboard();
+}
+
+function clearSuperviseSearch() {
+    const keyword = document.getElementById("superviseSearchInput");
+    if (keyword) keyword.value = "";
+    loadSuperviseDashboard();
+}
+
 function applySuperviseFilters(orders, filters) {
     return (orders || []).filter((order) => {
         if (filters.status !== "all" && order.status !== filters.status) {
@@ -545,7 +636,7 @@ function applySuperviseFilters(orders, filters) {
         }
 
         if (filters.keyword) {
-            const searchText = `${order.orderno || ""} ${order.project || ""} ${order.supervisor || ""} ${order.note || ""}`.toLowerCase();
+            const searchText = `${order.orderno || ""} ${order.project || ""} ${order.studentname || ""} ${order.supervisor || ""} ${order.note || ""}`.toLowerCase();
             if (!searchText.includes(filters.keyword)) return false;
         }
 
@@ -587,6 +678,10 @@ function renderSuperviseSummary(orders) {
 }
 
 function renderSuperviseTable(orders) {
+    const tableWrapper = document.querySelector(".supervise-table-wrapper");
+    if (!tableWrapper) return;
+    // 员工电脑端与管理员一致使用表格；窄屏下由 styles.css 将员工表格样式化为块级布局
+    ensureSuperviseTableShell(tableWrapper);
     const tbody = document.getElementById("superviseTableBody");
     if (!tbody) return;
 
@@ -597,8 +692,6 @@ function renderSuperviseTable(orders) {
 
     let html = "";
     orders.forEach((item) => {
-        const taskReady = isSuperviseTaskReady(item);
-        const startDateText = getSuperviseTaskStartDateStr(item);
         const statusText = getEffectiveSuperviseStatus(item);
         const statusClass = getSuperviseStatusClass(statusText);
         const amount = Number(item.price || item.amount || item.money || 0).toFixed(2);
@@ -606,23 +699,7 @@ function renderSuperviseTable(orders) {
         const completedDays = getCompletedDays(item);
         const progressText = `${completedDays}/${requiredDays}天`;
         const todayStateText = getTodayDailyStateText(item);
-        const ownerId = getOwnerIdValue(item);
-        const ownerName = getOwnerNameValue(item);
-        const hasOwner = hasMeaningfulValue(ownerId) || hasMeaningfulValue(ownerName);
-        let actionHtml = `<span style="color:#64748b;">-</span>`;
-        const calendarBtn = `<button type="button" onclick="openSuperviseCalendarModal('${item.id}')">监督日志</button>`;
-        const calendarAndFinishBtn = `<button type="button" class="success" onclick="openSuperviseCalendarModal('${item.id}')">监督日志/完成</button>`;
-        if (superviseIsStaff && statusText === "待接单" && !hasOwner && !taskReady) {
-            actionHtml = `${calendarBtn}<span style="color:#64748b;font-size:12px;">${startDateText} 开始</span>`;
-        } else if (superviseIsStaff && statusText === "待接单" && !hasOwner) {
-            actionHtml = `${calendarBtn}<button type="button" class="warning" onclick="takeSuperviseTask('${item.id}')">接单</button>`;
-        } else if (superviseIsStaff && ownerId === String(currentSuperviseUser?.id || "").trim() && statusText === "进行中") {
-            actionHtml = calendarBtn;
-        } else if ((superviseIsAdmin || ownerId === String(currentSuperviseUser?.id || "").trim()) && statusText === "进行中") {
-            actionHtml = superviseIsAdmin ? calendarAndFinishBtn : calendarBtn;
-        } else {
-            actionHtml = calendarBtn;
-        }
+        const actionHtml = getSuperviseActionHtml(item, statusText);
 
         html += `
             <tr>
@@ -641,6 +718,120 @@ function renderSuperviseTable(orders) {
     });
 
     tbody.innerHTML = html;
+}
+
+function isSuperviseMobileCardMode() {
+    return superviseIsStaff && window.matchMedia("(max-width: 768px)").matches;
+}
+
+function getSuperviseActionHtml(item, statusText = getEffectiveSuperviseStatus(item)) {
+    const taskReady = isSuperviseTaskReady(item);
+    const startDateText = getSuperviseTaskStartDateStr(item);
+    const ownerId = getOwnerIdValue(item);
+    const ownerName = getOwnerNameValue(item);
+    const hasOwner = hasMeaningfulValue(ownerId) || hasMeaningfulValue(ownerName);
+    const calendarBtn = `<button type="button" onclick="openSuperviseCalendarModal('${item.id}')">监督日志</button>`;
+    const calendarAndFinishBtn = `<button type="button" class="success" onclick="openSuperviseCalendarModal('${item.id}')">监督日志/完成</button>`;
+    if (superviseIsStaff && statusText === "待接单" && !hasOwner && !taskReady) {
+        return `${calendarBtn}<span class="svm-start-date">${startDateText} 开始</span>`;
+    }
+    if (superviseIsStaff && statusText === "待接单" && !hasOwner) {
+        return `${calendarBtn}<button type="button" class="warning" onclick="takeSuperviseTask('${item.id}')">接单</button>`;
+    }
+    if (superviseIsStaff && ownerId === String(currentSuperviseUser?.id || "").trim() && statusText === "进行中") {
+        return calendarBtn;
+    }
+    if ((superviseIsAdmin || ownerId === String(currentSuperviseUser?.id || "").trim()) && statusText === "进行中") {
+        return superviseIsAdmin ? calendarAndFinishBtn : calendarBtn;
+    }
+    return calendarBtn;
+}
+
+function renderSuperviseCards(orders) {
+    const container = document.getElementById("superviseMobileCards");
+    if (!container) return;
+    if (!orders || orders.length === 0) {
+        container.innerHTML = `<div style="color:#64748b;font-size:14px;padding:12px;">未找到符合条件的订单</div>`;
+        return;
+    }
+
+    let html = "";
+    orders.forEach((item) => {
+        const statusText = getEffectiveSuperviseStatus(item);
+        const statusClass = getSuperviseStatusClass(statusText);
+        const amount = Number(item.price || item.amount || item.money || 0).toFixed(2);
+        const requiredDays = getDurationDays(item.duration || "一天");
+        const completedDays = getCompletedDays(item);
+        const progressText = `${completedDays}/${requiredDays}天`;
+        const todayStateText = getTodayDailyStateText(item);
+        const actionHtml = getSuperviseActionHtml(item, statusText);
+
+        html += `
+            <div class="order-card">
+                <div class="order-card-header svm-card-header">
+                    <div class="svm-card-title">
+                        <div class="svm-orderno">${item.orderno || "-"}</div>
+                        <div class="svm-project">${item.project || "-"}</div>
+                    </div>
+                    <div class="svm-card-meta">
+                        <span class="status-badge ${statusClass}">${statusText}</span>
+                        <span class="order-money">${amount} 元</span>
+                    </div>
+                </div>
+                <div class="order-card-body svm-card-body">
+                    <div class="order-kv"><div class="k">时长</div><div class="v">${item.duration || "-"}</div></div>
+                    <div class="order-kv"><div class="k">学员</div><div class="v">${item.studentname || "-"}</div></div>
+                    <div class="order-kv"><div class="k">今日</div><div class="v">${todayStateText}</div></div>
+                    <div class="order-kv svm-note-kv"><div class="k">备注</div><div class="v">${item.note || "-"}</div></div>
+                </div>
+                <div class="order-card-footer">
+                    <button class="progress-btn" onclick="showProgressModal('${item.id}')" style="font-size:14px;font-weight:600;color:white;background:linear-gradient(135deg, #0e7490 0%, #06b6d4 100%);border:1px solid rgba(34, 211, 238, 0.45);border-radius:10px;padding:10px 18px;cursor:pointer;transition:all 0.3s ease-out;box-shadow:0 2px 12px rgba(6, 182, 212, 0.22),0 1px 0 rgba(255, 255, 255, 0.35) inset;">进度：${progressText}</button>
+                    <div>${actionHtml}</div>
+                </div>
+            </div>
+        `;
+    });
+    container.innerHTML = html;
+}
+
+function renderSuperviseOrders(orders) {
+    const tableWrapper = document.querySelector(".supervise-table-wrapper");
+    const cardContainer = document.getElementById("superviseMobileCards");
+    const useCards = isSuperviseMobileCardMode();
+    if (tableWrapper) tableWrapper.style.display = useCards ? "none" : "";
+    if (cardContainer) cardContainer.style.display = useCards ? "flex" : "none";
+    if (useCards) {
+        renderSuperviseCards(orders);
+    } else {
+        renderSuperviseTable(orders);
+    }
+}
+
+function ensureSuperviseTableShell(tableWrapper) {
+    if (document.getElementById("superviseTableBody")) return;
+    tableWrapper.innerHTML = `
+        <table class="supervise-table">
+            <thead>
+                <tr>
+                    <th>选择</th>
+                    <th>订单号</th>
+                    <th>项目</th>
+                    <th>时长</th>
+                    <th>学员名字</th>
+                    <th>结算价格</th>
+                    <th>监督员</th>
+                    <th>备注</th>
+                    <th>状态</th>
+                    <th>操作</th>
+                </tr>
+            </thead>
+            <tbody id="superviseTableBody">
+                <tr>
+                    <td colspan="10" class="salary-empty-cell">暂无监督数据</td>
+                </tr>
+            </tbody>
+        </table>
+    `;
 }
 
 async function addSingleSuperviseTask() {
@@ -795,11 +986,15 @@ function renderSuperviseCalendar(taskId, targetMonthDate) {
             const d = new Date(monthStart.getFullYear(), monthStart.getMonth(), day);
             const key = getLocalDateString(d);
             const log = dailyLogs[key];
+            const rowProject = row.project || "";
             let mark = "";
-            if (log && log.passed === true) {
+            const daySt = log ? getDayCalendarMarkState(log, rowProject) : "none";
+            if (daySt === "done") {
                 mark = "✅";
-            } else if (log && log.passed === false) {
+            } else if (daySt === "failed") {
                 mark = "❌";
+            } else if (daySt === "partial") {
+                mark = "🔸";
             } else if (expectedDates.has(key)) {
                 mark = "⭕";
             }
@@ -831,11 +1026,25 @@ function renderSuperviseCalendar(taskId, targetMonthDate) {
     });
 }
 
+function setSuperviseScreenshotSpecHint(project) {
+    const el = document.getElementById("svScreenshotSpecHint");
+    if (!el) return;
+    const p = String(project || "").trim();
+    if (p === "监督早睡早起") {
+        el.textContent =
+            "本单为「监督早睡早起」：同一天内需先后各提交 1 张聊天截图并通过 AI。第一张最后一条须含「监督早睡」与「已完成」等；第二张须含「监督早起」与「已完成」等；顶部均须含本单订单号与学员名；各张最后一条发送时间均须为目标日。两张均通过才算当日完成。";
+        return;
+    }
+    el.textContent =
+        "规范：聊天截屏须带到顶栏（客户/会话名旁可见订单号与学员姓名，与本单一致）；对话最下方最后一条正文为「当天日期+监督项目+已完成」（日期须与提交日同一天）；且该条发送时间的日期须为目标日。";
+}
+
 async function openSuperviseCalendarModal(taskId) {
     currentCalendarTaskId = String(taskId || "");
     const all = await getSuperviseOrders();
     const row = all.find((it) => String(it.id) === currentCalendarTaskId);
     if (!row) return;
+    setSuperviseScreenshotSpecHint(row.project);
     const input = document.getElementById("calendarSuperviseImage");
     const preview = document.getElementById("calendarSupervisePreview");
     const result = document.getElementById("calendarSuperviseAiResult");
@@ -850,8 +1059,10 @@ async function openSuperviseCalendarModal(taskId) {
     }
     if (result) {
         result.textContent = superviseIsAdmin
-            ? "管理员可直接对选中日期进行人工判定（完成/未完成）"
-            : "选择日期并上传后，点击AI识别并提交";
+            ? "管理员可直接对选中日期进行人工判定（完成/未完成）；员工须按左侧规范上传聊天截图。"
+            : row.project === "监督早睡早起"
+                ? "请按规范先后上传两张截图（先早睡、再早起），每次选一张图后点「AI识别并提交」；两张均通过即当日完成。"
+                : "请上传聊天截图后点「AI识别并提交」；通过即当日完成。";
     }
     const startDate = parseDateOnlyToLocal(row.startdate) || new Date(row.submittime || Date.now());
     selectedLogDate = getLocalDateString();
@@ -894,6 +1105,108 @@ function extractJsonObjectFromAiContent(raw) {
     return JSON.parse(jsonText);
 }
 
+function buildSuperviseChatScreenshotUserPrompt(row, targetDate, projectOverride) {
+    const orderno = String(row?.orderno || "").trim();
+    const studentname = String(row?.studentname || "").trim();
+    const project = String(projectOverride != null ? projectOverride : row?.project || "").trim();
+    const studentRule = studentname
+        ? `截图最上方标题区/客户信息区须能同时识别到：订单号「${orderno}」与学员姓名「${studentname}」（与系统登记一致；昵称为姓名子串或明显同一人可算一致）。`
+        : `截图最上方须能识别到订单号「${orderno}」；学员姓名系统未登记，则要求顶部有清晰的聊天对象/客户名称且与订单号同框出现即可。`;
+    const exampleDate = targetDate.replace(/^(\d{4})-(\d{2})-(\d{2})$/, (_, y, mo, da) => {
+        const m = String(Number(mo));
+        const d = String(Number(da));
+        return `${y}年${m}月${d}日`;
+    });
+    const dm = targetDate.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+    const sloppyDash = dm ? `${dm[1]}-${Number(dm[2])}-${Number(dm[3])}` : targetDate;
+    const dotStyle = dm ? `${dm[1]}.${Number(dm[2])}.${Number(dm[3])}` : targetDate;
+    return `【系统登记（用于比对）】
+- 订单号：${orderno || "（缺）"}
+- 学员姓名：${studentname || "（未登记）"}
+- 监督项目：${project || "（缺）"}
+- 目标自然日（必须通过截图证明是这一天的完成记录）：${targetDate}
+
+【聊天截图硬性要求】
+1）界面最上方：${studentRule}
+2）聊天区域「最后一条可见消息」（一般在对话最底部、常显示在右侧气泡）：正文须同时满足：
+   - 含有与「${targetDate}」同一公历日的日期（允许 ${targetDate}、${sloppyDash}、${dotStyle}、${exampleDate} 等等价写法，但年月日必须与目标日完全一致）；
+   - 含有监督项目「${project}」原文；
+   - 含有连续文字「已完成」。
+   合格示例（日期与项目随本单变化）：「${targetDate}${project}已完成」「${exampleDate}${project}已完成」。
+3）该「最后一条消息」旁或气泡上显示的**发送时间**（若 App 用相对时间如「刚刚」且无法还原到目标日，则本项判不通过）：其**日期**必须与「${targetDate}」为同一自然日。
+
+【输出】仅输出一个 JSON 对象，字段如下（不要其它文字）：
+{
+  "header_order_visible_and_matches": true或false,
+  "header_student_visible_and_matches": true或false,
+  "last_message_text_ok": true或false,
+  "last_message_time_same_day": true或false,
+  "reason": "一句话说明判定依据；不通过时写明缺哪一项或读到了什么"
+}`;
+}
+
+function aiJsonBool(value) {
+    if (value === true) return true;
+    if (value === false || value == null) return false;
+    if (typeof value === "string") return /^true$/i.test(value.trim());
+    return false;
+}
+
+function evaluateSuperviseScreenshotChecks(parsed) {
+    const hOrder = aiJsonBool(parsed?.header_order_visible_and_matches);
+    const hStudent = aiJsonBool(parsed?.header_student_visible_and_matches);
+    const msgOk = aiJsonBool(parsed?.last_message_text_ok);
+    const timeOk = aiJsonBool(parsed?.last_message_time_same_day);
+    const passed = hOrder && hStudent && msgOk && timeOk;
+    const aiReason = String(parsed?.reason || "").trim();
+    if (passed) {
+        return { passed, reason: aiReason || "四项核对均通过" };
+    }
+    const parts = [];
+    if (!hOrder) parts.push("顶部订单号与系统不一致或未清晰识别");
+    if (!hStudent) parts.push("顶部学员/客户名与系统不一致或未清晰识别");
+    if (!msgOk) parts.push("最后一条消息未同时满足「当天日期+监督项目+已完成」");
+    if (!timeOk) parts.push("最后一条消息发送时间无法确认为目标日当天");
+    const merged = [parts.join("；"), aiReason].filter(Boolean).join(" — ");
+    return { passed, reason: merged || "未通过" };
+}
+
+async function runSuperviseScreenshotAi(row, targetDate, projectForAi, imageDataUrl) {
+    if (!String(projectForAi || "").trim()) throw new Error("子项监督项目未知，无法校验截图");
+    const aiUserText = buildSuperviseChatScreenshotUserPrompt(row, targetDate, projectForAi);
+    const resp = await fetch("https://open.bigmodel.cn/api/paas/v4/chat/completions", {
+        method: "POST",
+        headers: {
+            "Content-Type": "application/json",
+            "Authorization": "Bearer bb956b2870b346a39c34b3344a61defb.IOTprsN1opphPYp8"
+        },
+        body: JSON.stringify({
+            model: "glm-4v-flash",
+            messages: [
+                { role: "system", content: SUPERVISE_SCREENSHOT_AI_SYSTEM },
+                {
+                    role: "user",
+                    content: [
+                        { type: "text", text: aiUserText },
+                        { type: "image_url", image_url: { url: imageDataUrl } }
+                    ]
+                }
+            ],
+            temperature: 0.1
+        })
+    });
+    const data = await resp.json();
+    if (data.error) throw new Error(typeof data.error === "string" ? data.error : JSON.stringify(data.error));
+    const raw = data?.choices?.[0]?.message?.content || "{}";
+    let parsed;
+    try {
+        parsed = extractJsonObjectFromAiContent(raw);
+    } catch (parseErr) {
+        throw new Error(`AI返回无法解析为JSON：${parseErr.message || parseErr}`);
+    }
+    return evaluateSuperviseScreenshotChecks(parsed);
+}
+
 async function submitDailySuperviseWithAI() {
     if (!currentCalendarTaskId) return;
     const input = document.getElementById("calendarSuperviseImage");
@@ -909,37 +1222,12 @@ async function submitDailySuperviseWithAI() {
         const imageDataUrl = await fileToDataUrl(file);
         const today = getLocalDateString();
         const targetDate = superviseIsStaff ? today : (selectedLogDate || today);
-        const aiPrompt = `请判断这张监督截图是否能证明用户在日期（${targetDate}）完成了监督任务。仅返回JSON对象：{"passed":true或false,"reason":"简短原因"}`;
-        const resp = await fetch("https://open.bigmodel.cn/api/paas/v4/chat/completions", {
-            method: "POST",
-            headers: {
-                "Content-Type": "application/json",
-                "Authorization": "Bearer bb956b2870b346a39c34b3344a61defb.IOTprsN1opphPYp8"
-            },
-            body: JSON.stringify({
-                model: "glm-4v-flash",
-                messages: [
-                    {
-                        role: "user",
-                        content: [
-                            { type: "text", text: aiPrompt },
-                            { type: "image_url", image_url: { url: imageDataUrl } }
-                        ]
-                    }
-                ],
-                temperature: 0.1
-            })
-        });
-        const data = await resp.json();
-        if (data.error) throw new Error(typeof data.error === "string" ? data.error : JSON.stringify(data.error));
-        const raw = data?.choices?.[0]?.message?.content || "{}";
-        const parsed = extractJsonObjectFromAiContent(raw);
-        const passed = parsed?.passed === true;
-        const reason = String(parsed?.reason || "").trim() || (passed ? "AI判定已完成" : "AI判定未完成");
-
-        const all = await getSuperviseOrders();
-        const row = all.find((item) => String(item.id) === currentCalendarTaskId);
+        const allForRow = await getSuperviseOrders();
+        const row = allForRow.find((item) => String(item.id) === currentCalendarTaskId);
         if (!row) throw new Error("任务不存在");
+        if (!String(row.orderno || "").trim()) throw new Error("本单缺少订单号，无法按规范校验截图");
+        if (!String(row.project || "").trim()) throw new Error("本单缺少监督项目，无法按规范校验截图");
+
         row.dailylogs = row.dailylogs && typeof row.dailylogs === "object" ? row.dailylogs : {};
         if (superviseIsStaff) {
             const startDate = parseDateOnlyToLocal(row.startdate || getDatePartFromDateTime(row.waketime));
@@ -948,23 +1236,78 @@ async function submitDailySuperviseWithAI() {
                 throw new Error(`该预约单从 ${row.startdate || getDatePartFromDateTime(row.waketime)} 开始监督，今天还不能提交`);
             }
         }
-        if (superviseIsStaff && row.dailylogs[targetDate] && row.dailylogs[targetDate].passed === true) {
-            throw new Error("今日已提交并通过，无需重复提交");
+
+        const slotLabels = getSuperviseScreenshotSlotProjects(row.project);
+        const slotCount = slotLabels.length;
+        const slotsWorking = normalizeSuperviseDaySlotsArray(row.dailylogs[targetDate], slotCount).map((s) =>
+            s ? { ...s } : null
+        );
+        const nextIdx = slotsWorking.findIndex((s) => !s || s.passed !== true);
+        if (superviseIsStaff && nextIdx < 0) {
+            throw new Error("当日已全部通过，无需重复提交");
         }
-        row.dailylogs[targetDate] = {
+        if (nextIdx < 0) {
+            throw new Error("当日已全部通过，无需重复提交");
+        }
+
+        const projectForAi = slotLabels[nextIdx];
+        const { passed, reason } = await runSuperviseScreenshotAi(row, targetDate, projectForAi, imageDataUrl);
+        const uid = String(currentSuperviseUser?.id || "");
+        const nowIso = new Date().toISOString();
+        slotsWorking[nextIdx] = {
             passed,
             reason,
-            submittedat: new Date().toISOString(),
-            by: currentSuperviseUser?.id || ""
+            submittedat: nowIso,
+            by: uid
+        };
+        const overallPassed = slotsWorking.every((s) => s && s.passed === true);
+        const summaryParts = slotLabels.map((label, i) => {
+            const s = slotsWorking[i];
+            if (!s) return `${label}：待传`;
+            return `${label}：${s.passed ? "✓" : "✗"} ${s.reason}`;
+        });
+        const storedSlots = slotsWorking.map((s, i) => {
+            if (!s) return null;
+            return {
+                passed: s.passed,
+                reason: s.reason,
+                slotLabel: slotLabels[i],
+                submittedat: s.submittedat,
+                by: s.by
+            };
+        });
+        row.dailylogs[targetDate] = {
+            slots: storedSlots,
+            passed: overallPassed,
+            reason: summaryParts.join("；"),
+            submittedat: nowIso,
+            by: uid
         };
         updateSuperviseTaskStatusByLogs(row);
-        const next = generateFixedSerial(all);
+        const next = generateFixedSerial(allForRow);
         await saveSuperviseOrders(next);
 
         if (result) {
-            result.textContent = passed
-                ? `AI判定：今日已完成（${reason}）`
-                : `AI判定：今日未完成（${reason}）`;
+            if (overallPassed) {
+                result.textContent = `AI判定：${targetDate} 已完成（${row.dailylogs[targetDate].reason}）`;
+            } else if (slotCount > 1) {
+                const tail = passed
+                    ? overallPassed
+                        ? ""
+                        : "请再选择截图并提交下一张（另一监督子项）。"
+                    : "可重新选择截图后再次提交当前项。";
+                result.textContent = `第 ${nextIdx + 1}/${slotCount} 张（${projectForAi}）：${passed ? "通过" : "未通过"} — ${reason}。${tail}`;
+            } else {
+                result.textContent = passed
+                    ? `AI判定：${targetDate} 已完成（${reason}）`
+                    : `AI判定：${targetDate} 未完成（${reason}）`;
+            }
+        }
+        if (input) input.value = "";
+        const preview = document.getElementById("calendarSupervisePreview");
+        if (preview) {
+            preview.style.display = "none";
+            preview.src = "";
         }
         renderSuperviseCalendar(currentCalendarTaskId, currentCalendarMonthCursor || new Date());
         loadSuperviseDashboard();
@@ -1055,7 +1398,7 @@ async function loadSuperviseDashboard() {
         const filtered = applySuperviseFilters(ordered, filters);
 
         renderSuperviseSummary(filtered);
-        renderSuperviseTable(filtered);
+        renderSuperviseOrders(filtered);
     } catch (error) {
         console.error("加载监督页面失败：", error);
         const tbody = document.getElementById("superviseTableBody");
@@ -1087,6 +1430,9 @@ window.addEventListener("DOMContentLoaded", () => {
             }
         });
     }
+    window.addEventListener("resize", () => {
+        loadSuperviseDashboard();
+    });
     getStaffList().then((staffList) => {
         const select = document.getElementById("svSupervisor");
         if (!select) return;
@@ -1147,3 +1493,58 @@ window.addEventListener("DOMContentLoaded", () => {
     updateAutoSupervisePrice();
     loadSuperviseDashboard();
 });
+
+// 显示进度详情模态框
+function showProgressModal(taskId) {
+    const task = superviseTasks.find(item => item.id === taskId);
+    if (!task) return;
+
+    const completedDays = getCompletedDays(task);
+    const requiredDays = task.duration === "一天" ? 1 :
+        task.duration === "两天" ? 2 :
+            task.duration === "三天" ? 3 :
+                task.duration === "四天" ? 4 :
+                    task.duration === "五天" ? 5 :
+                        task.duration === "六天" ? 6 :
+                            task.duration === "七天" ? 7 : 1;
+
+    const progressText = `${completedDays}/${requiredDays}天`;
+    const progressPercent = Math.round((completedDays / requiredDays) * 100);
+
+    let content = `
+        <div style="margin-bottom: 20px;">
+            <h4 style="margin: 0 0 12px 0;">${task.project || "项目"}</h4>
+            <p style="margin: 0 0 8px 0; color: #64748b;">订单号：${task.orderno || "-"}</p>
+            <p style="margin: 0 0 16px 0; color: #64748b;">学员：${task.studentname || "-"}</p>
+            
+            <div style="margin-bottom: 16px;">
+                <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
+                    <span style="font-size: 14px; font-weight: 500;">完成进度</span>
+                    <span style="font-size: 14px; color: #0e7490;">${progressText} (${progressPercent}%)</span>
+                </div>
+                <div style="width: 100%; height: 8px; background: #e2e8f0; border-radius: 4px; overflow: hidden;">
+                    <div style="width: ${progressPercent}%; height: 100%; background: linear-gradient(135deg, #0e7490 0%, #06b6d4 100%); border-radius: 4px;"></div>
+                </div>
+            </div>
+            
+            <div style="margin-bottom: 16px;">
+                <h5 style="margin: 0 0 8px 0; font-size: 14px; font-weight: 500;">详细记录</h5>
+                <div style="background: #f8fafc; padding: 12px; border-radius: 8px; font-size: 13px;">
+                    <div style="margin-bottom: 4px;"><strong>总时长：</strong>${task.duration || "-"}</div>
+                    <div style="margin-bottom: 4px;"><strong>已完成：</strong>${completedDays}天</div>
+                    <div style="margin-bottom: 4px;"><strong>剩余：</strong>${requiredDays - completedDays}天</div>
+                    <div style="margin-bottom: 4px;"><strong>状态：</strong>${task.status || "-"}</div>
+                    <div><strong>开始时间：</strong>${task.waketime || "-"}</div>
+                </div>
+            </div>
+        </div>
+    `;
+
+    document.getElementById("progressModalContent").innerHTML = content;
+    document.getElementById("progressModal").style.display = "flex";
+}
+
+// 关闭进度详情模态框
+function closeProgressModal() {
+    document.getElementById("progressModal").style.display = "none";
+}
