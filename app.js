@@ -1132,10 +1132,10 @@ async function submitSalaryMethod() {
 
 // 渲染余额明细
 async function renderBalanceDetail(container) {
-    const orders = await getOrders();
-    const myOrders = orders.filter(item => item.staffid === user.id && item.status === '已完成');
+    const allDetails = await getSalaryDetails();
+    const myDetails = allDetails.filter(item => item.staffid === user.id);
 
-    if (myOrders.length === 0) {
+    if (myDetails.length === 0) {
         container.innerHTML = `
             <div style="text-align: center; padding: 40px 20px; color: #94a3b8;">
                 <div style="margin-bottom: 16px;"><i data-lucide="wallet" style="width: 48px; height: 48px;"></i></div>
@@ -1147,7 +1147,7 @@ async function renderBalanceDetail(container) {
     }
 
     // 计算总余额
-    const totalBalance = myOrders.reduce((sum, order) => sum + (Number(order.amount) || Number(order.money) || 0), 0);
+    const totalBalance = myDetails.reduce((sum, item) => sum + Number(item.amount), 0);
 
     let html = `
         <div style="margin-bottom: 16px; padding: 16px; background: linear-gradient(135deg, #dcfce7 0%, #bbf7d0 100%); border-radius: 12px;">
@@ -1157,15 +1157,20 @@ async function renderBalanceDetail(container) {
         <div style="display: flex; flex-direction: column; gap: 8px;">
     `;
 
-    myOrders.slice().reverse().forEach(order => {
-        const amount = Number(order.amount) || Number(order.money) || 0;
+    myDetails.forEach(item => {
+        const amount = Number(item.amount);
+        const isPositive = amount >= 0;
+        const typeText = item.type || '其他';
+        const descText = item.description || '';
+        const timeText = item.createdat ? (typeof formatTime === 'function' ? formatTime(item.createdat) : item.createdat) : '';
+
         html += `
             <div style="padding: 12px; background: #f8fafc; border-radius: 8px; border: 1px solid rgba(148, 163, 184, 0.2); display: flex; justify-content: space-between; align-items: center;">
                 <div>
-                    <div style="font-weight: 500; color: #1e293b;">完成订单 - ${order.phone}</div>
-                    <div style="font-size: 12px; color: #94a3b8;">${typeof formatTime === 'function' ? formatTime(order.submittime) : order.submittime}</div>
+                    <div style="font-weight: 500; color: #1e293b;">${typeText}${descText ? ' - ' + descText : ''}</div>
+                    <div style="font-size: 12px; color: #94a3b8;">${timeText}</div>
                 </div>
-                <div style="font-weight: 600; color: #16a34a;">+${amount.toFixed(2)}</div>
+                <div style="font-weight: 600; color: ${isPositive ? '#16a34a' : '#dc2626'};">${isPositive ? '+' : ''}${amount.toFixed(2)}</div>
             </div>
         `;
     });
@@ -1178,9 +1183,24 @@ async function renderBalanceDetail(container) {
 // 渲染我的订单详情
 async function renderMyOrdersDetail(container) {
     const orders = await getOrders();
-    const myOrders = orders.filter(item => item.staffid === user.id);
+    const myWakeOrders = orders.filter(item => item.staffid === user.id);
 
-    if (myOrders.length === 0) {
+    let superviseOrders = [];
+    try {
+        const { data } = await supabaseClient.from("supervise_orders").select("*").eq("staffid", user.id);
+        if (data && Array.isArray(data)) {
+            superviseOrders = data;
+        }
+    } catch (e) {
+        console.error("读取监督订单失败：", e);
+    }
+
+    const allOrders = [
+        ...myWakeOrders.map(o => ({ ...o, orderType: 'wake' })),
+        ...superviseOrders.map(o => ({ ...o, orderType: 'supervise' }))
+    ].sort((a, b) => new Date(b.submittime || b.createdat) - new Date(a.submittime || a.createdat));
+
+    if (allOrders.length === 0) {
         container.innerHTML = `
             <div style="text-align: center; padding: 40px 20px; color: #94a3b8;">
                 <div style="margin-bottom: 16px;"><i data-lucide="file-text" style="width: 48px; height: 48px;"></i></div>
@@ -1192,16 +1212,43 @@ async function renderMyOrdersDetail(container) {
     }
 
     let html = '<div style="display: flex; flex-direction: column; gap: 12px;">';
-    myOrders.forEach(order => {
+    allOrders.forEach(order => {
+        const isWake = order.orderType === 'wake';
+        const phone = isWake ? order.phone : (order.studentname || order.phone || '-');
+        const statusClass = order.status === '已完成' ? '#dcfce7' : order.status === '待接单' ? '#fef3c7' : '#dbeafe';
+        const statusColor = order.status === '已完成' ? '#166534' : order.status === '待接单' ? '#92400e' : '#1e40af';
+        const time = isWake
+            ? (typeof formatWakeTimeForDisplay === 'function' ? formatWakeTimeForDisplay(order.waketime) : order.waketime)
+            : (order.waketime || order.duration || '-');
+        const submitTime = order.submittime || order.createdat;
+        const submitTimeText = typeof formatTime === 'function' ? formatTime(submitTime) : submitTime;
+
+        // 处理监督订单的note，避免显示完整JSON
+        let noteText = order.note || '';
+        if (!isWake && noteText) {
+            // 尝试解析JSON，如果是JSON则只显示部分信息
+            try {
+                const parsed = JSON.parse(noteText);
+                if (parsed.orderno) {
+                    noteText = `订单号：${parsed.orderno}`;
+                } else {
+                    noteText = noteText.substring(0, 50) + (noteText.length > 50 ? '...' : '');
+                }
+            } catch (e) {
+                // 如果不是JSON，只显示前50个字符
+                noteText = noteText.substring(0, 50) + (noteText.length > 50 ? '...' : '');
+            }
+        }
+
         html += `
             <div style="padding: 12px; background: #f8fafc; border-radius: 8px; border: 1px solid rgba(148, 163, 184, 0.2);">
                 <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
-                    <span style="font-weight: 600; color: #1e293b;">${order.phone}</span>
-                    <span style="font-size: 12px; padding: 4px 8px; border-radius: 4px; background: ${order.status === '已完成' ? '#dcfce7' : order.status === '待接单' ? '#fef3c7' : '#dbeafe'}; color: ${order.status === '已完成' ? '#166534' : order.status === '待接单' ? '#92400e' : '#1e40af'};">${order.status}</span>
+                    <span style="font-weight: 600; color: #1e293b;">${isWake ? '叫醒' : '监督'}订单 - ${phone}</span>
+                    <span style="font-size: 12px; padding: 4px 8px; border-radius: 4px; background: ${statusClass}; color: ${statusColor};">${order.status}</span>
                 </div>
-                <div style="font-size: 13px; color: #64748b;"><i data-lucide="alarm-clock" style="width: 14px; height: 14px; margin-right: 4px;"></i>${typeof formatWakeTimeForDisplay === 'function' ? formatWakeTimeForDisplay(order.waketime) : order.waketime}</div>
-                <div style="font-size: 12px; color: #94a3b8; margin-top: 4px;"><i data-lucide="calendar-days" style="width: 13px; height: 13px; margin-right: 4px;"></i>${typeof formatTime === 'function' ? formatTime(order.submittime) : order.submittime}</div>
-                ${order.note ? `<div style="font-size: 12px; color: #94a3b8; margin-top: 4px;"><i data-lucide="file-text" style="width: 13px; height: 13px; margin-right: 4px;"></i>${order.note}</div>` : ''}
+                <div style="font-size: 13px; color: #64748b;"><i data-lucide="alarm-clock" style="width: 14px; height: 14px; margin-right: 4px;"></i>${time}</div>
+                <div style="font-size: 12px; color: #94a3b8; margin-top: 4px;"><i data-lucide="calendar-days" style="width: 13px; height: 13px; margin-right: 4px;"></i>${submitTimeText}</div>
+                ${noteText ? `<div style="font-size: 12px; color: #94a3b8; margin-top: 4px;"><i data-lucide="file-text" style="width: 13px; height: 13px; margin-right: 4px;"></i>${noteText}</div>` : ''}
             </div>
         `;
     });
