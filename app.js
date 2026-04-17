@@ -877,7 +877,7 @@ async function saveSalaryMethod() {
 // ==================== 小组件详情功能 ====================
 
 // 显示小组件详情
-function showWidgetDetail(widgetType) {
+async function showWidgetDetail(widgetType) {
     const modal = document.getElementById('widgetDetailModal');
     const title = document.getElementById('widgetDetailTitle');
     const content = document.getElementById('widgetDetailContent');
@@ -889,15 +889,15 @@ function showWidgetDetail(widgetType) {
     switch (widgetType) {
         case 'todayOrders':
             title.textContent = '今日接单详情';
-            renderTodayOrdersDetail(content);
+            await renderTodayOrdersDetail(content);
             break;
         case 'balance':
             title.textContent = '余额明细';
-            renderBalanceDetail(content);
+            await renderBalanceDetail(content);
             break;
         case 'myOrders':
             title.textContent = '我的订单';
-            renderMyOrdersDetail(content);
+            await renderMyOrdersDetail(content);
             break;
     }
 }
@@ -1131,11 +1131,11 @@ async function submitSalaryMethod() {
 }
 
 // 渲染余额明细
-function renderBalanceDetail(container) {
-    const salaryList = JSON.parse(localStorage.getItem("salaryList") || "[]");
-    const userSalary = salaryList.find(s => s.staffId === user.id);
+async function renderBalanceDetail(container) {
+    const orders = await getOrders();
+    const myOrders = orders.filter(item => item.staffid === user.id && item.status === '已完成');
 
-    if (!userSalary || !userSalary.records || userSalary.records.length === 0) {
+    if (myOrders.length === 0) {
         container.innerHTML = `
             <div style="text-align: center; padding: 40px 20px; color: #94a3b8;">
                 <div style="margin-bottom: 16px;"><i data-lucide="wallet" style="width: 48px; height: 48px;"></i></div>
@@ -1146,22 +1146,26 @@ function renderBalanceDetail(container) {
         return;
     }
 
+    // 计算总余额
+    const totalBalance = myOrders.reduce((sum, order) => sum + (Number(order.amount) || Number(order.money) || 0), 0);
+
     let html = `
         <div style="margin-bottom: 16px; padding: 16px; background: linear-gradient(135deg, #dcfce7 0%, #bbf7d0 100%); border-radius: 12px;">
             <div style="font-size: 13px; color: #166534; margin-bottom: 4px;">当前余额</div>
-            <div style="font-size: 28px; font-weight: 700; color: #166534;">${userSalary.balance.toFixed(2)} 元</div>
+            <div style="font-size: 28px; font-weight: 700; color: #166534;">${totalBalance.toFixed(2)} 元</div>
         </div>
         <div style="display: flex; flex-direction: column; gap: 8px;">
     `;
 
-    userSalary.records.slice().reverse().forEach(record => {
+    myOrders.slice().reverse().forEach(order => {
+        const amount = Number(order.amount) || Number(order.money) || 0;
         html += `
             <div style="padding: 12px; background: #f8fafc; border-radius: 8px; border: 1px solid rgba(148, 163, 184, 0.2); display: flex; justify-content: space-between; align-items: center;">
                 <div>
-                    <div style="font-weight: 500; color: #1e293b;">${record.type}</div>
-                    <div style="font-size: 12px; color: #94a3b8;">${record.date}</div>
+                    <div style="font-weight: 500; color: #1e293b;">完成订单 - ${order.phone}</div>
+                    <div style="font-size: 12px; color: #94a3b8;">${typeof formatTime === 'function' ? formatTime(order.submittime) : order.submittime}</div>
                 </div>
-                <div style="font-weight: 600; color: ${record.amount >= 0 ? '#16a34a' : '#dc2626'};">${record.amount >= 0 ? '+' : ''}${record.amount.toFixed(2)}</div>
+                <div style="font-weight: 600; color: #16a34a;">+${amount.toFixed(2)}</div>
             </div>
         `;
     });
@@ -1196,7 +1200,7 @@ async function renderMyOrdersDetail(container) {
                     <span style="font-size: 12px; padding: 4px 8px; border-radius: 4px; background: ${order.status === '已完成' ? '#dcfce7' : order.status === '待接单' ? '#fef3c7' : '#dbeafe'}; color: ${order.status === '已完成' ? '#166534' : order.status === '待接单' ? '#92400e' : '#1e40af'};">${order.status}</span>
                 </div>
                 <div style="font-size: 13px; color: #64748b;"><i data-lucide="alarm-clock" style="width: 14px; height: 14px; margin-right: 4px;"></i>${typeof formatWakeTimeForDisplay === 'function' ? formatWakeTimeForDisplay(order.waketime) : order.waketime}</div>
-                <div style="font-size: 12px; color: #94a3b8; margin-top: 4px;"><i data-lucide="calendar-days" style="width: 13px; height: 13px; margin-right: 4px;"></i>${order.submittime}</div>
+                <div style="font-size: 12px; color: #94a3b8; margin-top: 4px;"><i data-lucide="calendar-days" style="width: 13px; height: 13px; margin-right: 4px;"></i>${typeof formatTime === 'function' ? formatTime(order.submittime) : order.submittime}</div>
                 ${order.note ? `<div style="font-size: 12px; color: #94a3b8; margin-top: 4px;"><i data-lucide="file-text" style="width: 13px; height: 13px; margin-right: 4px;"></i>${order.note}</div>` : ''}
             </div>
         `;
