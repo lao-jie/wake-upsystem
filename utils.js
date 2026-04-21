@@ -1,12 +1,18 @@
-// 格式化时间（使用中国时区 UTC+8）
+// 格式化时间为北京时间（Asia/Shanghai）。勿在解析后再手动 +8h：与 timeZone 叠加会重复偏移。
 function formatTime(timeStr) {
-    const d = new Date(timeStr);
-    // 手动调整为 UTC+8
-    const chinaTime = new Date(d.getTime() + 8 * 60 * 60 * 1000);
-    return chinaTime.toLocaleString("zh-CN", {
-        year: "numeric", month: "2-digit", day: "2-digit",
-        hour: "2-digit", minute: "2-digit", second: "2-digit",
-        timeZone: "Asia/Shanghai"
+    if (timeStr == null || timeStr === "") return "-";
+    const raw = String(timeStr).trim();
+    const d = new Date(raw);
+    if (Number.isNaN(d.getTime())) return raw || "-";
+    return d.toLocaleString("zh-CN", {
+        timeZone: "Asia/Shanghai",
+        year: "numeric",
+        month: "2-digit",
+        day: "2-digit",
+        hour: "2-digit",
+        minute: "2-digit",
+        second: "2-digit",
+        hour12: false
     });
 }
 

@@ -59,9 +59,6 @@
     </div>
 
     <div class="main-content">
-        <div class="supervise-headbar">
-            <h2>淘宝项目监督</h2>
-        </div>
         <div class="user-info">当前用户：<span id="superviseUserName">-</span></div>
 
         <div class="supervise-toolbar">
@@ -77,31 +74,6 @@
             <button type="button" class="ghost" onclick="clearSuperviseSearch()">清空</button>
         </div>
 
-        <div class="admin-form" id="superviseSummarySection">
-            <div class="supervise-summary-grid">
-                <div class="supervise-summary-card">
-                    <div class="supervise-summary-label">订单总数</div>
-                    <div class="supervise-summary-value" id="superviseTotalCount">0</div>
-                </div>
-                <div class="supervise-summary-card">
-                    <div class="supervise-summary-label">今日订单</div>
-                    <div class="supervise-summary-value" id="superviseTodayCount">0</div>
-                </div>
-                <div class="supervise-summary-card">
-                    <div class="supervise-summary-label">进行中</div>
-                    <div class="supervise-summary-value" id="superviseProcessingCount">0</div>
-                </div>
-                <div class="supervise-summary-card">
-                    <div class="supervise-summary-label">待接单</div>
-                    <div class="supervise-summary-value" id="supervisePendingCount">0</div>
-                </div>
-                <div class="supervise-summary-card">
-                    <div class="supervise-summary-label">已完成</div>
-                    <div class="supervise-summary-value" id="superviseDoneCount">0</div>
-                </div>
-            </div>
-        </div>
-
         <div class="admin-form supervise-task-form" id="superviseTaskFormSection">
             <input type="datetime-local" id="svTaskTime">
             <input type="text" id="svOrderNo" placeholder="订单号">
@@ -112,11 +84,11 @@
                 <option value="监督早睡早起">监督早睡早起</option>
             </select>
             <select id="svDuration">
-                <option value="一天">一天</option>
-                <option value="七天">七天</option>
-                <option value="半个月">半个月</option>
-                <option value="一个月">一个月</option>
-                <option value="其他时间">其他时间</option>
+                <option value="1次">1次</option>
+                <option value="7次">7次</option>
+                <option value="15次">15次</option>
+                <option value="30次">30次</option>
+                <option value="其他时间">其他次数</option>
             </select>
             <input type="text" id="svStudentName" placeholder="学员名字">
             <input type="number" id="svPrice" placeholder="结算价格" step="0.01" min="0">
@@ -129,7 +101,7 @@
         <div class="admin-form" id="superviseBatchSection" style="flex-direction: column;">
             <h3 class="batch-upload-title">批量添加监督任务</h3>
             <textarea id="superviseBatchText"
-                placeholder="粘贴监督任务文本（示例：&#10;TB20260414001&#10;监督早睡&#10;张三&#10;7天&#10;首单测试&#10;&#10;或单行：TB20260414002 监督早起 李四 3天 复训）"></textarea>
+                placeholder="粘贴监督任务文本（示例：&#10;TB20260414001&#10;监督早睡&#10;张三&#10;7次&#10;首单测试&#10;&#10;或单行：TB20260414002 监督早起 李四 3次 复训）"></textarea>
             <div style="display: flex; flex-wrap: wrap; gap: 12px;">
                 <button type="button" onclick="parseSuperviseBatchOrders()">识别任务</button>
                 <button type="button" id="superviseUploadBtn" disabled onclick="uploadSuperviseOrders()">批量上传</button>
@@ -156,7 +128,7 @@
                         <th>选择</th>
                         <th>订单号</th>
                         <th>项目</th>
-                        <th>时长</th>
+                        <th>次数</th>
                         <th>学员名字</th>
                         <th>结算价格</th>
                         <th>监督员</th>
@@ -175,69 +147,119 @@
     </div>
 
     <div class="modal-overlay" id="superviseCalendarModal">
-        <div class="modal-box" style="max-width: 900px;">
-            <div style="display:flex; align-items:center; justify-content:space-between; gap:8px; margin-bottom:8px;">
-                <h3 id="superviseCalendarTitle" style="margin:0; display:none;">监督日志</h3>
-            </div>
-            <div
-                style="display:flex; align-items:center; justify-content:space-between; gap:10px; flex-wrap:wrap; margin-bottom:10px;">
-                <div id="superviseCalendarMonthLabel" style="margin:0; color:#334155; font-weight:600;"></div>
-                <div class="sv-cal-nav">
-                    <button type="button" class="sv-cal-nav-btn" onclick="changeSuperviseCalendarMonth(-1)">上月</button>
-                    <button type="button" class="sv-cal-nav-btn" onclick="changeSuperviseCalendarMonth(1)">下月</button>
+        <div class="modal-box sv-cal-modal-box">
+            <div class="sv-cal-modal-scroll">
+            <div class="sv-cal-panel">
+                <div class="sv-cal-month-row">
+                    <div id="superviseCalendarMonthLabel" class="sv-cal-month-label"></div>
+                    <div class="sv-cal-month-right">
+                        <div class="sv-cal-nav">
+                            <button type="button" class="sv-cal-nav-btn" onclick="changeSuperviseCalendarMonth(-1)">上月</button>
+                            <button type="button" class="sv-cal-nav-btn" onclick="changeSuperviseCalendarMonth(1)">下月</button>
+                        </div>
+                        <button type="button" class="sv-cal-close-icon" title="关闭" aria-label="关闭"
+                            onclick="closeSuperviseCalendarModal()">×</button>
+                    </div>
                 </div>
-            </div>
-            <div id="superviseCalendarLegend"
-                style="display:flex; gap:14px; flex-wrap:wrap; font-size:12px; color:#64748b; margin-bottom:10px;">
-                <span>✅ 已完成</span>
-                <span>🔸 仅通过部分（如早睡早起只传了 1 张）</span>
-                <span>❌ 未完成</span>
-                <span>⭕ 待提交</span>
-                <span>📍 今天</span>
+                <div id="superviseCalendarLegend" class="sv-cal-legend">
+                    <span class="sv-cal-legend__item">✅ 已完成</span>
+                    <span class="sv-cal-legend__item" title="仅通过部分（如早睡早起只传了 1 张）">🔸 部分</span>
+                    <span class="sv-cal-legend__item">❌ 未完成</span>
+                    <span class="sv-cal-legend__item">⭕ 待传</span>
+                    <span class="sv-cal-legend__item">📍 今天</span>
+                </div>
             </div>
             <div class="sv-log-layout">
-                <div>
+                <div class="sv-cal-calendar-wrap">
                     <div id="superviseCalendarGrid"></div>
                 </div>
-                <div class="sv-log-uploader">
-                    <h4 style="margin:0 0 8px; color:#334155;">提交监督截图</h4>
-                    <div id="svSelectedDateHint" style="font-size:12px; color:#64748b; margin-bottom:8px;">
-                        当前日期（仅当天可提交）：--</div>
+                <div class="sv-log-uploader sv-submit-card">
+                    <h4 class="sv-submit-card__title">提交监督截图</h4>
+                    <div id="svDailyRequirementHint" class="sv-submit-card__hint">
+                        当前日期需提交：--
+                    </div>
+                    <div id="svComboCountHint" class="sv-submit-card__hint" style="display:none;">
+                        当前次数：早睡 --/--，早起 --/--
+                    </div>
                     <input type="file" id="calendarSuperviseImage" accept="image/*">
-                    <p id="svScreenshotSpecHint"
-                        style="font-size:12px; color:#64748b; margin:8px 0 0; line-height:1.55;">规范说明将随本单监督项目自动切换。</p>
+                    <details class="sv-spec-details" id="svScreenshotSpecDetails">
+                        <summary class="sv-spec-summary">截图规范说明</summary>
+                        <p id="svScreenshotSpecHint"
+                            style="font-size:12px; color:#64748b; margin:8px 0 0; line-height:1.55;">规范说明将随本单监督项目自动切换。</p>
+                    </details>
                     <img id="calendarSupervisePreview" alt="截图预览"
+                        class="sv-cal-preview-img"
                         style="display:none; width:100%; max-height:220px; object-fit:contain; border-radius:8px; border:1px solid rgba(148,163,184,0.35); margin-top:8px;">
-                    <div id="calendarSuperviseAiResult" style="font-size:13px; color:#64748b; margin-top:8px;">上传截图后，点击
+                    <div id="calendarSuperviseAiResult" class="sv-submit-card__status">上传截图后，点击
                         AI 识别并提交</div>
-                    <div class="modal-footer" style="justify-content:flex-start; margin-top:10px;">
+                    <div id="calendarSuperviseAiActionsSingle" class="modal-footer"
+                        style="justify-content:flex-start; margin-top:10px;">
                         <button type="button" class="success" onclick="submitDailySuperviseWithAI()">AI识别并提交</button>
+                    </div>
+                    <div id="calendarSuperviseAiActionsSleepWake" class="modal-footer"
+                        style="display:none; justify-content:flex-start; flex-wrap:wrap; gap:8px; margin-top:10px;">
+                        <button type="button" class="sv-cal-ai-btn" id="calendarSuperviseAiBtnSleep"
+                            onclick="submitDailySuperviseWithAI('监督早睡')">识别早睡</button>
+                        <button type="button" class="sv-cal-ai-btn" id="calendarSuperviseAiBtnWake"
+                            onclick="submitDailySuperviseWithAI('监督早起')">识别早起</button>
                     </div>
                     <div class="modal-footer" id="superviseManualActions"
                         style="display:none; justify-content:flex-start; margin-top:8px;">
                         <button type="button" class="success" onclick="markSuperviseDailyByAdmin(true)">完成</button>
                         <button type="button" class="danger" onclick="markSuperviseDailyByAdmin(false)">未完成</button>
+                        <button type="button" class="success" onclick="markSuperviseSlotByAdmin('sleep')">完成监督早睡</button>
+                        <button type="button" class="success" onclick="markSuperviseSlotByAdmin('wake')">完成监督早起</button>
+                    </div>
+                    <div class="modal-footer" id="superviseLeaveActions"
+                        style="display:none; justify-content:flex-start; margin-top:8px;">
+                        <button type="button" class="sv-cal-leave-btn" id="superviseLeaveBtnSleep"
+                            onclick="markSuperviseLeaveForDate('sleep')">申请请假早睡</button>
+                        <button type="button" class="sv-cal-leave-btn" id="superviseLeaveBtnWake"
+                            onclick="markSuperviseLeaveForDate('wake')">申请请假早起</button>
                     </div>
                 </div>
             </div>
-            <div class="modal-footer">
+            </div>
+            <div class="modal-footer sv-cal-modal-footer">
                 <button type="button" class="success" id="superviseTaskFinishAction" style="display:none;"
                     onclick="finishSuperviseTask(currentCalendarTaskId)">整单完成</button>
-                <button type="button" class="ghost" onclick="closeSuperviseCalendarModal()">关闭</button>
             </div>
         </div>
     </div>
 
     <div class="modal-overlay" id="customDurationModal">
         <div class="modal-box" style="max-width: 420px;">
-            <h3>输入监督时长</h3>
+            <h3>输入监督次数</h3>
             <div class="modal-form-item">
-                <label for="customDurationDays">监督时长（单位：天）</label>
-                <input type="number" id="customDurationDays" min="1" step="1" placeholder="请输入天数，例如 5">
+                <label for="customDurationDays">监督次数（单位：次）</label>
+                <input type="number" id="customDurationDays" min="1" step="1" placeholder="请输入次数，例如 5">
             </div>
             <div class="modal-footer">
                 <button type="button" class="ghost" onclick="closeCustomDurationModal()">取消</button>
                 <button type="button" class="success" onclick="confirmCustomDuration()">确定</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="modal-overlay" id="takeSuperviseModal">
+        <div class="modal-box" style="max-width: 420px;">
+            <h3>接单设置</h3>
+            <div class="modal-form-item">
+                <label for="takeSuperviseStartDate">开始监督日期</label>
+                <input type="date" id="takeSuperviseStartDate">
+            </div>
+            <div class="modal-form-item" id="takeSuperviseStartModeWrap">
+                <label for="takeSuperviseStartMode">当天监督模式（仅首日）</label>
+                <select id="takeSuperviseStartMode">
+                    <option value="监督早睡早起">监督早睡早起</option>
+                    <option value="仅监督早睡">仅监督早睡</option>
+                    <option value="仅监督早起">仅监督早起</option>
+                </select>
+                <div style="margin-top:6px;font-size:12px;color:#64748b;">后续日期默认按「监督早睡早起」执行，可在日志中请假早睡/请假早起。</div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="ghost" onclick="closeTakeSuperviseModal()">取消</button>
+                <button type="button" class="success" onclick="confirmTakeSuperviseTask()">确认接单</button>
             </div>
         </div>
     </div>

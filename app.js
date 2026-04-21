@@ -75,6 +75,8 @@ function initUser() {
 
 let currentPage = "home";
 let lastNoticePopupSignature = "";
+const HOME_PENDING_STORAGE_KEY = "homePendingOrders";
+const SUPERVISE_META_PREFIX = "[SVMETA]";
 
 const { user, allUsers } = initUser();
 const isAdmin = user.role === "admin";
@@ -169,6 +171,9 @@ function logout() {
 }
 
 function showPage(page) {
+    if (!document.getElementById(`page_${page}`)) {
+        page = "home";
+    }
     currentPage = page;
     // 切换页面时自动收起下拉，避免遮挡底部导航点击
     closeSubMenu();
@@ -208,6 +213,8 @@ function showPage(page) {
         }
     } else if (page === "home") {
         document.getElementById("nav-home").classList.add("active");
+        loadHomeOrderSummary();
+        loadHomePendingPanel();
     } else if (page === "wake") {
         document.getElementById("nav-taobao").classList.add("active");
         document.getElementById("sub-wake").classList.add("active");
@@ -226,6 +233,549 @@ function showPage(page) {
         // 刷新公告预览
         loadNoticeSettingsPreview();
     }
+}
+
+function getDatePartFromDateTime(value) {
+    const s = String(value || "").trim();
+    const m = s.match(/^(\d{4}-\d{2}-\d{2})/);
+    return m ? m[1] : "";
+}
+
+function getSuperviseEffectiveStatusForHome(row) {
+    const raw = String(row?.status || "").trim();
+    if (raw === "已完成") return "已完成";
+    const hasOwner = String(row?.staffid || "").trim() || String(row?.supervisor || row?.staffname || "").trim();
+    return hasOwner ? "进行中" : "待接单";
+}
+
+function getSuperviseTodayKeyForHome(row) {
+    const fromStartDate = String(row?.startdate || "").trim();
+    if (/^\d{4}-\d{2}-\d{2}$/.test(fromStartDate)) return fromStartDate;
+    const fromWakeTime = getDatePartFromDateTime(row?.waketime);
+    if (fromWakeTime) return fromWakeTime;
+    const fromSubmit = getDatePartFromDateTime(row?.submittime);
+    return fromSubmit;
+}
+
+async function getSuperviseOrdersForHomeSummary() {
+    try {
+        const { data, error } = await supabaseClient
+            .from("supervise_orders")
+            .select("*");
+        if (!error && Array.isArray(data)) return data.map(parseSuperviseOrderMeta);
+    } catch (e) {
+        console.error("首页读取监督订单失败：", e);
+    }
+    const localOrders = JSON.parse(localStorage.getItem("superviseOrders") || "[]");
+    return Array.isArray(localOrders) ? localOrders.map(parseSuperviseOrderMeta) : [];
+}
+
+async function loadHomeOrderSummary() {
+    const section = document.getElementById("homeSummarySection");
+    if (section) {
+        section.style.display = isAdmin ? "block" : "none";
+    }
+    if (!isAdmin) return;
+
+    const setText = (id, value) => {
+        const el = document.getElementById(id);
+        if (el) el.textContent = String(value);
+    };
+
+    try {
+        const [wakeOrders, superviseOrders] = await Promise.all([
+            getOrders(),
+            getSuperviseOrdersForHomeSummary()
+        ]);
+
+        const now = new Date();
+        const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+        const todayEnd = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
+        const todayKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+
+        let pending = 0;
+        let processing = 0;
+        let done = 0;
+        let today = 0;
+
+        (wakeOrders || []).forEach((item) => {
+            const st = String(item?.status || "").trim();
+            if (st === "待接单") pending += 1;
+            else if (st === "进行中") processing += 1;
+            else if (st === "已完成") done += 1;
+
+            const submitDate = new Date(item?.submittime || "");
+            if (submitDate >= todayStart && submitDate < todayEnd) {
+                today += 1;
+            }
+        });
+
+        (superviseOrders || []).forEach((item) => {
+            const st = getSuperviseEffectiveStatusForHome(item);
+            if (st === "待接单") pending += 1;
+            else if (st === "进行中") processing += 1;
+            else if (st === "已完成") done += 1;
+
+            if (getSuperviseTodayKeyForHome(item) === todayKey) {
+                today += 1;
+            }
+        });
+
+        const total = (wakeOrders || []).length + (superviseOrders || []).length;
+        setText("homeTotalCount", total);
+        setText("homeTodayCount", today);
+        setText("homeProcessingCount", processing);
+        setText("homePendingCount", pending);
+        setText("homeDoneCount", done);
+    } catch (error) {
+        console.error("加载首页订单统计失败：", error);
+        setText("homeTotalCount", 0);
+        setText("homeTodayCount", 0);
+        setText("homeProcessingCount", 0);
+        setText("homePendingCount", 0);
+        setText("homeDoneCount", 0);
+    }
+}
+
+function readHomePendingItems() {
+    try {
+        const arr = JSON.parse(localStorage.getItem(HOME_PENDING_STORAGE_KEY) || "[]");
+        return Array.isArray(arr) ? arr : [];
+    } catch (_) {
+        return [];
+    }
+}
+
+function saveHomePendingItems(items) {
+    localStorage.setItem(HOME_PENDING_STORAGE_KEY, JSON.stringify(items || []));
+}
+
+function getPendingStatusText(done) {
+    return done ? "已处理" : "待处理";
+}
+
+function getPendingStatusColors(done) {
+    return done
+        ? { bg: "#dcfce7", color: "#166534" }
+        : { bg: "#fef3c7", color: "#92400e" };
+}
+
+function getPendingActionText(item) {
+    if (item?.decision === "approved") return "已同意";
+    if (item?.decision === "rejected") return "已驳回";
+    return getPendingStatusText(item?.done === true);
+}
+
+function loadHomePendingPanel() {
+    const section = document.getElementById("homePendingSection");
+    const listEl = document.getElementById("homePendingList");
+    const statsEl = document.getElementById("homePendingStats");
+    if (!section || !listEl || !statsEl) return;
+
+    section.style.display = isAdmin ? "flex" : "none";
+    if (!isAdmin) return;
+
+    const items = readHomePendingItems().sort((a, b) => {
+        const ta = new Date(a.createdAt || 0).getTime() || 0;
+        const tb = new Date(b.createdAt || 0).getTime() || 0;
+        return tb - ta;
+    });
+    const pendingCount = items.filter((x) => x.done !== true).length;
+    statsEl.textContent = `待处理 ${pendingCount} 条 ｜ 全部 ${items.length} 条`;
+
+    if (items.length === 0) {
+        listEl.innerHTML = `<div style="font-size:13px;color:#94a3b8;">暂无待处理事项，可先录入员工反馈（例如请假申请）。</div>`;
+        return;
+    }
+
+    let html = "";
+    items.forEach((item) => {
+        const done = item.done === true;
+        const st = getPendingStatusColors(done);
+        const timeText = typeof formatTime === "function"
+            ? formatTime(item.createdAt || "")
+            : String(item.createdAt || "-");
+        const safeRef = String(item.orderRef || "-");
+        const safeSource = String(item.source || "-");
+        const safeType = String(item.type || "其他反馈");
+        const safeDesc = String(item.desc || "-");
+        const isLeaveRequest = String(item?.kind || "") === "supervise_leave";
+        const pendingApproveActions = isLeaveRequest && !done
+            ? `
+                    <button type="button" class="success" onclick="approveHomePendingItem('${item.id}')">同意</button>
+                    <button type="button" class="warning" onclick="rejectHomePendingItem('${item.id}')">驳回</button>
+              `
+            : `
+                    <button type="button" class="${done ? "ghost" : "success"}" onclick="toggleHomePendingDone('${item.id}')">${done ? "改回待处理" : "标记已处理"}</button>
+              `;
+        html += `
+            <div style="padding:14px;border:1px solid rgba(148,163,184,.25);border-radius:10px;margin-bottom:10px;background:#f8fafc;">
+                <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:8px;">
+                    <div style="font-size:15px;font-weight:600;color:#334155;line-height:1.4;">${safeType}</div>
+                    <span style="font-size:13px;padding:3px 10px;border-radius:999px;background:${st.bg};color:${st.color};">${getPendingActionText(item)}</span>
+                </div>
+                <div style="font-size:15px;color:#1e293b;margin-bottom:6px;line-height:1.45;">${safeDesc}</div>
+                <div style="font-size:13px;color:#64748b;line-height:1.45;">关联：${safeRef} ｜ 反馈：${safeSource} ｜ 提交：${timeText}</div>
+                <div style="display:flex;justify-content:flex-end;gap:8px;flex-wrap:wrap;margin-top:8px;">
+                    ${pendingApproveActions}
+                    <button type="button" class="danger" onclick="removeHomePendingItem('${item.id}')">删除</button>
+                </div>
+            </div>
+        `;
+    });
+    listEl.innerHTML = html;
+}
+
+function addHomePendingItem() {
+    if (!isAdmin) return;
+    const typeEl = document.getElementById("pendingTypeInput");
+    const refEl = document.getElementById("pendingOrderRefInput");
+    const sourceEl = document.getElementById("pendingSourceInput");
+    const descEl = document.getElementById("pendingDescInput");
+    const type = String(typeEl?.value || "其他反馈").trim();
+    const orderRef = String(refEl?.value || "").trim();
+    const source = String(sourceEl?.value || "").trim();
+    const desc = String(descEl?.value || "").trim();
+    if (!desc) {
+        showToast("请填写待处理说明", "warning");
+        return;
+    }
+    const items = readHomePendingItems();
+    items.push({
+        id: `${Date.now()}-${Math.floor(Math.random() * 1000000)}`,
+        type,
+        orderRef,
+        source,
+        desc,
+        done: false,
+        createdAt: new Date().toISOString()
+    });
+    saveHomePendingItems(items);
+    if (refEl) refEl.value = "";
+    if (sourceEl) sourceEl.value = "";
+    if (descEl) descEl.value = "";
+    loadHomePendingPanel();
+    showToast("已加入待处理列表", "success");
+}
+
+function toggleHomePendingDone(id) {
+    if (!isAdmin) return;
+    const items = readHomePendingItems();
+    const row = items.find((x) => String(x.id) === String(id));
+    if (!row) return;
+    row.done = row.done !== true;
+    saveHomePendingItems(items);
+    loadHomePendingPanel();
+}
+
+function removeHomePendingItem(id) {
+    if (!isAdmin) return;
+    const items = readHomePendingItems();
+    const next = items.filter((x) => String(x.id) !== String(id));
+    saveHomePendingItems(next);
+    loadHomePendingPanel();
+}
+
+function parseSuperviseOrderMeta(row) {
+    const rawNote = String(row?.note || "");
+    const markerIndex = rawNote.indexOf(SUPERVISE_META_PREFIX);
+    const cleanNote = markerIndex >= 0 ? rawNote.slice(0, markerIndex).trim() : rawNote.trim();
+    let meta = {};
+    if (markerIndex >= 0) {
+        const metaText = rawNote.slice(markerIndex + SUPERVISE_META_PREFIX.length).trim();
+        try {
+            meta = JSON.parse(metaText || "{}");
+        } catch (_) {
+            meta = {};
+        }
+    }
+    return {
+        ...row,
+        note: cleanNote || "-",
+        orderno: meta.orderno || row?.orderno || "",
+        project: meta.project || row?.project || "",
+        duration: meta.duration || row?.duration || "",
+        studentname: meta.studentname || row?.studentname || "",
+        price: Number(meta.price || row.amount || 0),
+        supervisor: meta.supervisor || row.supervisor || "",
+        endtime: meta.endtime || "",
+        startdate: meta.startdate || "",
+        dailylogs: meta.dailylogs && typeof meta.dailylogs === "object" ? meta.dailylogs : {}
+    };
+}
+
+function buildSuperviseOrderNote(row) {
+    const textNote = String(row.note || "").replace(`${SUPERVISE_META_PREFIX}`, "");
+    const meta = {
+        orderno: row.orderno || "",
+        project: row.project || "",
+        duration: row.duration || "",
+        studentname: row.studentname || "",
+        price: Number(row.price || row.amount || 0),
+        supervisor: row.supervisor || "",
+        endtime: row.endtime || "",
+        startdate: row.startdate || "",
+        dailylogs: row.dailylogs || {}
+    };
+    return `${textNote}\n${SUPERVISE_META_PREFIX}${JSON.stringify(meta)}`;
+}
+
+async function applySuperviseLeaveRequest(item) {
+    const payload = item?.payload || {};
+    if (String(payload.kind || "") !== "supervise_leave") return;
+    const orderId = String(payload.orderId || "").trim();
+    const targetDate = String(payload.date || "").trim();
+    const leaveType = String(payload.leaveType || "").trim();
+    if (!orderId || !/^\d{4}-\d{2}-\d{2}$/.test(targetDate)) {
+        throw new Error("请假申请缺少订单或日期");
+    }
+    if (leaveType !== "sleep" && leaveType !== "wake") {
+        throw new Error("请假申请类型无效");
+    }
+
+    const { data, error } = await supabaseClient
+        .from("supervise_orders")
+        .select("*")
+        .eq("id", orderId)
+        .single();
+    if (error || !data) {
+        throw new Error("读取监督订单失败");
+    }
+    const row = parseSuperviseOrderMeta(data);
+    row.dailylogs = row.dailylogs && typeof row.dailylogs === "object" ? row.dailylogs : {};
+    const existing = row.dailylogs[targetDate] && typeof row.dailylogs[targetDate] === "object"
+        ? row.dailylogs[targetDate]
+        : {};
+    const leave = existing.leave && typeof existing.leave === "object" ? { ...existing.leave } : {};
+    if (leaveType === "sleep") leave.sleep = true;
+    if (leaveType === "wake") leave.wake = true;
+    row.dailylogs[targetDate] = {
+        ...existing,
+        leave,
+        reason: `${leave.sleep ? "早睡请假" : "早睡正常"}，${leave.wake ? "早起请假" : "早起正常"}（管理员审批）`
+    };
+    const patchedNote = buildSuperviseOrderNote(row);
+    const { error: updateError } = await supabaseClient
+        .from("supervise_orders")
+        .update({ note: patchedNote })
+        .eq("id", orderId);
+    if (updateError) {
+        throw new Error("写入监督订单失败");
+    }
+
+    const local = JSON.parse(localStorage.getItem("superviseOrders") || "[]");
+    if (Array.isArray(local)) {
+        const idx = local.findIndex((x) => String(x.id) === orderId);
+        if (idx >= 0) {
+            local[idx] = { ...local[idx], dailylogs: row.dailylogs };
+            localStorage.setItem("superviseOrders", JSON.stringify(local));
+        }
+    }
+}
+
+async function approveHomePendingItem(id) {
+    if (!isAdmin) return;
+    const items = readHomePendingItems();
+    const row = items.find((x) => String(x.id) === String(id));
+    if (!row || row.done === true) return;
+    try {
+        if (String(row.kind || "") === "supervise_leave") {
+            await applySuperviseLeaveRequest(row);
+        }
+        row.done = true;
+        row.decision = "approved";
+        row.processedAt = new Date().toISOString();
+        row.processedBy = user?.id || "admin";
+        saveHomePendingItems(items);
+        loadHomePendingPanel();
+        showToast("已同意并同步到监督订单", "success");
+    } catch (e) {
+        showToast(`同意失败：${e.message || e}`, "danger");
+    }
+}
+
+function rejectHomePendingItem(id) {
+    if (!isAdmin) return;
+    const items = readHomePendingItems();
+    const row = items.find((x) => String(x.id) === String(id));
+    if (!row || row.done === true) return;
+    row.done = true;
+    row.decision = "rejected";
+    row.processedAt = new Date().toISOString();
+    row.processedBy = user?.id || "admin";
+    saveHomePendingItems(items);
+    loadHomePendingPanel();
+    showToast("已驳回该申请", "success");
+}
+
+function getHomeOrderTypeLabel(type) {
+    return type === "supervise" ? "监督" : "叫醒";
+}
+
+function getHomeOrderDisplayTime(item) {
+    if (item.orderType === "supervise") {
+        return item.startdate || getDatePartFromDateTime(item.waketime) || getDatePartFromDateTime(item.submittime) || "-";
+    }
+    if (typeof formatWakeTimeForDisplay === "function") {
+        return formatWakeTimeForDisplay(item.waketime);
+    }
+    return String(item.waketime || "-");
+}
+
+function getHomeOrderDisplayMainText(item) {
+    if (item.orderType === "supervise") {
+        return `${item.orderno || "-"}｜${item.project || "-"}｜${item.studentname || "-"}`;
+    }
+    return `${item.phone || "-"}｜${item.note || "-"}`;
+}
+
+async function getAllHomeOrders() {
+    const [wakeOrders, superviseOrders] = await Promise.all([
+        getOrders(),
+        getSuperviseOrdersForHomeSummary()
+    ]);
+    const wake = (wakeOrders || []).map((item) => ({
+        ...item,
+        orderType: "wake",
+        effectiveStatus: String(item?.status || "").trim(),
+        todayKey: getDatePartFromDateTime(item?.submittime)
+    }));
+    const supervise = (superviseOrders || []).map((item) => ({
+        ...item,
+        orderType: "supervise",
+        effectiveStatus: getSuperviseEffectiveStatusForHome(item),
+        todayKey: getSuperviseTodayKeyForHome(item)
+    }));
+    return [...wake, ...supervise].sort((a, b) => {
+        const ta = new Date(a.submittime || a.waketime || 0).getTime() || 0;
+        const tb = new Date(b.submittime || b.waketime || 0).getTime() || 0;
+        return tb - ta;
+    });
+}
+
+function matchHomeOrderFilter(item, filterType, todayKey) {
+    if (filterType === "all") return true;
+    if (filterType === "today") return String(item.todayKey || "") === todayKey;
+    if (filterType === "processing") return item.effectiveStatus === "进行中";
+    if (filterType === "pending") return item.effectiveStatus === "待接单";
+    if (filterType === "done") return item.effectiveStatus === "已完成";
+    return true;
+}
+
+async function openHomeOrderDetail(filterType) {
+    if (!isAdmin) return;
+    const titleMap = {
+        all: "订单总数详情",
+        today: "今日订单详情",
+        processing: "进行中订单详情",
+        pending: "待接单订单详情",
+        done: "已完成订单详情"
+    };
+    const titleEl = document.getElementById("homeOrderDetailTitle");
+    const countEl = document.getElementById("homeOrderDetailCount");
+    const listEl = document.getElementById("homeOrderDetailList");
+    const modal = document.getElementById("homeOrderDetailModal");
+    if (!listEl || !modal) return;
+
+    if (titleEl) titleEl.textContent = titleMap[filterType] || "订单详情";
+    listEl.innerHTML = `<div style="font-size:13px;color:#64748b;">加载中...</div>`;
+    modal.style.display = "flex";
+
+    try {
+        const now = new Date();
+        const todayKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+        const all = await getAllHomeOrders();
+        const rows = all.filter((item) => matchHomeOrderFilter(item, filterType, todayKey));
+        if (countEl) countEl.textContent = `共 ${rows.length} 条`;
+
+        if (rows.length === 0) {
+            listEl.innerHTML = `<div style="font-size:13px;color:#94a3b8;padding:10px 0;">暂无符合条件的订单</div>`;
+            return;
+        }
+
+        let html = "";
+        rows.forEach((item) => {
+            const status = item.effectiveStatus || "-";
+            const statusBg = status === "已完成" ? "#dcfce7" : status === "待接单" ? "#fef3c7" : "#dbeafe";
+            const statusColor = status === "已完成" ? "#166534" : status === "待接单" ? "#92400e" : "#1e40af";
+            const submitText = typeof formatTime === "function"
+                ? formatTime(item.submittime || item.waketime || "")
+                : String(item.submittime || item.waketime || "-");
+            const jumpPayload = buildHomeOrderJumpPayload(item);
+            html += `
+                <div style="padding:12px;border:1px solid rgba(148,163,184,.25);border-radius:10px;margin-bottom:10px;background:#f8fafc;">
+                    <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:6px;">
+                        <div style="font-size:13px;font-weight:600;color:#334155;">${getHomeOrderTypeLabel(item.orderType)}订单</div>
+                        <span style="font-size:12px;padding:2px 8px;border-radius:999px;background:${statusBg};color:${statusColor};">${status}</span>
+                    </div>
+                    <div style="font-size:13px;color:#1e293b;margin-bottom:4px;">${getHomeOrderDisplayMainText(item)}</div>
+                    <div style="font-size:12px;color:#64748b;">时间：${getHomeOrderDisplayTime(item)} ｜ 提交：${submitText}</div>
+                    <div style="margin-top:8px;">
+                        <button type="button" onclick="jumpToOrderFromHomeDetail('${jumpPayload}')">打开对应订单</button>
+                    </div>
+                </div>
+            `;
+        });
+        listEl.innerHTML = html;
+    } catch (error) {
+        console.error("加载首页订单详情失败：", error);
+        if (countEl) countEl.textContent = "共 0 条";
+        listEl.innerHTML = `<div style="font-size:13px;color:#ef4444;">加载失败，请稍后重试</div>`;
+    }
+}
+
+function closeHomeOrderDetailModal() {
+    const modal = document.getElementById("homeOrderDetailModal");
+    if (modal) modal.style.display = "none";
+}
+
+function buildHomeOrderJumpPayload(item) {
+    const isSupervise = item.orderType === "supervise";
+    const keyword = isSupervise
+        ? String(item.orderno || item.studentname || item.project || "").trim()
+        : String(item.phone || item.serialnumber || "").trim();
+    return encodeURIComponent(JSON.stringify({
+        type: item.orderType,
+        keyword
+    }));
+}
+
+async function jumpToOrderFromHomeDetail(payload) {
+    let parsed = null;
+    try {
+        parsed = JSON.parse(decodeURIComponent(String(payload || "")));
+    } catch (e) {
+        showToast("跳转参数无效", "warning");
+        return;
+    }
+    const type = String(parsed?.type || "").trim();
+    const keyword = String(parsed?.keyword || "").trim();
+    if (!type || !keyword) {
+        showToast("缺少定位信息", "warning");
+        return;
+    }
+
+    if (type === "wake") {
+        closeHomeOrderDetailModal();
+        showPage("wake");
+        try {
+            await loadOrders();
+        } catch (_) {
+            // ignore load error; search still attempts local render.
+        }
+        const searchInput = document.getElementById("searchInput");
+        if (searchInput) searchInput.value = keyword;
+        searchOrders();
+        showToast(`已定位叫醒订单：${keyword}`, "success");
+        return;
+    }
+
+    if (type === "supervise") {
+        window.location.href = `supervise.html?keyword=${encodeURIComponent(keyword)}`;
+        return;
+    }
+
+    showToast("不支持的订单类型", "warning");
 }
 
 // 在页面上显示公告（管理员和员工都显示）
@@ -320,6 +870,11 @@ window.onload = async function () {
     initNotice();
     // 初始化公告设置页面预览
     loadNoticeSettingsPreview();
+    // 首页模块兜底刷新，防止首屏切换异常导致空白
+    if (currentPage === "home") {
+        loadHomeOrderSummary();
+        loadHomePendingPanel();
+    }
     renderLucideIcons();
 };
 

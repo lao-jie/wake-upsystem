@@ -33,32 +33,3 @@ node proxy-server.js
 ```
 
 （Windows PowerShell 可用 `$env:UPSTREAM_COOKIE="KSSID=...; lang=zh-cn"`）
-
-## 4) Vercel 部署说明
-
-本项目已提供 Vercel 路由文件：
-
-- `api/goodslist.js`
-- `api/order/confirm.js`
-- `api/order/create.js`
-- `api/order/affirm.js`
-
-部署到 Vercel 后，可直接使用：
-
-- `https://你的域名/api/goodslist`
-
-如果要跑下单三步，请在 Vercel 项目环境变量里设置：
-
-- `UPSTREAM_COOKIE=KSSID=...; lang=zh-cn`
-
-若上游提示“手机签名异常”，再补充：
-
-- `UPSTREAM_SIGN=抓包里的 Sign 值`
-- `UPSTREAM_KSS_DEVICE=抓包里的 Kss-Device 值`
-- `UPSTREAM_AUTHORIZATION=抓包里的 Authorization 值（Bearer ...）`
-- `UPSTREAM_COOKIE=抓包里的 Cookie 值`
-
-也可以在前端请求时临时传请求头：
-
-- `x-upstream-sign`
-- `x-upstream-kss-device`

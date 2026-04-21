@@ -442,15 +442,6 @@ textarea {
 }
 
 /* 监督页 */
-.supervise-headbar {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    gap: 12px;
-    margin-bottom: 8px;
-    flex-wrap: wrap;
-}
-
 .supervise-toolbar {
     margin-bottom: 16px;
     display: grid;
@@ -500,6 +491,139 @@ textarea {
     color: #0f766e;
     font-size: 24px;
     font-weight: 700;
+}
+
+/* 首页统计与待处理模块 */
+#page_home #homeSummarySection .supervise-summary-card {
+    position: relative;
+    overflow: hidden;
+    transition: transform 0.25s var(--ease-out), box-shadow 0.25s var(--ease-out), border-color 0.25s var(--ease-out);
+}
+
+#page_home #homeSummarySection .supervise-summary-card::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(120deg, rgba(45, 212, 191, 0.08) 0%, rgba(14, 116, 144, 0.03) 60%, transparent 100%);
+    pointer-events: none;
+}
+
+#page_home #homeSummarySection .supervise-summary-card:hover {
+    transform: translateY(-3px);
+    border-color: rgba(45, 212, 191, 0.5);
+    box-shadow:
+        0 0 0 1px rgba(204, 251, 241, 0.65) inset,
+        0 10px 26px rgba(13, 148, 136, 0.14);
+}
+
+#homePendingSection {
+    padding: 16px 16px 14px;
+    border-radius: 16px;
+    border: 1px solid rgba(148, 163, 184, 0.34);
+    background: linear-gradient(180deg, rgba(255, 255, 255, 0.96) 0%, rgba(248, 250, 252, 0.94) 100%);
+    box-shadow:
+        0 0 0 1px rgba(255, 255, 255, 0.85) inset,
+        0 8px 26px rgba(15, 23, 42, 0.07);
+    align-items: stretch;
+}
+
+#homePendingSection h3 {
+    margin-bottom: 12px !important;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+#homePendingSection h3::before {
+    content: "◈";
+    font-size: 12px;
+    color: #0d9488;
+}
+
+#homePendingSection > div:first-of-type {
+    display: grid !important;
+    grid-template-columns: 140px 1.2fr 1fr 1.6fr auto;
+    gap: 10px !important;
+    align-items: center;
+    margin-bottom: 10px !important;
+}
+
+#homePendingSection select,
+#homePendingSection input {
+    width: 100%;
+    margin: 0;
+    height: 40px;
+    padding: 0 12px;
+    border-radius: 10px;
+    border: 1px solid rgba(148, 163, 184, 0.42);
+    background: #f8fafc;
+    color: #1e293b;
+    box-sizing: border-box;
+}
+
+#homePendingSection select:focus,
+#homePendingSection input:focus {
+    outline: none;
+    border-color: #2dd4bf;
+    box-shadow:
+        0 0 0 3px rgba(45, 212, 191, 0.2),
+        0 4px 14px rgba(13, 148, 136, 0.08);
+    background: #ffffff;
+}
+
+#homePendingSection #homePendingStats {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 10px;
+    border-radius: 999px;
+    background: rgba(236, 253, 245, 0.9);
+    border: 1px solid rgba(45, 212, 191, 0.25);
+    color: #0f766e !important;
+}
+
+#homePendingSection #homePendingList > div {
+    border-radius: 12px !important;
+    border: 1px solid rgba(148, 163, 184, 0.26) !important;
+    box-shadow: 0 3px 12px rgba(15, 23, 42, 0.05);
+    background: #ffffff !important;
+    width: 100%;
+}
+
+#homePendingSection #homePendingList > div:hover {
+    border-color: rgba(45, 212, 191, 0.4) !important;
+    box-shadow: 0 8px 22px rgba(13, 148, 136, 0.1);
+}
+
+#homePendingSection #homePendingList button {
+    margin: 0;
+}
+
+#homePendingSection #homePendingList {
+    width: 100%;
+}
+
+@media (min-width: 769px) {
+    #page_home #homePendingSection {
+        width: 100%;
+        max-width: 100%;
+        flex-basis: 100%;
+    }
+
+    #page_home #homePendingSection #homePendingList {
+        width: 100%;
+        display: block;
+    }
+
+    #page_home #homePendingSection #homePendingList > div {
+        width: 100% !important;
+        max-width: none !important;
+        margin-right: 0;
+    }
+
+    #page_home #homePendingSection #homePendingList > div > div:last-child {
+        justify-content: flex-start;
+    }
 }
 
 .supervise-table-wrapper {
@@ -635,11 +759,32 @@ textarea {
         0 6px 14px rgba(37, 99, 235, 0.16);
 }
 
-#superviseCalendarLegend {
-    padding: 8px 10px;
-    border-radius: 10px;
-    background: rgba(255, 255, 255, 0.85);
-    border: 1px solid rgba(148, 163, 184, 0.25);
+/* 监督日志：日历图例（#id 保留兼容） */
+#superviseCalendarLegend.sv-cal-legend,
+.sv-cal-legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px 10px;
+    padding: 10px 12px;
+    margin: 0;
+    border-radius: 12px;
+    background: rgba(248, 250, 252, 0.95);
+    border: 1px solid rgba(148, 163, 184, 0.22);
+    font-size: 12px;
+    color: #64748b;
+}
+
+.sv-cal-legend__item {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 4px 8px;
+    border-radius: 8px;
+    background: #ffffff;
+    border: 1px solid rgba(148, 163, 184, 0.2);
+    font-size: 11px;
+    font-weight: 600;
+    white-space: nowrap;
 }
 
 #superviseCalendarMonthLabel {
@@ -650,6 +795,55 @@ textarea {
     background: linear-gradient(180deg, #ccfbf1 0%, #99f6e4 100%);
     color: #0f766e;
     border: 1px solid rgba(20, 184, 166, 0.3);
+}
+
+#superviseCalendarModal .sv-cal-month-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    margin-bottom: 10px;
+    min-width: 0;
+}
+
+#superviseCalendarModal #superviseCalendarMonthLabel {
+    min-width: 0;
+    max-width: 100%;
+}
+
+#superviseCalendarModal .sv-cal-month-right {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-shrink: 0;
+}
+
+#superviseCalendarModal .sv-cal-close-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    margin: 0;
+    width: 42px;
+    min-width: 42px;
+    height: 42px;
+    padding: 0;
+    border-radius: 12px;
+    border: 1px solid rgba(148, 163, 184, 0.45);
+    background: linear-gradient(180deg, #f8fafc 0%, #e2e8f0 100%);
+    color: #64748b;
+    font-size: 26px;
+    font-weight: 500;
+    line-height: 1;
+    cursor: pointer;
+    box-shadow: 0 2px 8px rgba(15, 23, 42, 0.08);
+    touch-action: manipulation;
+    -webkit-tap-highlight-color: transparent;
+}
+
+#superviseCalendarModal .sv-cal-close-icon:hover {
+    color: #0f172a;
+    border-color: rgba(100, 116, 139, 0.55);
+    background: linear-gradient(180deg, #ffffff 0%, #f1f5f9 100%);
 }
 
 .sv-cal-nav {
@@ -703,27 +897,211 @@ textarea {
     box-sizing: border-box;
 }
 
-#superviseCalendarModal .modal-box {
-    width: min(960px, 92vw);
-    max-height: 88vh;
-    overflow-y: auto;
+#superviseCalendarModal.modal-overlay {
+    align-items: center;
+    z-index: 2600;
+    /* 避免 height:100% 在部分移动 WebView 下短一截，底部露出遮罩 */
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    width: auto;
+    height: auto;
+    min-height: 100vh;
+    min-height: 100dvh;
+    min-height: -webkit-fill-available;
 }
 
-#superviseCalendarLegend {
+#superviseCalendarModal .modal-box.sv-cal-modal-box {
+    width: min(960px, 92vw);
+    max-height: min(88vh, 100dvh);
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    padding: 0;
+    align-self: center;
+    border-radius: 18px;
+    border: 1px solid rgba(45, 212, 191, 0.22);
+    box-shadow:
+        0 0 0 1px rgba(204, 251, 241, 0.45) inset,
+        0 20px 50px rgba(15, 23, 42, 0.12);
+    background: linear-gradient(165deg, #ffffff 0%, #f8fafc 100%);
+    /* 与全局 .modal-box 的毛玻璃叠在深色遮罩上时，底部易出现半透明发黑条 */
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+}
+
+/* flex-grow: 0 — 内容不足一屏时不要撑满剩余高度，避免提交区下方大块空白 */
+#superviseCalendarModal .sv-cal-modal-scroll {
+    flex: 0 1 auto;
+    min-height: 0;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+    padding: 18px 20px 16px;
+    background-color: #f8fafc;
+    background-image:
+        linear-gradient(rgba(148, 163, 184, 0.08) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(148, 163, 184, 0.08) 1px, transparent 1px);
+    background-size: 24px 24px;
+    background-position: center top;
+}
+
+#superviseCalendarModal .sv-cal-panel .sv-cal-month-row {
+    margin-bottom: 8px;
+}
+
+#superviseCalendarModal .sv-cal-panel {
+    margin-bottom: 14px;
+    padding: 12px 14px 14px;
+    border-radius: 16px;
+    background: linear-gradient(135deg, rgba(255, 255, 255, 0.98) 0%, rgba(240, 253, 250, 0.55) 100%);
+    border: 1px solid rgba(148, 163, 184, 0.28);
+    box-shadow:
+        0 0 0 1px rgba(204, 251, 241, 0.35) inset,
+        0 4px 18px rgba(15, 23, 42, 0.06);
+}
+
+#superviseCalendarModal .sv-cal-calendar-wrap {
+    margin-bottom: 4px;
+}
+
+#superviseCalendarModal .sv-cal-calendar-wrap #superviseCalendarGrid {
+    border-radius: 14px;
+}
+
+#superviseCalendarModal .sv-cal-modal-footer {
+    flex-shrink: 0;
+    margin: 0;
+    margin-top: 0;
+    padding: 12px 26px calc(16px + env(safe-area-inset-bottom, 0px));
+    border-top: 1px solid rgba(148, 163, 184, 0.28);
+    background: linear-gradient(180deg, rgba(248, 250, 252, 0.98) 0%, #ffffff 100%);
+    justify-content: flex-end;
     flex-wrap: wrap;
+    gap: 10px;
+}
+
+#superviseCalendarModal .sv-log-layout {
+    gap: 14px;
+}
+
+#superviseCalendarModal .sv-submit-card {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    padding: 16px 14px;
+    border-radius: 16px;
+    background: linear-gradient(135deg, #ffffff 0%, #f8fafc 100%);
+    border: 1px solid rgba(148, 163, 184, 0.3);
+    box-shadow:
+        0 0 0 1px rgba(204, 251, 241, 0.35) inset,
+        0 4px 22px rgba(15, 23, 42, 0.07);
+}
+
+#superviseCalendarModal .sv-submit-card__title {
+    margin: 0;
+    font-size: 15px;
+    font-weight: 700;
+    color: #0f172a;
+    letter-spacing: 0.02em;
+}
+
+#superviseCalendarModal .sv-submit-card__hint {
+    margin: 0;
+    font-size: 13px;
+    font-weight: 600;
+    color: #0f766e;
+    line-height: 1.45;
+    padding: 8px 10px;
+    border-radius: 10px;
+    background: rgba(204, 251, 241, 0.5);
+    border: 1px solid rgba(45, 212, 191, 0.28);
+}
+
+#superviseCalendarModal .sv-submit-card input[type="file"] {
+    padding: 10px 12px;
+    border-radius: 10px;
+    border: 1px dashed rgba(148, 163, 184, 0.55);
+    background: rgba(248, 250, 252, 0.9);
+}
+
+#superviseCalendarModal .sv-submit-card > .modal-footer {
+    margin-top: 0;
+}
+
+#superviseCalendarModal .sv-submit-card #calendarSuperviseAiResult,
+#superviseCalendarModal .sv-submit-card__status {
+    margin: 0;
+    font-size: 13px;
+    color: #64748b;
+    line-height: 1.5;
+}
+
+.sv-spec-details {
+    margin-top: 6px;
+    border: 1px solid rgba(148, 163, 184, 0.28);
+    border-radius: 8px;
+    padding: 6px 10px 8px;
+    background: rgba(248, 250, 252, 0.65);
+}
+
+#superviseCalendarModal .sv-submit-card .sv-spec-details {
+    margin-top: 0;
+    border-radius: 10px;
+    border-color: rgba(148, 163, 184, 0.22);
+    background: rgba(255, 255, 255, 0.85);
+}
+
+#superviseCalendarModal #superviseLeaveActions.modal-footer {
+    margin-top: 4px;
+    padding-top: 12px;
+    border-top: 1px dashed rgba(148, 163, 184, 0.4);
+}
+
+.sv-spec-summary {
+    font-size: 12px;
+    font-weight: 600;
+    color: #0f766e;
+    cursor: pointer;
+    user-select: none;
+    list-style: none;
+}
+
+.sv-spec-summary::-webkit-details-marker {
+    display: none;
+}
+
+/* 监督日志：主操作与全站青绿按钮一致；请假为柔和次要样式 */
+#superviseCalendarModal button.sv-cal-ai-btn {
+    background: linear-gradient(135deg, #0d9488 0%, #14b8a6 50%, #2dd4bf 100%);
+    border-color: rgba(45, 212, 191, 0.5);
+    color: #f8fafc;
+    box-shadow:
+        0 2px 12px rgba(13, 148, 136, 0.28),
+        0 1px 0 rgba(255, 255, 255, 0.28) inset;
+}
+
+#superviseCalendarModal button.sv-cal-ai-btn:hover {
+    box-shadow:
+        0 6px 18px rgba(13, 148, 136, 0.35),
+        0 1px 0 rgba(255, 255, 255, 0.32) inset;
+}
+
+#superviseCalendarModal button.sv-cal-leave-btn {
+    background: linear-gradient(180deg, #fffbeb 0%, #fef9c3 100%);
+    border: 1px solid rgba(245, 158, 11, 0.45);
+    color: #92400e;
+    box-shadow: 0 2px 8px rgba(245, 158, 11, 0.12);
+}
+
+#superviseCalendarModal button.sv-cal-leave-btn:hover {
+    border-color: rgba(217, 119, 6, 0.55);
+    background: linear-gradient(180deg, #fff7ed 0%, #ffedd5 100%);
+    box-shadow: 0 4px 14px rgba(245, 158, 11, 0.18);
 }
 
 @media (max-width: 768px) {
-    .supervise-headbar {
-        flex-direction: column;
-        align-items: stretch;
-    }
-
-    .supervise-headbar button {
-        width: 100%;
-        margin: 0;
-    }
-
     .supervise-toolbar {
         grid-template-columns: 1fr;
     }
@@ -741,8 +1119,20 @@ textarea {
         grid-template-columns: repeat(2, minmax(120px, 1fr));
     }
 
+    #homePendingSection > div:first-of-type {
+        grid-template-columns: 1fr !important;
+    }
+
+    #homePendingSection #homePendingStats {
+        width: 100%;
+        justify-content: center;
+    }
+
     .supervise-page .main-content {
         padding: 12px;
+        /* 与固定顶栏（sidebar-header）、底栏（nav-row）留白一致，避免搜索框被挡住 */
+        padding-top: calc(56px + env(safe-area-inset-top, 0px));
+        padding-bottom: calc(68px + env(safe-area-inset-bottom, 0px));
     }
 
     .supervise-page .supervise-toolbar {
@@ -947,46 +1337,98 @@ body.is-staff.is-mobile #userInfo {
         line-height: 1.4;
     }
 
-    /* 监督日志弹窗手机适配 */
-    #superviseCalendarModal .modal-box {
-        width: calc(100vw - 12px);
-        max-width: calc(100vw - 12px);
-        max-height: 92vh;
-        padding: 12px;
-        border-radius: 12px;
+    /* 监督日志弹窗手机：上下留白，整块卡片垂直居中（非底栏抽屉） */
+    #superviseCalendarModal.modal-overlay {
+        justify-content: center;
+        align-items: center;
+        padding: max(20px, env(safe-area-inset-top, 0px)) 12px max(24px, env(safe-area-inset-bottom, 0px));
+        overflow-y: auto;
+        -webkit-overflow-scrolling: touch;
     }
 
-    #superviseCalendarLegend {
-        font-size: 11px !important;
-        gap: 8px !important;
-        padding: 6px 8px;
+    #superviseCalendarModal .modal-box.sv-cal-modal-box {
+        width: calc(100vw - 24px);
+        max-width: 100%;
+        height: auto;
+        max-height: min(80dvh, calc(100dvh - 96px));
+        min-height: 0;
+        margin: 0;
+        align-self: center;
+        border-radius: 16px;
+        padding-bottom: 0;
+        box-sizing: border-box;
+    }
+
+    #superviseCalendarModal .sv-cal-modal-scroll {
+        flex: 1 1 auto;
+        min-height: 0;
+        overflow-y: auto;
+        padding: 10px 12px 14px;
+    }
+
+    #superviseCalendarModal .sv-cal-modal-footer {
+        padding: 10px 12px calc(12px + env(safe-area-inset-bottom, 0px));
+    }
+
+    #superviseCalendarModal .sv-cal-modal-footer #superviseTaskFinishAction {
+        width: 100%;
+    }
+
+    #superviseCalendarModal .sv-cal-nav {
+        width: auto;
+        flex: 0 1 auto;
+    }
+
+    #superviseCalendarModal .sv-cal-close-icon {
+        width: 44px;
+        min-width: 44px;
+        height: 44px;
+        font-size: 28px;
+    }
+
+    #superviseCalendarModal #superviseCalendarLegend.sv-cal-legend {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 6px;
+        padding: 8px;
+        font-size: 10px;
+    }
+
+    #superviseCalendarModal .sv-cal-legend__item {
+        font-size: 10px;
+        padding: 5px 6px;
+        justify-content: center;
+        white-space: normal;
+        text-align: center;
+        line-height: 1.25;
     }
 
     #superviseCalendarGrid {
-        grid-template-columns: repeat(7, minmax(38px, 1fr));
-        gap: 6px;
-        padding: 8px;
+        grid-template-columns: repeat(7, minmax(0, 1fr));
+        gap: 4px;
+        padding: 6px;
+        border-radius: 10px;
     }
 
     .sv-cal-weekday {
-        font-size: 11px;
-        padding: 4px 0;
+        font-size: 10px;
+        padding: 3px 0;
     }
 
     .sv-cal-day {
-        min-height: 56px;
-        border-radius: 10px;
-        padding: 6px 4px;
+        min-height: 44px;
+        border-radius: 8px;
+        padding: 4px 2px;
     }
 
     .sv-cal-day .num {
-        font-size: 12px;
-        margin-bottom: 4px;
+        font-size: 11px;
+        margin-bottom: 2px;
     }
 
     .sv-cal-day .mark {
-        font-size: 15px;
-        min-height: 16px;
+        font-size: 13px;
+        min-height: 14px;
     }
 
     .sv-cal-nav {
@@ -997,31 +1439,58 @@ body.is-staff.is-mobile #userInfo {
     .sv-cal-nav-btn {
         flex: 1;
         min-width: 0;
-        height: 34px;
+        height: 32px;
+        font-size: 13px;
+        padding: 0 10px;
     }
 
     .sv-log-layout {
-        gap: 10px;
+        gap: 8px;
     }
 
     .sv-log-uploader {
-        padding: 10px;
+        padding: 8px;
     }
 
-    .sv-log-uploader .modal-footer {
+    .sv-log-uploader h4 {
+        font-size: 14px !important;
+    }
+
+    #superviseCalendarModal .sv-log-uploader .modal-footer {
         display: grid;
-        grid-template-columns: 1fr;
-        gap: 8px;
+        grid-template-columns: 1fr 1fr;
+        gap: 6px;
+        margin-top: 8px !important;
+    }
+
+    #superviseCalendarModal .sv-log-uploader .modal-footer button {
+        margin: 0;
+        width: 100%;
+        padding: 8px 6px;
+        font-size: 12px;
+        min-height: 38px;
+        white-space: normal;
+        line-height: 1.2;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        text-align: center;
+    }
+
+    #superviseCalendarModal .sv-cal-preview-img {
+        max-height: 120px !important;
+        margin-top: 6px !important;
+    }
+
+    #superviseCalendarModal #calendarSuperviseAiResult {
+        font-size: 12px !important;
+        margin-top: 6px !important;
     }
 
     .supervise-page.supervise-admin #superviseManualActions {
         display: grid !important;
         grid-template-columns: 1fr 1fr;
         gap: 8px;
-    }
-
-    #superviseTaskFinishAction {
-        width: 100%;
     }
 }
 
