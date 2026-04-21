@@ -18,6 +18,17 @@ module.exports = async function handler(req, res) {
   }
 
   try {
+    const upstreamSign = process.env.UPSTREAM_SIGN || req.headers['x-upstream-sign'] || ''
+    const upstreamDevice = process.env.UPSTREAM_KSS_DEVICE || req.headers['x-upstream-kss-device'] || ''
+    const upstreamHeaders = {
+      'Content-Type': 'application/x-www-form-urlencoded',
+      'User-Agent': req.headers['user-agent'] || 'Mozilla/5.0 (Linux; Android 10) AppleWebKit/537.36 Chrome/120.0.0.0 Mobile Safari/537.36',
+      'Referer': 'http://jie.ykw100.cn/',
+      'Origin': 'http://jie.ykw100.cn'
+    }
+    if (upstreamSign) upstreamHeaders.Sign = upstreamSign
+    if (upstreamDevice) upstreamHeaders['Kss-Device'] = upstreamDevice
+
     const body = req.body || {}
     const form = new URLSearchParams({
       index: String(body.index ?? 4),
@@ -29,7 +40,7 @@ module.exports = async function handler(req, res) {
 
     const response = await fetch(`${UPSTREAM_BASE}/uni/goodslist`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      headers: upstreamHeaders,
       body: form.toString()
     })
     const text = await response.text()
