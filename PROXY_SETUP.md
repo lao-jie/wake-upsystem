@@ -55,6 +55,8 @@ node proxy-server.js
 
 - `UPSTREAM_SIGN=抓包里的 Sign 值`
 - `UPSTREAM_KSS_DEVICE=抓包里的 Kss-Device 值`
+- `UPSTREAM_AUTHORIZATION=抓包里的 Authorization 值（Bearer ...）`
+- `UPSTREAM_COOKIE=抓包里的 Cookie 值`
 
 也可以在前端请求时临时传请求头：
 
