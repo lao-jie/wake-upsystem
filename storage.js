@@ -145,6 +145,17 @@ async function getStaffList() {
     return JSON.parse(localStorage.getItem("staffList") || "[]");
 }
 
+function normalizeSalaryMethodForDb(rawValue) {
+    const value = String(rawValue || "").trim().toLowerCase();
+    if (!value) return null;
+    if (value === "alipay" || value === "wechat" || value === "bank") return value;
+    // 兼容历史中文值，避免触发数据库 check constraint
+    if (value === "支付宝") return "alipay";
+    if (value === "微信") return "wechat";
+    if (value === "银行卡" || value === "bankcard") return "bank";
+    return null;
+}
+
 async function saveStaffList(staffList) {
     let savedToCloud = false;
     try {
@@ -154,7 +165,7 @@ async function saveStaffList(staffList) {
             password: staff.password,
             salary: parseFloat(staff.salary || 0),
             phone: String(staff.phone || "").trim(),
-            salarymethod: String(staff.salaryMethod || "").trim(),
+            salarymethod: normalizeSalaryMethodForDb(staff.salaryMethod),
             salaryaccount: String(staff.salaryAccount || "").trim()
         }));
 
@@ -235,7 +246,7 @@ async function updateStaffProfileById(staffId, patch) {
             dbPatch.phone = String(patch.phone || "").trim();
         }
         if (Object.prototype.hasOwnProperty.call(patch, "salaryMethod")) {
-            dbPatch.salarymethod = String(patch.salaryMethod || "").trim();
+            dbPatch.salarymethod = normalizeSalaryMethodForDb(patch.salaryMethod);
         }
         if (Object.prototype.hasOwnProperty.call(patch, "salaryAccount")) {
             dbPatch.salaryaccount = String(patch.salaryAccount || "").trim();

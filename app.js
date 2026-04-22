@@ -77,6 +77,8 @@ let currentPage = "home";
 let lastNoticePopupSignature = "";
 const HOME_PENDING_STORAGE_KEY = "homePendingOrders";
 const SUPERVISE_META_PREFIX = "[SVMETA]";
+const HOME_PENDING_DB_TABLE = "home_pending_items";
+const SUPERVISE_LEAVE_REQUESTS_TABLE = "supervise_leave_requests";
 
 const { user, allUsers } = initUser();
 const isAdmin = user.role === "admin";
@@ -337,7 +339,41 @@ async function loadHomeOrderSummary() {
     }
 }
 
-function readHomePendingItems() {
+function mapPendingRowFromDb(row) {
+    return {
+        id: String(row?.id || ""),
+        kind: String(row?.kind || ""),
+        type: String(row?.type || "其他反馈"),
+        orderRef: String(row?.order_ref || ""),
+        source: String(row?.source || ""),
+        desc: String(row?.description || ""),
+        payload: row?.payload && typeof row.payload === "object" ? row.payload : {},
+        done: row?.done === true,
+        decision: String(row?.decision || ""),
+        createdAt: String(row?.created_at || ""),
+        processedAt: String(row?.processed_at || ""),
+        processedBy: String(row?.processed_by || "")
+    };
+}
+
+function mapPendingRowToDb(item) {
+    return {
+        id: String(item?.id || `${Date.now()}-${Math.floor(Math.random() * 1000000)}`),
+        kind: String(item?.kind || ""),
+        type: String(item?.type || "其他反馈"),
+        order_ref: String(item?.orderRef || ""),
+        source: String(item?.source || ""),
+        description: String(item?.desc || ""),
+        payload: item?.payload && typeof item.payload === "object" ? item.payload : {},
+        done: item?.done === true,
+        decision: String(item?.decision || ""),
+        created_at: String(item?.createdAt || new Date().toISOString()),
+        processed_at: item?.processedAt ? String(item.processedAt) : null,
+        processed_by: item?.processedBy ? String(item.processedBy) : null
+    };
+}
+
+function readHomePendingItemsFromLocal() {
     try {
         const arr = JSON.parse(localStorage.getItem(HOME_PENDING_STORAGE_KEY) || "[]");
         return Array.isArray(arr) ? arr : [];
@@ -346,8 +382,40 @@ function readHomePendingItems() {
     }
 }
 
-function saveHomePendingItems(items) {
+function saveHomePendingItemsToLocal(items) {
     localStorage.setItem(HOME_PENDING_STORAGE_KEY, JSON.stringify(items || []));
+}
+
+async function readHomePendingItems() {
+    try {
+        const { data, error } = await supabaseClient
+            .from(HOME_PENDING_DB_TABLE)
+            .select("*")
+            .order("created_at", { ascending: false });
+        if (error) throw error;
+        const rows = Array.isArray(data) ? data.map(mapPendingRowFromDb) : [];
+        saveHomePendingItemsToLocal(rows);
+        return rows;
+    } catch (error) {
+        console.warn("读取待处理事项表失败，回退本地存储：", error);
+        return readHomePendingItemsFromLocal();
+    }
+}
+
+async function upsertHomePendingItem(item) {
+    const payload = mapPendingRowToDb(item);
+    const { error } = await supabaseClient
+        .from(HOME_PENDING_DB_TABLE)
+        .upsert([payload], { onConflict: "id" });
+    if (error) throw error;
+}
+
+async function deleteHomePendingItemById(id) {
+    const { error } = await supabaseClient
+        .from(HOME_PENDING_DB_TABLE)
+        .delete()
+        .eq("id", String(id || ""));
+    if (error) throw error;
 }
 
 function getPendingStatusText(done) {
@@ -366,7 +434,7 @@ function getPendingActionText(item) {
     return getPendingStatusText(item?.done === true);
 }
 
-function loadHomePendingPanel() {
+async function loadHomePendingPanel() {
     const section = document.getElementById("homePendingSection");
     const listEl = document.getElementById("homePendingList");
     const statsEl = document.getElementById("homePendingStats");
@@ -375,7 +443,7 @@ function loadHomePendingPanel() {
     section.style.display = isAdmin ? "flex" : "none";
     if (!isAdmin) return;
 
-    const items = readHomePendingItems().sort((a, b) => {
+    const items = (await readHomePendingItems()).sort((a, b) => {
         const ta = new Date(a.createdAt || 0).getTime() || 0;
         const tb = new Date(b.createdAt || 0).getTime() || 0;
         return tb - ta;
@@ -426,7 +494,7 @@ function loadHomePendingPanel() {
     listEl.innerHTML = html;
 }
 
-function addHomePendingItem() {
+async function addHomePendingItem() {
     if (!isAdmin) return;
     const typeEl = document.getElementById("pendingTypeInput");
     const refEl = document.getElementById("pendingOrderRefInput");
@@ -440,8 +508,7 @@ function addHomePendingItem() {
         showToast("请填写待处理说明", "warning");
         return;
     }
-    const items = readHomePendingItems();
-    items.push({
+    const newItem = {
         id: `${Date.now()}-${Math.floor(Math.random() * 1000000)}`,
         type,
         orderRef,
@@ -449,31 +516,46 @@ function addHomePendingItem() {
         desc,
         done: false,
         createdAt: new Date().toISOString()
-    });
-    saveHomePendingItems(items);
+    };
+    try {
+        await upsertHomePendingItem(newItem);
+    } catch (e) {
+        // 表不存在或网络异常时回退本地，保证页面可用
+        const items = readHomePendingItemsFromLocal();
+        items.push(newItem);
+        saveHomePendingItemsToLocal(items);
+    }
     if (refEl) refEl.value = "";
     if (sourceEl) sourceEl.value = "";
     if (descEl) descEl.value = "";
-    loadHomePendingPanel();
+    await loadHomePendingPanel();
     showToast("已加入待处理列表", "success");
 }
 
-function toggleHomePendingDone(id) {
+async function toggleHomePendingDone(id) {
     if (!isAdmin) return;
-    const items = readHomePendingItems();
+    const items = await readHomePendingItems();
     const row = items.find((x) => String(x.id) === String(id));
     if (!row) return;
     row.done = row.done !== true;
-    saveHomePendingItems(items);
-    loadHomePendingPanel();
+    try {
+        await upsertHomePendingItem(row);
+    } catch (e) {
+        saveHomePendingItemsToLocal(items);
+    }
+    await loadHomePendingPanel();
 }
 
-function removeHomePendingItem(id) {
+async function removeHomePendingItem(id) {
     if (!isAdmin) return;
-    const items = readHomePendingItems();
-    const next = items.filter((x) => String(x.id) !== String(id));
-    saveHomePendingItems(next);
-    loadHomePendingPanel();
+    try {
+        await deleteHomePendingItemById(id);
+    } catch (e) {
+        const items = readHomePendingItemsFromLocal();
+        const next = items.filter((x) => String(x.id) !== String(id));
+        saveHomePendingItemsToLocal(next);
+    }
+    await loadHomePendingPanel();
 }
 
 function parseSuperviseOrderMeta(row) {
@@ -575,7 +657,7 @@ async function applySuperviseLeaveRequest(item) {
 
 async function approveHomePendingItem(id) {
     if (!isAdmin) return;
-    const items = readHomePendingItems();
+    const items = await readHomePendingItems();
     const row = items.find((x) => String(x.id) === String(id));
     if (!row || row.done === true) return;
     try {
@@ -586,25 +668,33 @@ async function approveHomePendingItem(id) {
         row.decision = "approved";
         row.processedAt = new Date().toISOString();
         row.processedBy = user?.id || "admin";
-        saveHomePendingItems(items);
-        loadHomePendingPanel();
+        try {
+            await upsertHomePendingItem(row);
+        } catch (e) {
+            saveHomePendingItemsToLocal(items);
+        }
+        await loadHomePendingPanel();
         showToast("已同意并同步到监督订单", "success");
     } catch (e) {
         showToast(`同意失败：${e.message || e}`, "danger");
     }
 }
 
-function rejectHomePendingItem(id) {
+async function rejectHomePendingItem(id) {
     if (!isAdmin) return;
-    const items = readHomePendingItems();
+    const items = await readHomePendingItems();
     const row = items.find((x) => String(x.id) === String(id));
     if (!row || row.done === true) return;
     row.done = true;
     row.decision = "rejected";
     row.processedAt = new Date().toISOString();
     row.processedBy = user?.id || "admin";
-    saveHomePendingItems(items);
-    loadHomePendingPanel();
+    try {
+        await upsertHomePendingItem(row);
+    } catch (e) {
+        saveHomePendingItemsToLocal(items);
+    }
+    await loadHomePendingPanel();
     showToast("已驳回该申请", "success");
 }
 
@@ -1454,7 +1544,135 @@ async function showWidgetDetail(widgetType) {
             title.textContent = '我的订单';
             await renderMyOrdersDetail(content);
             break;
+        case 'myLeaves':
+            title.textContent = '我的请假订单';
+            await renderMyLeaveOrdersDetail(content);
+            break;
     }
+}
+
+async function renderMyLeaveOrdersDetail(container) {
+    let rows = [];
+    try {
+        const { data, error } = await supabaseClient
+            .from(SUPERVISE_LEAVE_REQUESTS_TABLE)
+            .select("*")
+            .eq("applicant_id", String(user?.id || ""))
+            .order("updated_at", { ascending: false });
+        if (error) throw error;
+        rows = Array.isArray(data) ? data : [];
+    } catch (e) {
+        container.innerHTML = `
+            <div style="text-align:center; padding:32px 16px; color:#94a3b8;">
+                <div style="margin-bottom:10px;"><i data-lucide="database-zap" style="width:40px; height:40px;"></i></div>
+                <div>请假记录读取失败，请稍后重试</div>
+            </div>
+        `;
+        renderLucideIcons();
+        return;
+    }
+
+    if (rows.length === 0) {
+        container.innerHTML = `
+            <div style="text-align:center; padding:32px 16px; color:#94a3b8;">
+                <div style="margin-bottom:10px;"><i data-lucide="calendar-off" style="width:40px; height:40px;"></i></div>
+                <div>暂无请假记录</div>
+            </div>
+        `;
+        renderLucideIcons();
+        return;
+    }
+
+    const typeLabel = (v) => (String(v) === "sleep" ? "请假早睡" : "请假早起");
+    const enabledLabel = (v) => (v === true ? "已生效" : "已取消");
+    const enabledStyle = (v) =>
+        v === true
+            ? "background:#dcfce7;color:#166534;"
+            : "background:#fee2e2;color:#991b1b;";
+    const safe = (v) => String(v == null ? "-" : v);
+    const normDate = (v) => {
+        const s = String(v || "").trim();
+        const m = s.match(/^(\d{4})-(\d{2})-(\d{2})/);
+        return m ? `${m[1]}-${m[2]}-${m[3]}` : "";
+    };
+
+    container.innerHTML = `
+        <div style="display:flex; flex-direction:column; gap:10px;">
+            <div style="display:flex; gap:8px; flex-wrap:wrap; align-items:center; padding:10px; background:#f8fafc; border:1px solid rgba(148,163,184,.22); border-radius:10px;">
+                <input type="date" id="myLeavesDateFilter" style="min-width:170px;">
+                <label style="display:inline-flex; align-items:center; gap:6px; font-size:13px; color:#475569; cursor:pointer;">
+                    <input type="checkbox" id="myLeavesEnabledOnly">
+                    只看已生效
+                </label>
+                <button type="button" class="ghost" id="myLeavesClearFilter" style="padding:6px 10px; margin-left:auto;">清空筛选</button>
+            </div>
+            <div id="myLeavesListWrap" style="display:flex; flex-direction:column; gap:10px;"></div>
+        </div>
+    `;
+
+    const dateInput = container.querySelector("#myLeavesDateFilter");
+    const enabledOnlyInput = container.querySelector("#myLeavesEnabledOnly");
+    const clearBtn = container.querySelector("#myLeavesClearFilter");
+    const listWrap = container.querySelector("#myLeavesListWrap");
+
+    const renderList = () => {
+        const dateFilter = normDate(dateInput?.value || "");
+        const enabledOnly = enabledOnlyInput?.checked === true;
+        const filtered = rows.filter((row) => {
+            if (enabledOnly && row.leave_enabled !== true) return false;
+            if (dateFilter) {
+                const rowDate = normDate(row.target_date);
+                if (rowDate !== dateFilter) return false;
+            }
+            return true;
+        });
+
+        if (!listWrap) return;
+        if (filtered.length === 0) {
+            listWrap.innerHTML = `<div style="text-align:center; padding:20px 12px; color:#94a3b8; border:1px dashed rgba(148,163,184,.35); border-radius:10px;">没有符合筛选条件的记录</div>`;
+            return;
+        }
+
+        let html = "";
+        filtered.forEach((row) => {
+            const orderNo = safe(row.order_no || row.order_id || "-");
+            const project = safe(row.project || "-");
+            const targetDate = safe(row.target_date || "-");
+            const operator = safe(row.operator_name || row.operator_id || "-");
+            const updatedAt = typeof formatTime === "function" ? formatTime(row.updated_at || "") : safe(row.updated_at || "-");
+            const leaveType = typeLabel(row.leave_type);
+            const enabled = row.leave_enabled === true;
+            html += `
+                <div style="padding:12px; background:#f8fafc; border-radius:10px; border:1px solid rgba(148,163,184,.22);">
+                    <div style="display:flex; justify-content:space-between; align-items:center; gap:8px; margin-bottom:8px;">
+                        <div style="font-size:14px; font-weight:700; color:#1e293b;">${orderNo}</div>
+                        <span style="font-size:12px; padding:3px 10px; border-radius:999px; ${enabledStyle(enabled)}">${enabledLabel(enabled)}</span>
+                    </div>
+                    <div style="font-size:13px; color:#475569; line-height:1.6;">
+                        项目：${project}<br>
+                        日期：${targetDate}<br>
+                        类型：${leaveType}<br>
+                        处理人：${operator}<br>
+                        更新时间：${updatedAt}
+                    </div>
+                </div>
+            `;
+        });
+        listWrap.innerHTML = html;
+    };
+
+    if (dateInput) dateInput.addEventListener("change", renderList);
+    if (enabledOnlyInput) enabledOnlyInput.addEventListener("change", renderList);
+    if (clearBtn) {
+        clearBtn.addEventListener("click", () => {
+            if (dateInput) dateInput.value = "";
+            if (enabledOnlyInput) enabledOnlyInput.checked = false;
+            renderList();
+        });
+    }
+
+    renderList();
+    renderLucideIcons();
 }
 
 // 关闭小组件详情弹窗

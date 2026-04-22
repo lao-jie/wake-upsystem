@@ -65,6 +65,7 @@ function toggleSubMenu() {
 let parsedSuperviseOrders = [];
 const HOME_PENDING_STORAGE_KEY = "homePendingOrders";
 const SUPERVISE_META_PREFIX = "[SVMETA]";
+const SUPERVISE_LEAVE_REQUESTS_TABLE = "supervise_leave_requests";
 let customDurationDays = 1;
 let lastDurationValue = "1次";
 let currentCalendarTaskId = "";
@@ -568,7 +569,11 @@ function syncSuperviseComboActionButtons(row, dateKey, canLeave) {
     const p = String(row?.project || "").trim();
     if (p !== "监督早睡早起") {
         if (comboActions) comboActions.style.display = "none";
-        if (leaveActions) leaveActions.style.display = canLeave ? "flex" : "none";
+        const isSleepOnly = p === "监督早睡";
+        const isWakeOnly = p === "监督早起";
+        if (leaveSleepBtn) leaveSleepBtn.style.display = isSleepOnly ? "inline-flex" : "none";
+        if (leaveWakeBtn) leaveWakeBtn.style.display = isWakeOnly ? "inline-flex" : "none";
+        if (leaveActions) leaveActions.style.display = canLeave && (isSleepOnly || isWakeOnly) ? "flex" : "none";
         return;
     }
     const required = getSuperviseRequiredSlotProjectsByDate(row, dateKey);
@@ -600,7 +605,11 @@ function syncSuperviseComboCountHint(row) {
 
 function getSuperviseRequiredSlotProjectsByDate(row, dateKey) {
     const project = String(row?.project || "").trim();
+    const dayLog = row?.dailylogs && typeof row.dailylogs === "object" ? row.dailylogs[dateKey] : null;
+    const leaveFlags = getDailyLeaveFlags(dayLog);
     if (project !== "监督早睡早起") {
+        if (project === "监督早睡" && leaveFlags.sleep) return [];
+        if (project === "监督早起" && leaveFlags.wake) return [];
         return [project || ""].filter(Boolean);
     }
     const startDate = String(getSuperviseTaskStartDateStr(row) || "").trim();
@@ -610,8 +619,6 @@ function getSuperviseRequiredSlotProjectsByDate(row, dateKey) {
             ? mapTakeStartModeToProjects(startMode)
             : ["监督早睡", "监督早起"];
 
-    const dayLog = row?.dailylogs && typeof row.dailylogs === "object" ? row.dailylogs[dateKey] : null;
-    const leaveFlags = getDailyLeaveFlags(dayLog);
     const N = Math.max(1, getDurationDays(row?.duration || "1次"));
     return baseProjects.filter((slotProject) => {
         if (slotProject === "监督早睡" && leaveFlags.sleep) return false;
@@ -1277,7 +1284,7 @@ function renderSuperviseCalendar(taskId, targetMonthDate) {
         if (reqHint) reqHint.textContent = buildSuperviseDateRequirementHint(row, dateForOps);
         syncSuperviseComboCountHint(row);
         const isOwner = String(row.staffid || "").trim() === String(currentSuperviseUser?.id || "").trim();
-        const canLeave = String(row.project || "").trim() === "监督早睡早起" && (superviseIsAdmin || isOwner);
+        const canLeave = ["监督早睡", "监督早起", "监督早睡早起"].includes(String(row.project || "").trim()) && (superviseIsAdmin || isOwner);
         syncSuperviseComboActionButtons(row, dateForOps, canLeave);
     });
 }
@@ -1301,6 +1308,35 @@ function buildSuperviseDateRequirementHint(row, dateKey) {
         return "当前日期已请假（无需提交截图）";
     }
     return `当前日期需提交：${requiredProjects.join(" + ")}`;
+}
+
+async function upsertSuperviseLeaveRequestRecord(params) {
+    try {
+        const payload = {
+            id: String(params?.id || ""),
+            order_id: String(params?.orderId || ""),
+            order_no: String(params?.orderNo || ""),
+            project: String(params?.project || ""),
+            target_date: String(params?.targetDate || ""),
+            leave_type: String(params?.leaveType || ""),
+            leave_enabled: params?.leaveEnabled === true,
+            applicant_id: String(params?.applicantId || ""),
+            applicant_name: String(params?.applicantName || ""),
+            operator_id: String(params?.operatorId || ""),
+            operator_name: String(params?.operatorName || ""),
+            status: String(params?.status || ""),
+            updated_at: new Date().toISOString()
+        };
+        if (!payload.id || !payload.order_id || !payload.target_date || !payload.leave_type) return;
+        const { error } = await supabaseClient
+            .from(SUPERVISE_LEAVE_REQUESTS_TABLE)
+            .upsert([payload], { onConflict: "id" });
+        if (error) {
+            console.warn("写入独立请假记录失败：", error);
+        }
+    } catch (e) {
+        console.warn("写入独立请假记录异常：", e);
+    }
 }
 
 async function openSuperviseCalendarModal(taskId) {
@@ -1333,7 +1369,7 @@ async function openSuperviseCalendarModal(taskId) {
     const calFooter = document.querySelector("#superviseCalendarModal .sv-cal-modal-footer");
     if (calFooter) calFooter.style.display = superviseIsAdmin ? "flex" : "none";
     const isOwner = String(row.staffid || "").trim() === String(currentSuperviseUser?.id || "").trim();
-    const canLeave = String(row.project || "").trim() === "监督早睡早起" && (superviseIsAdmin || isOwner);
+    const canLeave = ["监督早睡", "监督早起", "监督早睡早起"].includes(String(row.project || "").trim()) && (superviseIsAdmin || isOwner);
     if (leaveActions) leaveActions.style.display = canLeave ? "flex" : "none";
     if (input) input.value = "";
     if (preview) {
@@ -1763,8 +1799,10 @@ async function markSuperviseLeaveForDate(type) {
     const all = await getSuperviseOrders();
     const row = all.find((item) => String(item.id) === currentCalendarTaskId);
     if (!row) return;
-    if (String(row.project || "").trim() !== "监督早睡早起") {
-        alert("仅「监督早睡早起」支持请假早睡/早起");
+    const project = String(row.project || "").trim();
+    if (!["监督早睡", "监督早起", "监督早睡早起"].includes(project)) return;
+    if ((project === "监督早睡" && type !== "sleep") || (project === "监督早起" && type !== "wake")) {
+        alert("当前监督项目与请假类型不匹配");
         return;
     }
     const isOwner = String(row.staffid || "").trim() === String(currentSuperviseUser?.id || "").trim();
@@ -1773,42 +1811,66 @@ async function markSuperviseLeaveForDate(type) {
         return;
     }
     if (!superviseIsAdmin) {
-        const leaveLabel = type === "sleep" ? "请假早睡" : "请假早起";
-        const itemsRaw = JSON.parse(localStorage.getItem(HOME_PENDING_STORAGE_KEY) || "[]");
-        const items = Array.isArray(itemsRaw) ? itemsRaw : [];
-        const exists = items.some((x) =>
-            x &&
-            x.done !== true &&
-            String(x.kind || "") === "supervise_leave" &&
-            String(x.payload?.orderId || "") === String(row.id) &&
-            String(x.payload?.date || "") === targetDate &&
-            String(x.payload?.leaveType || "") === String(type)
-        );
-        if (exists) {
-            alert("该请假申请已提交，等待管理员审批");
-            return;
+        row.dailylogs = row.dailylogs && typeof row.dailylogs === "object" ? row.dailylogs : {};
+        const existing = row.dailylogs[targetDate] && typeof row.dailylogs[targetDate] === "object" ? row.dailylogs[targetDate] : {};
+        const leave = getDailyLeaveFlags(existing);
+        if (type === "sleep") {
+            if (leave.sleep) {
+                alert("该日期已请假早睡，无需重复提交");
+                return;
+            }
+            leave.sleep = true;
         }
-        items.push({
-            id: `${Date.now()}-${Math.floor(Math.random() * 1000000)}`,
-            kind: "supervise_leave",
-            type: "请假申请",
-            orderRef: row.orderno || row.id || "-",
-            source: currentSuperviseUser?.name || currentSuperviseUser?.id || "-",
-            desc: `${leaveLabel}｜订单 ${row.orderno || row.id || "-"}｜日期 ${targetDate}`,
-            payload: {
-                kind: "supervise_leave",
-                orderId: String(row.id || ""),
-                date: targetDate,
-                leaveType: String(type)
-            },
-            done: false,
-            createdAt: new Date().toISOString()
+        if (type === "wake") {
+            if (leave.wake) {
+                alert("该日期已请假早起，无需重复提交");
+                return;
+            }
+            leave.wake = true;
+        }
+        const tempRow = {
+            ...row,
+            dailylogs: {
+                ...row.dailylogs,
+                [targetDate]: { ...existing, leave }
+            }
+        };
+        const required = getSuperviseRequiredSlotProjectsByDate(tempRow, targetDate);
+        const slots = normalizeSuperviseDaySlotsArray(existing, required);
+        const allPassed = required.length === 0 ? true : slots.every((s) => s && s.passed === true);
+        row.dailylogs[targetDate] = {
+            ...existing,
+            leave,
+            slots,
+            passed: allPassed,
+            reason: required.length === 0
+                ? "请假：当天早睡与早起均请假"
+                : `请假设置：${leave.sleep ? "早睡请假" : "早睡正常"}，${leave.wake ? "早起请假" : "早起正常"}`
+        };
+        updateSuperviseTaskStatusByLogs(row);
+        await settleSuperviseIfCompleted(row, new Date());
+        const next = generateFixedSerial(all);
+        await saveSuperviseOrders(next);
+        await upsertSuperviseLeaveRequestRecord({
+            id: `${String(row.id || "")}_${targetDate}_${type}`,
+            orderId: String(row.id || ""),
+            orderNo: row.orderno || "",
+            project,
+            targetDate,
+            leaveType: type,
+            leaveEnabled: type === "sleep" ? leave.sleep : leave.wake,
+            applicantId: String(row.staffid || currentSuperviseUser?.id || ""),
+            applicantName: row.supervisor || row.staffname || currentSuperviseUser?.name || "",
+            operatorId: String(currentSuperviseUser?.id || ""),
+            operatorName: currentSuperviseUser?.name || currentSuperviseUser?.id || "",
+            status: "approved"
         });
-        localStorage.setItem(HOME_PENDING_STORAGE_KEY, JSON.stringify(items));
+        renderSuperviseCalendar(currentCalendarTaskId, currentCalendarMonthCursor || new Date());
+        const reqHint = document.getElementById("svDailyRequirementHint");
+        if (reqHint) reqHint.textContent = buildSuperviseDateRequirementHint(row, targetDate);
         const resultMsg = document.getElementById("calendarSuperviseAiResult");
-        if (resultMsg) {
-            resultMsg.textContent = `${leaveLabel}申请已提交，等待管理员审批`;
-        }
+        if (resultMsg) resultMsg.textContent = `请假已提交并同步：${row.dailylogs[targetDate].reason}`;
+        loadSuperviseDashboard();
         return;
     }
     row.dailylogs = row.dailylogs && typeof row.dailylogs === "object" ? row.dailylogs : {};
@@ -1839,6 +1901,20 @@ async function markSuperviseLeaveForDate(type) {
     await settleSuperviseIfCompleted(row, new Date());
     const next = generateFixedSerial(all);
     await saveSuperviseOrders(next);
+    await upsertSuperviseLeaveRequestRecord({
+        id: `${String(row.id || "")}_${targetDate}_${type}`,
+        orderId: String(row.id || ""),
+        orderNo: row.orderno || "",
+        project,
+        targetDate,
+        leaveType: type,
+        leaveEnabled: type === "sleep" ? leave.sleep : leave.wake,
+        applicantId: String(row.staffid || currentSuperviseUser?.id || ""),
+        applicantName: row.supervisor || row.staffname || currentSuperviseUser?.name || "",
+        operatorId: String(currentSuperviseUser?.id || ""),
+        operatorName: currentSuperviseUser?.name || currentSuperviseUser?.id || "",
+        status: "approved"
+    });
     renderSuperviseCalendar(currentCalendarTaskId, currentCalendarMonthCursor || new Date());
     const reqHint = document.getElementById("svDailyRequirementHint");
     if (reqHint) reqHint.textContent = buildSuperviseDateRequirementHint(row, targetDate);

@@ -434,6 +434,11 @@ textarea {
     transition: box-shadow 0.3s var(--ease-out), border-color 0.3s var(--ease-out);
 }
 
+/* 团队管理页：允许纵向滚动继续传递给主容器，避免“无法下拉”与列表显示受限 */
+#page_team .table-wrapper {
+    overflow-y: visible;
+}
+
 .table-wrapper:hover {
     border-color: rgba(45, 212, 191, 0.35);
     box-shadow:
