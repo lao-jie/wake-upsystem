@@ -622,14 +622,18 @@ async function finishOrder(serialnumber, waketime, phone) {
         return;
     }
     targetOrder.status = "已完成";
-    targetOrder.salarysettled = true;
     // 传递当前时间作为完成时间
     const completedTime = new Date();
-    await settleOrderIncomeOnce(targetOrder, completedTime);
+    const settleRes = await settleOrderIncomeOnce(targetOrder, completedTime);
+    targetOrder.salarysettled = settleRes.settled === true || settleRes.reason === "already_settled";
 
     await saveOrders(allOrders);
     loadOrders();
-    showToast("订单已完成，薪资已结算。", "success");
+    if (targetOrder.salarysettled) {
+        showToast("订单已完成，薪资已结算。", "success");
+    } else {
+        showToast("订单已完成，但薪资结算失败，请稍后重试。", "error");
+    }
 }
 
 // 检查过期订单
@@ -641,6 +645,15 @@ async function checkExpiredOrders() {
     let isUpdated = false;
 
     for (const item of allOrders) {
+        if (item.status === "已完成" && !item.salarysettled) {
+            const settleRes = await settleOrderIncomeOnce(item, now);
+            const settled = settleRes.settled === true || settleRes.reason === "already_settled";
+            if (settled) {
+                item.salarysettled = true;
+                isUpdated = true;
+            }
+            continue;
+        }
         if (item.status === "进行中") {
             // 获取订单提交时间（JavaScript 会自动将 UTC 时间转换为本地时间）
             const submitDate = new Date(item.submittime);
@@ -666,9 +679,9 @@ async function checkExpiredOrders() {
             if (submitDateObj < currentDateObj && !item.salarysettled) {
                 console.log('订单是昨天的，需要自动完成');
                 item.status = "已完成";
-                item.salarysettled = true;
                 // 传递当前时间作为完成时间
-                await settleOrderIncomeOnce(item, now);
+                const settleRes = await settleOrderIncomeOnce(item, now);
+                item.salarysettled = settleRes.settled === true || settleRes.reason === "already_settled";
                 isUpdated = true;
             } else if (submitDateObj.getTime() === currentDateObj.getTime()) {
                 // 计算提交日期的午夜（本地时间）
@@ -679,9 +692,9 @@ async function checkExpiredOrders() {
                 if (now >= submitMidnight && !item.salarysettled) {
                     console.log('订单已过午夜，需要自动完成');
                     item.status = "已完成";
-                    item.salarysettled = true;
                     // 传递当前时间作为完成时间
-                    await settleOrderIncomeOnce(item, now);
+                    const settleRes = await settleOrderIncomeOnce(item, now);
+                    item.salarysettled = settleRes.settled === true || settleRes.reason === "already_settled";
                     isUpdated = true;
                 }
             }
@@ -768,6 +781,28 @@ async function addSingleOrder() {
     showToast("上传成功。", "success");
 }
 
+async function rollbackWakeOrderIncomeIfSettled(order, rollbackTime = new Date()) {
+    if (!order) return { rolledBack: false, reason: "no_order" };
+    if (order.salarysettled !== true) return { rolledBack: false, reason: "not_settled" };
+    const staffId = String(order.staffid || "").trim();
+    if (!staffId) return { rolledBack: false, reason: "no_staff" };
+    const amount = parseFloat(order.amount || order.money || 0);
+    if (!Number.isFinite(amount) || amount === 0) return { rolledBack: false, reason: "bad_amount" };
+
+    const ok = await addStaffSalary(staffId, -Math.abs(amount));
+    if (!ok) return { rolledBack: false, reason: "balance_update_failed" };
+
+    await addSalaryDetail(
+        staffId,
+        -Math.abs(amount),
+        "订单收入",
+        "叫醒订单删除，回退已结算收入",
+        rollbackTime,
+        { settleKey: `wake_income_rollback:${order.id ?? `${order.submittime || ""}:${order.phone || ""}:${order.waketime || ""}`}`, orderId: order.id ?? null }
+    );
+    return { rolledBack: true };
+}
+
 // 删除选中订单
 async function deleteSelected() {
     const checkedSerials = Array.from(document.querySelectorAll(".order-checkbox:checked"))
@@ -777,17 +812,27 @@ async function deleteSelected() {
     if (!confirm(`确定删除选中的 ${checkedSerials.length} 条订单吗？`)) return;
 
     let allOrders = await getOrders();
+    const selectedSet = new Set(checkedSerials);
+    const selectedOrders = allOrders.filter((order) => selectedSet.has(order.serialnumber));
 
-    // 检查并处理已结算订单的余额
-    for (const order of allOrders) {
-        if (checkedSerials.includes(order.serialnumber) && order.status === "已完成" && order.salarysettled) {
-            // 从员工余额中减去该订单的金额
-            await addSalary(order.staffid, -(order.amount || order.money), new Date());
+    // 先回退已结算收入，避免删单后账目不一致
+    let rollbackFailedCount = 0;
+    for (const order of selectedOrders) {
+        if (order.status === "已完成" && order.salarysettled === true) {
+            const res = await rollbackWakeOrderIncomeIfSettled(order, new Date());
+            if (res.rolledBack !== true) {
+                rollbackFailedCount += 1;
+                console.error("删除叫醒订单时回退结算失败：", { serialnumber: order.serialnumber, reason: res.reason });
+            }
         }
+    }
+    if (rollbackFailedCount > 0) {
+        alert(`删除已中止：有 ${rollbackFailedCount} 条已结算订单回退失败，请先核对员工余额后重试。`);
+        return;
     }
 
     // 删除订单
-    allOrders = allOrders.filter(item => !checkedSerials.includes(item.serialnumber));
+    allOrders = allOrders.filter(item => !selectedSet.has(item.serialnumber));
     await saveOrders(allOrders);
 
     loadOrders();

@@ -815,6 +815,30 @@ async function settleSuperviseIfCompleted(row, completedTime = new Date()) {
     await settleSuperviseIncomeOnce(row, completedTime);
 }
 
+async function rollbackSuperviseIncomeIfSettled(row, rollbackTime = new Date()) {
+    if (!row) return { rolledBack: false, reason: "no_order" };
+    if (row.salarysettled !== true) return { rolledBack: false, reason: "not_settled" };
+    const staffId = String(row.staffid || "").trim();
+    if (!staffId) return { rolledBack: false, reason: "no_staff" };
+    const amount = parseFloat(row.price || row.amount || row.money || 0);
+    if (!Number.isFinite(amount) || amount === 0) return { rolledBack: false, reason: "bad_amount" };
+
+    const ok = await addStaffSalary(staffId, -Math.abs(amount));
+    if (!ok) return { rolledBack: false, reason: "balance_update_failed" };
+
+    // 记录回退明细，便于余额对账
+    await addSalaryDetail(
+        staffId,
+        -Math.abs(amount),
+        "订单收入",
+        "监督订单删除，回退已结算收入",
+        rollbackTime,
+        { settleKey: `supervise_income_rollback:${row.id ?? `${row.orderno || ""}:${row.submittime || ""}`}` }
+    );
+
+    return { rolledBack: true };
+}
+
 function getExpectedDateSet(row) {
     const set = new Set();
     const start = parseDateOnlyToLocal(row?.startdate) || new Date(row?.submittime || Date.now());
@@ -1122,8 +1146,46 @@ async function deleteSelectedSupervise() {
     const checked = Array.from(document.querySelectorAll(".supervise-checkbox:checked")).map((el) => String(el.value));
     if (checked.length === 0) return alert("请先勾选任务");
     const all = await getSuperviseOrders();
-    const next = generateFixedSerial(all.filter((item) => !checked.includes(String(item.id))));
-    await saveSuperviseOrders(next);
+    const selectedSet = new Set(checked);
+    const selectedOrders = all.filter((item) => selectedSet.has(String(item.id)));
+    const idsToDelete = all
+        .filter((item) => selectedSet.has(String(item.id)))
+        .map((item) => item.id)
+        .filter((id) => id !== undefined && id !== null && String(id).trim() !== "");
+
+    let rollbackFailedCount = 0;
+    for (const row of selectedOrders) {
+        const res = await rollbackSuperviseIncomeIfSettled(row, new Date());
+        if (row?.salarysettled === true && res.rolledBack !== true && res.reason !== "not_settled") {
+            rollbackFailedCount += 1;
+            console.error("删除后回退监督订单结算失败：", { orderId: row?.id, reason: res.reason });
+        }
+    }
+    if (rollbackFailedCount > 0) {
+        alert(`删除已中止：有 ${rollbackFailedCount} 条已结算订单回退失败，请先核对员工余额后重试。`);
+        return;
+    }
+
+    if (idsToDelete.length > 0) {
+        try {
+            const { error } = await supabaseClient
+                .from("supervise_orders")
+                .delete()
+                .in("id", idsToDelete);
+            if (error) {
+                console.error("删除监督订单失败：", error);
+                alert("删除失败，请稍后重试");
+                return;
+            }
+        } catch (e) {
+            console.error("删除监督订单异常：", e);
+            alert("删除失败，请稍后重试");
+            return;
+        }
+    }
+
+    const next = generateFixedSerial(all.filter((item) => !selectedSet.has(String(item.id))));
+    localStorage.setItem("superviseOrders", JSON.stringify(next));
     loadSuperviseDashboard();
 }
 

@@ -54,42 +54,7 @@ export default async function handler(req, res) {
       });
     }
 
-    // 5. 结算员工薪资（逐个处理）
-    const salaryDetails = [];
-    const staffSalaryUpdates = {};
-    let detailIdCounter = 0;
-
-    for (const order of ordersToComplete) {
-处理有员工接单的订单
-      if (order.staffid && !order.salarysettled) {
-        const amount = parseFloat(order.amount || order.money || 0);
-        if (amount > 0) {
-          // 生成结算key（幂等性保护）
-          const settleKey = `auto_close_order:${order.id}:${todayZero.toISOString().split('T')[0]}`;
-          
-          // 准备薪资明细记录（使用更安全的ID生成方式）
-          detailIdCounter++;
-          salaryDetails.push({
-            id: `${Date.now()}-${detailIdCounter}-${Math.floor(Math.random() * 1000)}-${order.id}`,
-            staffid: order.staffid,
-            amount: amount,
-            type: "订单收入",
-            description: "订单完成自动结算",
-            createdat: new Date().toISOString(),
-            settle_key: settleKey,
-            order_id: order.id
-          });
-
-          // 累计员工薪资更新
-          if (!staffSalaryUpdates[order.staffid]) {
-            staffSalaryUpdates[order.staffid] = 0;
-          }
-          staffSalaryUpdates[order.staffid] += amount;
-        }
-      }
-    }
-
-    // 6. 先更新订单状态（确保即使薪资结算失败，订单也不会重复处理）
+    // 5. 先将超时单标记为已完成（不直接标记为已结算）
     const updateResponse = await fetch(
       `${SUPABASE_URL}/rest/v1/wake_orders?status=eq.进行中&submittime=lt.${todayZeroUTC.toISOString()}`,
       {
@@ -102,7 +67,7 @@ export default async function handler(req, res) {
         },
         body: JSON.stringify({ 
           status: "已完成",
-          salarysettled: true 
+          salarysettled: false 
         })
       }
     );
@@ -118,8 +83,31 @@ export default async function handler(req, res) {
 
     const updatedOrders = await updateResponse.json();
 
-    // 7. 插入薪资明细（使用upsert避免重复）
-    if (salaryDetails.length > 0) {
+    // 6. 逐单结算：写明细 -> 加余额 -> 标记该单已结算
+    const settledOrderIds = [];
+    const failedOrderIds = [];
+    let salaryDetailsCount = 0;
+
+    for (const order of updatedOrders) {
+      const staffId = String(order?.staffid || "").trim();
+      const amount = parseFloat(order?.amount || order?.money || 0);
+      if (!staffId || !(amount > 0)) {
+        failedOrderIds.push(order.id);
+        continue;
+      }
+
+      const settleKey = `order_income:${order.id}`;
+      const detailPayload = [{
+        id: `${Date.now()}-${Math.floor(Math.random() * 1000000)}-${order.id}`,
+        staffid: staffId,
+        amount: amount,
+        type: "订单收入",
+        description: "订单完成自动结算",
+        createdat: new Date().toISOString(),
+        settle_key: settleKey,
+        order_id: order.id
+      }];
+
       const detailResponse = await fetch(
         `${SUPABASE_URL}/rest/v1/salary_details`,
         {
@@ -130,18 +118,15 @@ export default async function handler(req, res) {
             "Content-Type": "application/json",
             "Prefer": "resolution=ignore-duplicates"
           },
-          body: JSON.stringify(salaryDetails)
+          body: JSON.stringify(detailPayload)
         }
       );
-
       if (!detailResponse.ok) {
-        console.error("插入薪资明细失败:", await detailResponse.json());
-        // 不影响主流程，继续执行
+        failedOrderIds.push(order.id);
+        continue;
       }
-    }
+      salaryDetailsCount += 1;
 
-    // 8. 更新员工余额（逐个更新）
-    for (const [staffId, amount] of Object.entries(staffSalaryUpdates)) {
       // 先查询当前余额
       const staffQueryResponse = await fetch(
         `${SUPABASE_URL}/rest/v1/staff_list?id=eq.${staffId}&select=salary`,
@@ -156,9 +141,9 @@ export default async function handler(req, res) {
       );
 
       if (staffQueryResponse.ok) {
-        const staffData = awai staffQueryResponse.json();
+        const staffData = await staffQueryResponse.json();
         if (staffData.length > 0) {
-          const currentSalary= parseFloat(staffData[0].salary || 0);
+          const currentSalary = parseFloat(staffData[0].salary || 0);
           const newSalary = parseFloat((currentSalary + amount).toFixed(2));
 
           // 更新员工余额
@@ -176,18 +161,41 @@ export default async function handler(req, res) {
           );
 
           if (!staffUpdateResponse.ok) {
-            console.error(`更新员工 ${staffId} 余额失败:`, await staffUpdateResponse.json());
+            failedOrderIds.push(order.id);
+            continue;
           }
+
+          settledOrderIds.push(order.id);
+          continue;
         }
       }
+      failedOrderIds.push(order.id);
     }
 
-    // 9. 成功返回（包含更新条数，方便验证）
+    if (settledOrderIds.length > 0) {
+      const idsCsv = settledOrderIds.join(",");
+      await fetch(
+        `${SUPABASE_URL}/rest/v1/wake_orders?id=in.(${idsCsv})`,
+        {
+          method: "PATCH",
+          headers: {
+            "apikey": SUPABASE_SERVICE_KEY,
+            "Authorization": `Bearer ${SUPABASE_SERVICE_KEY}`,
+            "Content-Type": "application/json"
+          },
+          body: JSON.stringify({ salarysettled: true })
+        }
+      );
+    }
+
+    // 7. 返回结果（包含成功与失败统计，方便排查）
     return res.status(200).json({
       message: "自动完成订单并结算薪资成功",
       updatedCount: updatedOrders.length,
-      salaryDetailsCount: salaryDetails.length,
-      staffUpdatedCount: Object.keys(staffSalaryUpdates).length,
+      salaryDetailsCount,
+      settledCount: settledOrderIds.length,
+      failedCount: failedOrderIds.length,
+      failedOrderIds,
       todayZero: todayZero.toISOString()
     });
 
