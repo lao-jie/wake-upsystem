@@ -387,6 +387,7 @@ function saveHomePendingItemsToLocal(items) {
 }
 
 async function readHomePendingItems() {
+    const localRows = readHomePendingItemsFromLocal();
     try {
         const { data, error } = await supabaseClient
             .from(HOME_PENDING_DB_TABLE)
@@ -394,11 +395,20 @@ async function readHomePendingItems() {
             .order("created_at", { ascending: false });
         if (error) throw error;
         const rows = Array.isArray(data) ? data.map(mapPendingRowFromDb) : [];
-        saveHomePendingItemsToLocal(rows);
-        return rows;
+        // 云端可用时也合并本地待处理，避免员工端写本地回退后 admin 看不到
+        const map = new Map();
+        rows.forEach((r) => map.set(String(r.id || ""), r));
+        localRows.forEach((r) => {
+            const id = String(r?.id || "");
+            if (!id) return;
+            if (!map.has(id)) map.set(id, r);
+        });
+        const merged = Array.from(map.values());
+        saveHomePendingItemsToLocal(merged);
+        return merged;
     } catch (error) {
         console.warn("读取待处理事项表失败，回退本地存储：", error);
-        return readHomePendingItemsFromLocal();
+        return localRows;
     }
 }
 
@@ -629,11 +639,17 @@ async function applySuperviseLeaveRequest(item) {
         ? row.dailylogs[targetDate]
         : {};
     const leave = existing.leave && typeof existing.leave === "object" ? { ...existing.leave } : {};
+    const leavepending = existing.leavepending && typeof existing.leavepending === "object"
+        ? { ...existing.leavepending }
+        : {};
     if (leaveType === "sleep") leave.sleep = true;
     if (leaveType === "wake") leave.wake = true;
+    if (leaveType === "sleep") leavepending.sleep = false;
+    if (leaveType === "wake") leavepending.wake = false;
     row.dailylogs[targetDate] = {
         ...existing,
         leave,
+        leavepending,
         reason: `${leave.sleep ? "早睡请假" : "早睡正常"}，${leave.wake ? "早起请假" : "早起正常"}（管理员审批）`
     };
     const patchedNote = buildSuperviseOrderNote(row);
@@ -655,6 +671,45 @@ async function applySuperviseLeaveRequest(item) {
     }
 }
 
+async function clearSuperviseLeavePendingMarker(item) {
+    const payload = item?.payload || {};
+    if (String(payload.kind || "") !== "supervise_leave") return;
+    const orderId = String(payload.orderId || "").trim();
+    const targetDate = String(payload.date || "").trim();
+    const leaveType = String(payload.leaveType || "").trim();
+    if (!orderId || !/^\d{4}-\d{2}-\d{2}$/.test(targetDate)) return;
+    if (leaveType !== "sleep" && leaveType !== "wake") return;
+
+    const { data, error } = await supabaseClient
+        .from("supervise_orders")
+        .select("*")
+        .eq("id", orderId)
+        .single();
+    if (error || !data) return;
+
+    const row = parseSuperviseOrderMeta(data);
+    row.dailylogs = row.dailylogs && typeof row.dailylogs === "object" ? row.dailylogs : {};
+    const existing = row.dailylogs[targetDate] && typeof row.dailylogs[targetDate] === "object"
+        ? row.dailylogs[targetDate]
+        : {};
+    const leavepending = existing.leavepending && typeof existing.leavepending === "object"
+        ? { ...existing.leavepending }
+        : {};
+    if (leaveType === "sleep") leavepending.sleep = false;
+    if (leaveType === "wake") leavepending.wake = false;
+    const hasAnyPending = leavepending.sleep === true || leavepending.wake === true;
+    row.dailylogs[targetDate] = {
+        ...existing,
+        leavepending,
+        reason: hasAnyPending ? "请假申请中（待管理员审批）" : ""
+    };
+    const patchedNote = buildSuperviseOrderNote(row);
+    await supabaseClient
+        .from("supervise_orders")
+        .update({ note: patchedNote })
+        .eq("id", orderId);
+}
+
 async function approveHomePendingItem(id) {
     if (!isAdmin) return;
     const items = await readHomePendingItems();
@@ -663,6 +718,20 @@ async function approveHomePendingItem(id) {
     try {
         if (String(row.kind || "") === "supervise_leave") {
             await applySuperviseLeaveRequest(row);
+            const p = row?.payload || {};
+            const leaveRequestId = String(p.leaveRequestId || row.id || "");
+            if (leaveRequestId) {
+                await supabaseClient
+                    .from(SUPERVISE_LEAVE_REQUESTS_TABLE)
+                    .upsert([{
+                        id: leaveRequestId,
+                        status: "approved",
+                        leave_enabled: true,
+                        operator_id: String(user?.id || "admin"),
+                        operator_name: String(user?.name || user?.id || "管理员"),
+                        updated_at: new Date().toISOString()
+                    }], { onConflict: "id" });
+            }
         }
         row.done = true;
         row.decision = "approved";
@@ -689,6 +758,31 @@ async function rejectHomePendingItem(id) {
     row.decision = "rejected";
     row.processedAt = new Date().toISOString();
     row.processedBy = user?.id || "admin";
+    if (String(row.kind || "") === "supervise_leave") {
+        const p = row?.payload || {};
+        const leaveRequestId = String(p.leaveRequestId || row.id || "");
+        try {
+            await clearSuperviseLeavePendingMarker(row);
+        } catch (e) {
+            console.warn("清理请假待审批标识失败：", e);
+        }
+        if (leaveRequestId) {
+            try {
+                await supabaseClient
+                    .from(SUPERVISE_LEAVE_REQUESTS_TABLE)
+                    .upsert([{
+                        id: leaveRequestId,
+                        status: "rejected",
+                        leave_enabled: false,
+                        operator_id: String(user?.id || "admin"),
+                        operator_name: String(user?.name || user?.id || "管理员"),
+                        updated_at: new Date().toISOString()
+                    }], { onConflict: "id" });
+            } catch (e) {
+                console.warn("回写请假驳回状态失败：", e);
+            }
+        }
+    }
     try {
         await upsertHomePendingItem(row);
     } catch (e) {
