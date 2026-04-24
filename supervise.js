@@ -552,6 +552,12 @@ function getDailyLeavePendingFlags(log) {
     };
 }
 
+function isApprovedLeaveDay(log) {
+    if (!log || typeof log !== "object") return false;
+    const leaveFlags = getDailyLeaveFlags(log);
+    return leaveFlags.sleep || leaveFlags.wake;
+}
+
 /** 监督早睡早起：按「监督早睡」「监督早起」分别统计已通过次数（与时长天数 N 对应，可跨自然日）。 */
 function countPassedSuperviseSlotLabel(row, label) {
     if (String(row?.project || "").trim() !== "监督早睡早起") return 0;
@@ -753,7 +759,12 @@ function isPastExpectedDateWithoutLog(row, dateKey, log) {
 
 function getCompletedDays(row) {
     const logs = getDailyLogs(row);
-    return Object.entries(logs).filter(([dateKey, entry]) => entry && isDailyLogFullyPassed(entry, row?.project || "", row, dateKey)).length;
+    return Object.entries(logs).filter(([dateKey, entry]) => {
+        if (!entry) return false;
+        // 请假只表示当天免提交，不计入“已完成次数”
+        if (isApprovedLeaveDay(entry)) return false;
+        return isDailyLogFullyPassed(entry, row?.project || "", row, dateKey);
+    }).length;
 }
 
 function getTodayDailyStateText(row) {
