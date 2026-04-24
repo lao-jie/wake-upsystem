@@ -66,6 +66,8 @@ let parsedSuperviseOrders = [];
 const HOME_PENDING_STORAGE_KEY = "homePendingOrders";
 const SUPERVISE_META_PREFIX = "[SVMETA]";
 const SUPERVISE_LEAVE_REQUESTS_TABLE = "supervise_leave_requests";
+const HOME_PENDING_DB_TABLE = "home_pending_items";
+const LEAVE_REAPPLY_COOLDOWN_MINUTES = 60;
 let customDurationDays = 1;
 let lastDurationValue = "1次";
 let currentCalendarTaskId = "";
@@ -542,6 +544,14 @@ function getDailyLeaveFlags(log) {
     };
 }
 
+function getDailyLeavePendingFlags(log) {
+    const pending = log?.leavepending && typeof log.leavepending === "object" ? log.leavepending : {};
+    return {
+        sleep: pending.sleep === true,
+        wake: pending.wake === true
+    };
+}
+
 /** 监督早睡早起：按「监督早睡」「监督早起」分别统计已通过次数（与时长天数 N 对应，可跨自然日）。 */
 function countPassedSuperviseSlotLabel(row, label) {
     if (String(row?.project || "").trim() !== "监督早睡早起") return 0;
@@ -687,6 +697,12 @@ function isDailyLogFullyPassed(log, project, row = null, dateKey = "") {
 }
 
 function getDayCalendarMarkState(log, project, row = null, dateKey = "") {
+    if (log && typeof log === "object") {
+        const pendingFlags = getDailyLeavePendingFlags(log);
+        if (pendingFlags.sleep || pendingFlags.wake) return "leave_pending";
+        const leaveFlags = getDailyLeaveFlags(log);
+        if (leaveFlags.sleep || leaveFlags.wake) return "leave_approved";
+    }
     if (row && String(row?.project || "").trim() === "监督早睡早起" && log && typeof log === "object") {
         // 对于早睡早起组合单，若当日记录已被写入为完成，优先显示完成（避免请假单子项场景被误标为部分完成）
         if (log.passed === true) return "done";
@@ -748,6 +764,8 @@ function getTodayDailyStateText(row) {
     if (!todayLog) return "待提交";
     if (isDailyLogFullyPassed(todayLog, project, row, today)) return "已完成";
     const st = getDayCalendarMarkState(todayLog, project, row, today);
+    if (st === "leave_pending") return "请假待审批";
+    if (st === "leave_approved") return "已请假";
     if (st === "partial") return "待补图";
     if (st === "failed") return "未完成";
     return "待提交";
@@ -1317,6 +1335,10 @@ function renderSuperviseCalendar(taskId, targetMonthDate) {
             const daySt = log ? getDayCalendarMarkState(log, rowProject, row, key) : "none";
             if (daySt === "done") {
                 mark = "✅";
+            } else if (daySt === "leave_pending") {
+                mark = "🕒";
+            } else if (daySt === "leave_approved") {
+                mark = "😴";
             } else if (isPastExpectedDateWithoutLog(row, key, log)) {
                 mark = "❌";
             } else if (daySt === "failed") {
@@ -1365,6 +1387,11 @@ function setSuperviseScreenshotSpecHint(project) {
 }
 
 function buildSuperviseDateRequirementHint(row, dateKey) {
+    const dayLog = row?.dailylogs && typeof row.dailylogs === "object" ? row.dailylogs[dateKey] : null;
+    const pendingFlags = getDailyLeavePendingFlags(dayLog);
+    if (pendingFlags.sleep || pendingFlags.wake) {
+        return `当前日期请假申请中：${pendingFlags.sleep ? "早睡" : ""}${pendingFlags.sleep && pendingFlags.wake ? "+" : ""}${pendingFlags.wake ? "早起" : ""}（待管理员审批）`;
+    }
     const requiredProjects = getSuperviseRequiredSlotProjectsByDate(row, dateKey);
     if (requiredProjects.length === 0) {
         return "当前日期已请假（无需提交截图）";
@@ -1398,6 +1425,123 @@ async function upsertSuperviseLeaveRequestRecord(params) {
         }
     } catch (e) {
         console.warn("写入独立请假记录异常：", e);
+    }
+}
+
+function readHomePendingItemsFromLocalInSupervise() {
+    try {
+        const arr = JSON.parse(localStorage.getItem(HOME_PENDING_STORAGE_KEY) || "[]");
+        return Array.isArray(arr) ? arr : [];
+    } catch (_) {
+        return [];
+    }
+}
+
+function saveHomePendingItemsToLocalInSupervise(items) {
+    localStorage.setItem(HOME_PENDING_STORAGE_KEY, JSON.stringify(items || []));
+}
+
+async function upsertHomePendingForSuperviseLeave(params) {
+    const payload = {
+        id: String(params?.id || `${Date.now()}-${Math.floor(Math.random() * 1000000)}`),
+        kind: "supervise_leave",
+        type: "请假申请",
+        order_ref: String(params?.orderRef || ""),
+        source: String(params?.source || ""),
+        description: String(params?.description || ""),
+        payload: params?.payload && typeof params.payload === "object" ? params.payload : {},
+        done: false,
+        decision: "",
+        created_at: new Date().toISOString(),
+        processed_at: null,
+        processed_by: null
+    };
+    try {
+        const { error } = await supabaseClient
+            .from(HOME_PENDING_DB_TABLE)
+            .upsert([payload], { onConflict: "id" });
+        if (error) throw error;
+    } catch (e) {
+        const items = readHomePendingItemsFromLocalInSupervise();
+        const idx = items.findIndex((x) => String(x?.id || "") === payload.id);
+        const localRow = {
+            id: payload.id,
+            kind: payload.kind,
+            type: payload.type,
+            orderRef: payload.order_ref,
+            source: payload.source,
+            desc: payload.description,
+            payload: payload.payload,
+            done: payload.done,
+            decision: payload.decision,
+            createdAt: payload.created_at,
+            processedAt: payload.processed_at,
+            processedBy: payload.processed_by
+        };
+        if (idx >= 0) items[idx] = { ...items[idx], ...localRow };
+        else items.push(localRow);
+        saveHomePendingItemsToLocalInSupervise(items);
+    }
+}
+
+function formatCooldownRemainText(ms) {
+    const totalMinutes = Math.max(1, Math.ceil(ms / 60000));
+    if (totalMinutes >= 60) {
+        const h = Math.floor(totalMinutes / 60);
+        const m = totalMinutes % 60;
+        return m > 0 ? `${h}小时${m}分钟` : `${h}小时`;
+    }
+    return `${totalMinutes}分钟`;
+}
+
+async function hasExistingLeaveRequestConflict(leaveRequestId) {
+    const id = String(leaveRequestId || "").trim();
+    if (!id) return { blocked: false, reason: "" };
+    try {
+        const { data, error } = await supabaseClient
+            .from(SUPERVISE_LEAVE_REQUESTS_TABLE)
+            .select("id,status,leave_enabled,updated_at")
+            .eq("id", id)
+            .maybeSingle();
+        if (error) throw error;
+        if (!data) return { blocked: false, reason: "" };
+        const st = String(data.status || "").trim().toLowerCase();
+        // 待审批 / 已通过（或已生效）都视为冲突，不允许重复提单
+        if (st === "pending" || st === "approved" || data.leave_enabled === true) {
+            return {
+                blocked: true,
+                reason: "该日期该类型请假已提交（待审批）或已通过，无需重复申请"
+            };
+        }
+        if (st === "rejected") {
+            const updatedAtMs = new Date(String(data.updated_at || "")).getTime();
+            if (Number.isFinite(updatedAtMs)) {
+                const cooldownMs = LEAVE_REAPPLY_COOLDOWN_MINUTES * 60 * 1000;
+                const remainMs = updatedAtMs + cooldownMs - Date.now();
+                if (remainMs > 0) {
+                    return {
+                        blocked: true,
+                        reason: `该请假申请刚被驳回，请 ${formatCooldownRemainText(remainMs)} 后再提交`
+                    };
+                }
+            }
+        }
+        return { blocked: false, reason: "" };
+    } catch (e) {
+        // 云端失败时回退本地判断，尽量防重
+        const local = readHomePendingItemsFromLocalInSupervise();
+        const hasConflict = local.some((x) => {
+            const localId = String(x?.id || "").trim();
+            const done = x?.done === true;
+            const decision = String(x?.decision || "").trim().toLowerCase();
+            if (localId !== id) return false;
+            if (!done) return true; // 本地待处理
+            return decision === "approved"; // 本地已同意
+        });
+        return {
+            blocked: hasConflict,
+            reason: hasConflict ? "该日期该类型请假已提交（待审批）或已通过，无需重复申请" : ""
+        };
     }
 }
 
@@ -1877,66 +2021,62 @@ async function markSuperviseLeaveForDate(type) {
         return;
     }
     if (!superviseIsAdmin) {
+        const leaveRequestId = `${String(row.id || "")}_${targetDate}_${type}`;
+        const conflict = await hasExistingLeaveRequestConflict(leaveRequestId);
+        if (conflict.blocked) {
+            alert(conflict.reason || "请假申请暂不可重复提交");
+            return;
+        }
         row.dailylogs = row.dailylogs && typeof row.dailylogs === "object" ? row.dailylogs : {};
         const existing = row.dailylogs[targetDate] && typeof row.dailylogs[targetDate] === "object" ? row.dailylogs[targetDate] : {};
-        const leave = getDailyLeaveFlags(existing);
-        if (type === "sleep") {
-            if (leave.sleep) {
-                alert("该日期已请假早睡，无需重复提交");
-                return;
-            }
-            leave.sleep = true;
-        }
-        if (type === "wake") {
-            if (leave.wake) {
-                alert("该日期已请假早起，无需重复提交");
-                return;
-            }
-            leave.wake = true;
-        }
-        const tempRow = {
-            ...row,
-            dailylogs: {
-                ...row.dailylogs,
-                [targetDate]: { ...existing, leave }
-            }
-        };
-        const required = getSuperviseRequiredSlotProjectsByDate(tempRow, targetDate);
-        const slots = normalizeSuperviseDaySlotsArray(existing, required);
-        const allPassed = required.length === 0 ? true : slots.every((s) => s && s.passed === true);
+        const leavePending = getDailyLeavePendingFlags(existing);
+        if (type === "sleep") leavePending.sleep = true;
+        if (type === "wake") leavePending.wake = true;
         row.dailylogs[targetDate] = {
             ...existing,
-            leave,
-            slots,
-            passed: allPassed,
-            reason: required.length === 0
-                ? "请假：当天早睡与早起均请假"
-                : `请假设置：${leave.sleep ? "早睡请假" : "早睡正常"}，${leave.wake ? "早起请假" : "早起正常"}`
+            leavepending: leavePending,
+            // 员工提交请假仅进入待审批，不直接改变生效请假
+            leave: getDailyLeaveFlags(existing),
+            passed: false,
+            reason: `请假申请中：${leavePending.sleep ? "早睡" : ""}${leavePending.sleep && leavePending.wake ? "+" : ""}${leavePending.wake ? "早起" : ""}（待管理员审批）`
         };
-        updateSuperviseTaskStatusByLogs(row);
-        await settleSuperviseIfCompleted(row, new Date());
         const next = generateFixedSerial(all);
         await saveSuperviseOrders(next);
         await upsertSuperviseLeaveRequestRecord({
-            id: `${String(row.id || "")}_${targetDate}_${type}`,
+            id: leaveRequestId,
             orderId: String(row.id || ""),
             orderNo: row.orderno || "",
             project,
             targetDate,
             leaveType: type,
-            leaveEnabled: type === "sleep" ? leave.sleep : leave.wake,
+            leaveEnabled: false,
             applicantId: String(row.staffid || currentSuperviseUser?.id || ""),
             applicantName: row.supervisor || row.staffname || currentSuperviseUser?.name || "",
-            operatorId: String(currentSuperviseUser?.id || ""),
-            operatorName: currentSuperviseUser?.name || currentSuperviseUser?.id || "",
-            status: "approved"
+            operatorId: "",
+            operatorName: "",
+            status: "pending"
+        });
+        await upsertHomePendingForSuperviseLeave({
+            id: leaveRequestId,
+            orderRef: row.orderno || String(row.id || ""),
+            source: row.supervisor || row.staffname || currentSuperviseUser?.name || currentSuperviseUser?.id || "",
+            description: `监督请假申请：${row.orderno || row.id || "-"}｜${targetDate}｜${type === "sleep" ? "早睡" : "早起"}`,
+            payload: {
+                kind: "supervise_leave",
+                leaveRequestId,
+                orderId: String(row.id || ""),
+                orderNo: row.orderno || "",
+                date: targetDate,
+                leaveType: type,
+                project: project,
+                applicantId: String(row.staffid || currentSuperviseUser?.id || ""),
+                applicantName: row.supervisor || row.staffname || currentSuperviseUser?.name || ""
+            }
         });
         renderSuperviseCalendar(currentCalendarTaskId, currentCalendarMonthCursor || new Date());
-        const reqHint = document.getElementById("svDailyRequirementHint");
-        if (reqHint) reqHint.textContent = buildSuperviseDateRequirementHint(row, targetDate);
-        const resultMsg = document.getElementById("calendarSuperviseAiResult");
-        if (resultMsg) resultMsg.textContent = `请假已提交并同步：${row.dailylogs[targetDate].reason}`;
         loadSuperviseDashboard();
+        const resultMsg = document.getElementById("calendarSuperviseAiResult");
+        if (resultMsg) resultMsg.textContent = "请假申请已提交，等待管理员审批。";
         return;
     }
     row.dailylogs = row.dailylogs && typeof row.dailylogs === "object" ? row.dailylogs : {};
@@ -1957,6 +2097,7 @@ async function markSuperviseLeaveForDate(type) {
     row.dailylogs[targetDate] = {
         ...existing,
         leave,
+        leavepending: { sleep: false, wake: false },
         slots,
         passed: allPassed,
         reason: required.length === 0
