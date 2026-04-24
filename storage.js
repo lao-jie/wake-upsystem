@@ -382,9 +382,10 @@ async function insertSalaryDetail(detail) {
 
 // 添加余额变动记录（返回 inserted，用于幂等结算判断）
 async function addSalaryDetail(staffid, amount, type, description, completedTime = new Date(), opts = {}) {
+    const normalizedStaffId = String(staffid || "").trim();
     const newDetail = {
         id: (opts.id || `${Date.now()}-${Math.floor(Math.random() * 1000000)}`),
-        staffid,
+        staffid: normalizedStaffId,
         amount,
         type, // 类型：订单收入、奖励、惩罚、结算
         description,
@@ -409,11 +410,13 @@ async function addSalaryDetail(staffid, amount, type, description, completedTime
 
 // 原子性更好的余额更新：只更新单个员工行（避免全表 delete/insert）
 async function addStaffSalary(staffId, delta) {
+    const normalizedStaffId = String(staffId || "").trim();
+    if (!normalizedStaffId) return false;
     try {
         const { data, error } = await supabaseClient
             .from('staff_list')
             .select('id, salary')
-            .eq('id', staffId)
+            .eq('id', normalizedStaffId)
             .single();
         if (error || !data) {
             console.error("读取员工余额失败：", error);
@@ -423,7 +426,7 @@ async function addStaffSalary(staffId, delta) {
         const { error: updateError } = await supabaseClient
             .from('staff_list')
             .update({ salary: nextSalary })
-            .eq('id', staffId);
+            .eq('id', normalizedStaffId);
         if (updateError) {
             console.error("更新员工余额失败：", updateError);
             return false;
@@ -431,7 +434,7 @@ async function addStaffSalary(staffId, delta) {
 
         // 同步本地 staffList 缓存
         const staffList = JSON.parse(localStorage.getItem("staffList") || "[]");
-        const idx = staffList.findIndex(s => s.id === staffId);
+        const idx = staffList.findIndex(s => String(s.id || "").trim() === normalizedStaffId);
         if (idx !== -1) {
             staffList[idx].salary = nextSalary;
             localStorage.setItem("staffList", JSON.stringify(staffList));

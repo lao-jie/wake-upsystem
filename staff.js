@@ -525,7 +525,8 @@ async function openSalaryDetailModal(staffId) {
 
     // 获取余额明细
     const details = await getSalaryDetails();
-    const staffDetails = details.filter(d => d.staffid === staffId);
+    const normalizedStaffId = String(staffId || "").trim();
+    const staffDetails = details.filter((d) => String(d?.staffid || "").trim() === normalizedStaffId);
 
     // 渲染明细表格
     let html = "";
