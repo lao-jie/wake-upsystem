@@ -1361,7 +1361,7 @@ function setSuperviseScreenshotSpecHint(project) {
         return;
     }
     el.textContent =
-        "规范：聊天截屏须带到顶栏（客户/会话名旁可见订单号与学员姓名，与本单一致）；对话最下方最后一条正文为「当天日期+监督项目+已完成」（日期须与提交日同一天）；且该条发送时间的日期须为目标日。";
+        "规范：聊天截屏须带到顶栏（客户/会话名旁可见订单号后四位+员工姓名，与本单一致）；对话最下方最后一条正文为「当天日期+监督项目+已完成」（日期须与提交日同一天）；且该条发送时间的日期须为目标日。";
 }
 
 function buildSuperviseDateRequirementHint(row, dateKey) {
@@ -1500,11 +1500,14 @@ function extractJsonObjectFromAiContent(raw) {
 
 function buildSuperviseChatScreenshotUserPrompt(row, targetDate, projectOverride) {
     const orderno = String(row?.orderno || "").trim();
-    const studentname = String(row?.studentname || "").trim();
+    const tail4 = orderno ? orderno.slice(-4) : "";
+    const employeeName = String(
+        row?.supervisor || row?.staffname || currentSuperviseUser?.name || currentSuperviseUser?.id || ""
+    ).trim();
     const project = String(projectOverride != null ? projectOverride : row?.project || "").trim();
-    const studentRule = studentname
-        ? `截图最上方标题区/客户信息区须能同时识别到：订单号「${orderno}」与学员姓名「${studentname}」（与系统登记一致；昵称为姓名子串或明显同一人可算一致）。`
-        : `截图最上方须能识别到订单号「${orderno}」；学员姓名系统未登记，则要求顶部有清晰的聊天对象/客户名称且与订单号同框出现即可。`;
+    const headerRule = employeeName
+        ? `截图最上方标题区/客户信息区须能同时识别到：订单号后四位「${tail4 || "（缺）"}」与员工姓名「${employeeName}」（与系统登记一致；昵称为姓名子串或明显同一人可算一致）。`
+        : `截图最上方须能识别到订单号后四位「${tail4 || "（缺）"}」；员工姓名系统未登记时，此项按不通过处理。`;
     const exampleDate = targetDate.replace(/^(\d{4})-(\d{2})-(\d{2})$/, (_, y, mo, da) => {
         const m = String(Number(mo));
         const d = String(Number(da));
@@ -1515,12 +1518,13 @@ function buildSuperviseChatScreenshotUserPrompt(row, targetDate, projectOverride
     const dotStyle = dm ? `${dm[1]}.${Number(dm[2])}.${Number(dm[3])}` : targetDate;
     return `【系统登记（用于比对）】
 - 订单号：${orderno || "（缺）"}
-- 学员姓名：${studentname || "（未登记）"}
+- 订单号后四位：${tail4 || "（缺）"}
+- 员工姓名：${employeeName || "（未登记）"}
 - 监督项目：${project || "（缺）"}
 - 目标自然日（必须通过截图证明是这一天的完成记录）：${targetDate}
 
 【聊天截图硬性要求】
-1）界面最上方：${studentRule}
+1）界面最上方：${headerRule}
 2）聊天区域「最后一条可见消息」（一般在对话最底部、常显示在右侧气泡）：正文须同时满足：
    - 含有与「${targetDate}」同一公历日的日期（允许 ${targetDate}、${sloppyDash}、${dotStyle}、${exampleDate} 等等价写法，但年月日必须与目标日完全一致）；
    - 含有监督项目「${project}」原文；
@@ -1531,7 +1535,7 @@ function buildSuperviseChatScreenshotUserPrompt(row, targetDate, projectOverride
 【输出】仅输出一个 JSON 对象，字段如下（不要其它文字）：
 {
   "header_order_visible_and_matches": true或false,
-  "header_student_visible_and_matches": true或false,
+  "header_staff_visible_and_matches": true或false,
   "last_message_text_ok": true或false,
   "last_message_time_same_day": true或false,
   "reason": "一句话说明判定依据；不通过时写明缺哪一项或读到了什么"
@@ -1547,17 +1551,17 @@ function aiJsonBool(value) {
 
 function evaluateSuperviseScreenshotChecks(parsed) {
     const hOrder = aiJsonBool(parsed?.header_order_visible_and_matches);
-    const hStudent = aiJsonBool(parsed?.header_student_visible_and_matches);
+    const hStaff = aiJsonBool(parsed?.header_staff_visible_and_matches ?? parsed?.header_student_visible_and_matches);
     const msgOk = aiJsonBool(parsed?.last_message_text_ok);
     const timeOk = aiJsonBool(parsed?.last_message_time_same_day);
-    const passed = hOrder && hStudent && msgOk && timeOk;
+    const passed = hOrder && hStaff && msgOk && timeOk;
     const aiReason = String(parsed?.reason || "").trim();
     if (passed) {
         return { passed, reason: aiReason || "四项核对均通过" };
     }
     const parts = [];
-    if (!hOrder) parts.push("顶部订单号与系统不一致或未清晰识别");
-    if (!hStudent) parts.push("顶部学员/客户名与系统不一致或未清晰识别");
+    if (!hOrder) parts.push("顶部订单号后四位与系统不一致或未清晰识别");
+    if (!hStaff) parts.push("顶部员工名与系统不一致或未清晰识别");
     if (!msgOk) parts.push("最后一条消息未同时满足「当天日期+监督项目+已完成」");
     if (!timeOk) parts.push("最后一条消息发送时间无法确认为目标日当天");
     const merged = [parts.join("；"), aiReason].filter(Boolean).join(" — ");

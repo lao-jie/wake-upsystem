@@ -293,6 +293,7 @@ async function updateStaffProfileById(staffId, patch) {
 
 // 余额明细存储
 async function getSalaryDetails() {
+    const localDetails = JSON.parse(localStorage.getItem("salaryDetails") || "[]");
     try {
         const { data, error } = await supabaseClient
             .from('salary_details')
@@ -300,16 +301,32 @@ async function getSalaryDetails() {
             .order('createdat', { ascending: false });
 
         if (!error && data) {
-            // 同步到本地存储
-            localStorage.setItem("salaryDetails", JSON.stringify(data));
-            return data;
+            // 云端成功时，与本地兜底明细合并，避免“余额已变但明细看不到”
+            const merged = [...data];
+            const cloudKeySet = new Set(
+                data.map((d) => `${d.id || ""}|${d.staffid || ""}|${d.createdat || ""}|${d.amount || 0}|${d.type || ""}|${d.description || ""}`)
+            );
+            localDetails.forEach((d) => {
+                const key = `${d.id || ""}|${d.staffid || ""}|${d.createdat || ""}|${d.amount || 0}|${d.type || ""}|${d.description || ""}`;
+                if (!cloudKeySet.has(key)) {
+                    merged.push(d);
+                    cloudKeySet.add(key);
+                }
+            });
+            merged.sort((a, b) => {
+                const ta = new Date(a.createdat || 0).getTime() || 0;
+                const tb = new Date(b.createdat || 0).getTime() || 0;
+                return tb - ta;
+            });
+            localStorage.setItem("salaryDetails", JSON.stringify(merged));
+            return merged;
         } else if (error) {
             console.error("Supabase 读取余额明细失败：", error);
         }
     } catch (e) {
         console.error("Supabase 读取余额明细异常：", e);
     }
-    return JSON.parse(localStorage.getItem("salaryDetails") || "[]");
+    return localDetails;
 }
 
 // 原先的 saveSalaryDetails 会“全表删除再插入”，会引发并发重复/覆盖问题。
@@ -329,7 +346,20 @@ async function insertSalaryDetail(detail) {
             order_id: detail.order_id || null
         };
 
-        const { error } = await supabaseClient.from('salary_details').insert(payload);
+        let { error } = await supabaseClient.from('salary_details').insert(payload);
+        // 兼容旧表结构：若无 settle_key / order_id 字段，自动降级重试
+        if (error && /settle_key|order_id|column/i.test(String(error.message || ""))) {
+            const fallbackPayload = {
+                id: payload.id,
+                staffid: payload.staffid,
+                amount: payload.amount,
+                type: payload.type,
+                description: payload.description,
+                createdat: payload.createdat
+            };
+            const retry = await supabaseClient.from('salary_details').insert(fallbackPayload);
+            error = retry.error || null;
+        }
         if (error) {
             // 23505 = unique_violation（用于 settle_key 唯一约束）
             if (error.code === '23505') {
