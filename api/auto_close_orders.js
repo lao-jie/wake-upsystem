@@ -97,6 +97,26 @@ export default async function handler(req, res) {
       }
 
       const settleKey = `order_income:${order.id}`;
+      // 先查是否已结算过，避免重复加余额
+      const existedResp = await fetch(
+        `${SUPABASE_URL}/rest/v1/salary_details?settle_key=eq.${encodeURIComponent(settleKey)}&select=id&limit=1`,
+        {
+          method: "GET",
+          headers: {
+            "apikey": SUPABASE_SERVICE_KEY,
+            "Authorization": `Bearer ${SUPABASE_SERVICE_KEY}`,
+            "Content-Type": "application/json"
+          }
+        }
+      );
+      if (existedResp.ok) {
+        const existed = await existedResp.json();
+        if (Array.isArray(existed) && existed.length > 0) {
+          settledOrderIds.push(order.id);
+          continue;
+        }
+      }
+
       const detailPayload = [{
         id: `${Date.now()}-${Math.floor(Math.random() * 1000000)}-${order.id}`,
         staffid: staffId,
@@ -116,13 +136,19 @@ export default async function handler(req, res) {
             "apikey": SUPABASE_SERVICE_KEY,
             "Authorization": `Bearer ${SUPABASE_SERVICE_KEY}`,
             "Content-Type": "application/json",
-            "Prefer": "resolution=ignore-duplicates"
+            "Prefer": "return=representation"
           },
           body: JSON.stringify(detailPayload)
         }
       );
       if (!detailResponse.ok) {
         failedOrderIds.push(order.id);
+        continue;
+      }
+      const insertedRows = await detailResponse.json();
+      if (!Array.isArray(insertedRows) || insertedRows.length === 0) {
+        // 未插入新明细（例如并发下已存在），不重复加余额
+        settledOrderIds.push(order.id);
         continue;
       }
       salaryDetailsCount += 1;
