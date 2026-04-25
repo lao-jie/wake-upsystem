@@ -7,7 +7,6 @@ function perfLog(...args) {
 
 let latestLoadOrdersToken = 0;
 let renderFrameId = null;
-let lastSavedOrdersSignature = "";
 
 function formatWakeTimeDisplay(waketime) {
     if (typeof formatWakeTimeForDisplay === "function") {
@@ -32,6 +31,20 @@ function buildOrdersSignature(orders) {
         o.salarysettled ? "1" : "0",
         o.submittime || ""
     ].join("|")).join("||");
+}
+
+function getOrderIdentity(order) {
+    if (order && order.id !== undefined && order.id !== null && String(order.id).trim() !== "") {
+        return `id:${String(order.id).trim()}`;
+    }
+    const submit = String(order?.submittime || "").trim();
+    const phone = String(order?.phone || "").trim();
+    const wake = String(order?.waketime || "").trim();
+    return `fallback:${submit}|${phone}|${wake}`;
+}
+
+function escapeJsSingleQuote(value) {
+    return String(value || "").replace(/\\/g, "\\\\").replace(/'/g, "\\'");
 }
 
 async function ensureStaffContactAndAlipayBound() {
@@ -88,18 +101,8 @@ async function loadOrders() {
         // 生成序号
         const ordersWithSerial = generateFixedSerial(allOrders);
 
-        // 只有当订单发生变化时才保存到数据库（避免每次都做重序列化比对）
-        if (!lastSavedOrdersSignature) {
-            lastSavedOrdersSignature = localStorage.getItem("wakeOrdersSignature") || "";
-        }
-        const currentSignature = buildOrdersSignature(ordersWithSerial);
-        const hasChanges = currentSignature !== lastSavedOrdersSignature;
-
-        if (hasChanges) {
-            await saveOrders(ordersWithSerial);
-            lastSavedOrdersSignature = currentSignature;
-            localStorage.setItem("wakeOrdersSignature", currentSignature);
-        }
+        // load 只负责读取和渲染，不在这里回写数据库，避免“读触发全量写”造成卡顿与并发覆盖
+        localStorage.setItem("wakeOrdersSignature", buildOrdersSignature(ordersWithSerial));
 
         let displayOrders = [];
         const now = new Date();
@@ -202,7 +205,8 @@ function renderOrders(orders) {
 
                             let actionHtml = "";
                             if (isStaff && item.status === "待接单") {
-                                actionHtml = `<button class="warning" onclick="takeOrder(${item.serialnumber}, '${item.waketime}', '${item.phone}')">接单</button>`;
+                                const identity = escapeJsSingleQuote(getOrderIdentity(item));
+                                actionHtml = `<button class="warning" onclick="takeOrderByIdentity('${identity}')">接单</button>`;
                             } else {
                                 actionHtml = `<span class="status-badge ${statusClass}">${item.status}</span>`;
                             }
@@ -271,7 +275,8 @@ function renderCards(orders) {
 
                         let actionHtml = "";
                         if (isStaff && item.status === "待接单") {
-                            actionHtml = `<button class="warning" onclick="takeOrder(${item.serialnumber}, '${item.waketime}', '${item.phone}')">接单</button>`;
+                            const identity = escapeJsSingleQuote(getOrderIdentity(item));
+                            actionHtml = `<button class="warning" onclick="takeOrderByIdentity('${identity}')">接单</button>`;
                         } else {
                             actionHtml = `<span class="status-badge ${statusClass}">${item.status}</span>`;
                         }
@@ -311,7 +316,8 @@ function renderCards(orders) {
 
                 let actionHtml = "";
                 if (isStaff && item.status === "待接单") {
-                    actionHtml = `<button class="warning" onclick="takeOrder(${item.serialnumber}, '${item.waketime}', '${item.phone}')">接单</button>`;
+                    const identity = escapeJsSingleQuote(getOrderIdentity(item));
+                    actionHtml = `<button class="warning" onclick="takeOrderByIdentity('${identity}')">接单</button>`;
                 } else {
                     actionHtml = `<span class="status-badge ${statusClass}">${item.status}</span>`;
                 }
@@ -322,7 +328,7 @@ function renderCards(orders) {
                 <div class="order-card">
                     <div class="order-card-header">
                         <div class="order-card-title">
-                            <input type="checkbox" class="order-checkbox" value="${item.serialnumber}" ${item.status !== "待接单" ? "data-status='processed'" : ""}>
+                            <input type="checkbox" class="order-checkbox" value="${escapeJsSingleQuote(getOrderIdentity(item))}" ${item.status !== "待接单" ? "data-status='processed'" : ""}>
                             <span class="serial-number">${item.serialnumber}</span>
                             <span class="time">${showTime}</span>
                         </div>
@@ -421,14 +427,16 @@ function renderTable(orders) {
                 let actionBtn = "无操作权限";
                 if (isAdmin) {
                     if (item.status === "进行中") {
-                        actionBtn = `<button class="success" onclick="finishOrder(${item.serialnumber}, '${item.waketime}', '${item.phone}')">手动完成</button>`;
+                        const identity = escapeJsSingleQuote(getOrderIdentity(item));
+                        actionBtn = `<button class="success" onclick="finishOrderByIdentity('${identity}')">手动完成</button>`;
                     } else if (item.status === "待接单") {
                         actionBtn = "待接单";
                     } else {
                         actionBtn = "已完成";
                     }
                 } else if (isStaff && item.status === "待接单") {
-                    actionBtn = `<button class="warning" onclick="takeOrder(${item.serialnumber}, '${item.waketime}', '${item.phone}')">接单</button>`;
+                    const identity = escapeJsSingleQuote(getOrderIdentity(item));
+                    actionBtn = `<button class="warning" onclick="takeOrderByIdentity('${identity}')">接单</button>`;
                 } else if (item.status === "进行中") {
                     actionBtn = "进行中";
                 } else if (item.status === "已完成") {
@@ -439,7 +447,7 @@ function renderTable(orders) {
 
                 html += `
                 <tr>
-                    <td><input type="checkbox" class="order-checkbox" value="${item.serialnumber}" ${item.status !== "待接单" ? "data-status='processed'" : ""}></td>
+                    <td><input type="checkbox" class="order-checkbox" value="${escapeJsSingleQuote(getOrderIdentity(item))}" ${item.status !== "待接单" ? "data-status='processed'" : ""}></td>
                     <td class="serial-number">${item.serialnumber}</td>
                     <td>${showTime}</td>
                     <td>${item.phone}</td>
@@ -489,14 +497,16 @@ function renderTable(orders) {
             let actionBtn = "无操作权限";
             if (isAdmin) {
                 if (item.status === "进行中") {
-                    actionBtn = `<button class="success" onclick="finishOrder(${item.serialnumber}, '${item.waketime}', '${item.phone}')">手动完成</button>`;
+                    const identity = escapeJsSingleQuote(getOrderIdentity(item));
+                    actionBtn = `<button class="success" onclick="finishOrderByIdentity('${identity}')">手动完成</button>`;
                 } else if (item.status === "待接单") {
                     actionBtn = "待接单";
                 } else {
                     actionBtn = "已完成";
                 }
             } else if (isStaff && item.status === "待接单") {
-                actionBtn = `<button class="warning" onclick="takeOrder(${item.serialnumber}, '${item.waketime}', '${item.phone}')">接单</button>`;
+                const identity = escapeJsSingleQuote(getOrderIdentity(item));
+                actionBtn = `<button class="warning" onclick="takeOrderByIdentity('${identity}')">接单</button>`;
             } else if (item.status === "进行中") {
                 actionBtn = "进行中";
             } else if (item.status === "已完成") {
@@ -507,7 +517,7 @@ function renderTable(orders) {
 
             html += `
     <tr>
-      <td><input type="checkbox" class="order-checkbox" value="${item.serialnumber}" ${item.status !== "待接单" ? "data-status='processed'" : ""}></td>
+      <td><input type="checkbox" class="order-checkbox" value="${escapeJsSingleQuote(getOrderIdentity(item))}" ${item.status !== "待接单" ? "data-status='processed'" : ""}></td>
       <td class="serial-number">${item.serialnumber}</td>
       <td>${showTime}</td>
       <td>${item.phone}</td>
@@ -524,19 +534,20 @@ function renderTable(orders) {
     document.getElementById("orderTable").innerHTML = html || `<tr><td colspan="10" style="text-align: center; padding: 20px; color: #64748b;">暂无订单</td></tr>`;
 }
 
+function findOrderIndexByIdentity(allOrders, identity) {
+    const targetIdentity = String(identity || "").trim();
+    if (!targetIdentity) return -1;
+    return allOrders.findIndex((item) => getOrderIdentity(item) === targetIdentity);
+}
+
 // 接单
-async function takeOrder(serialnumber, waketime, phone) {
+async function takeOrderByIdentity(identity) {
     if (!(await ensureStaffContactAndAlipayBound())) {
         return;
     }
 
     let allOrders = await getOrders();
-    // 使用serialnumber、waketime和phone的组合来查找订单，确保找到正确的订单
-    const targetIndex = allOrders.findIndex(item =>
-        item.serialnumber === serialnumber &&
-        item.waketime === waketime &&
-        item.phone === phone
-    );
+    const targetIndex = findOrderIndexByIdentity(allOrders, identity);
 
     if (targetIndex === -1) {
         alert("订单不存在！");
@@ -558,6 +569,22 @@ async function takeOrder(serialnumber, waketime, phone) {
     showToast("接单成功。", "success");
 }
 
+// 兼容旧按钮参数
+async function takeOrder(serialnumber, waketime, phone) {
+    let allOrders = await getOrders();
+    const target = allOrders.find(
+        (item) =>
+            item.serialnumber === serialnumber &&
+            String(item.waketime || "") === String(waketime || "") &&
+            String(item.phone || "") === String(phone || "")
+    );
+    if (!target) {
+        alert("订单不存在！");
+        return;
+    }
+    return takeOrderByIdentity(getOrderIdentity(target));
+}
+
 // 批量接单
 async function batchTakeOrders() {
     if (!(await ensureStaffContactAndAlipayBound())) {
@@ -570,15 +597,14 @@ async function batchTakeOrders() {
         return;
     }
 
-    const selectedSerials = [];
+    const selectedOrderKeys = [];
     let hasProcessedOrder = false;
 
     checkedBoxes.forEach(box => {
-        const serial = parseInt(box.value);
         if (box.dataset.status === "processed") {
             hasProcessedOrder = true;
         }
-        selectedSerials.push(serial);
+        selectedOrderKeys.push(String(box.value || "").trim());
     });
 
     if (hasProcessedOrder) {
@@ -590,7 +616,7 @@ async function batchTakeOrders() {
     let successCount = 0;
 
     allOrders.forEach(order => {
-        if (selectedSerials.includes(order.serialnumber) && order.status === "待接单") {
+        if (selectedOrderKeys.includes(getOrderIdentity(order)) && order.status === "待接单") {
             order.status = "进行中";
             order.staffid = user.id;
             order.staffname = user.name;
@@ -604,14 +630,9 @@ async function batchTakeOrders() {
 }
 
 // 完成订单
-async function finishOrder(serialnumber, waketime, phone) {
+async function finishOrderByIdentity(identity) {
     let allOrders = await getOrders();
-    // 使用serialnumber、waketime和phone的组合来查找订单，确保找到正确的订单
-    const targetIndex = allOrders.findIndex(item =>
-        item.serialnumber === serialnumber &&
-        item.waketime === waketime &&
-        item.phone === phone
-    );
+    const targetIndex = findOrderIndexByIdentity(allOrders, identity);
     if (targetIndex === -1) {
         alert("订单不存在！");
         return;
@@ -634,6 +655,22 @@ async function finishOrder(serialnumber, waketime, phone) {
     } else {
         showToast("订单已完成，但薪资结算失败，请稍后重试。", "error");
     }
+}
+
+// 兼容旧按钮参数
+async function finishOrder(serialnumber, waketime, phone) {
+    let allOrders = await getOrders();
+    const target = allOrders.find(
+        (item) =>
+            item.serialnumber === serialnumber &&
+            String(item.waketime || "") === String(waketime || "") &&
+            String(item.phone || "") === String(phone || "")
+    );
+    if (!target) {
+        alert("订单不存在！");
+        return;
+    }
+    return finishOrderByIdentity(getOrderIdentity(target));
 }
 
 // 检查过期订单
@@ -805,15 +842,16 @@ async function rollbackWakeOrderIncomeIfSettled(order, rollbackTime = new Date()
 
 // 删除选中订单
 async function deleteSelected() {
-    const checkedSerials = Array.from(document.querySelectorAll(".order-checkbox:checked"))
-        .map(cb => parseInt(cb.value));
+    const checkedKeys = Array.from(document.querySelectorAll(".order-checkbox:checked"))
+        .map((cb) => String(cb.value || "").trim())
+        .filter(Boolean);
 
-    if (checkedSerials.length === 0) return alert("请选择要删除的订单！");
-    if (!confirm(`确定删除选中的 ${checkedSerials.length} 条订单吗？`)) return;
+    if (checkedKeys.length === 0) return alert("请选择要删除的订单！");
+    if (!confirm(`确定删除选中的 ${checkedKeys.length} 条订单吗？`)) return;
 
     let allOrders = await getOrders();
-    const selectedSet = new Set(checkedSerials);
-    const selectedOrders = allOrders.filter((order) => selectedSet.has(order.serialnumber));
+    const selectedSet = new Set(checkedKeys);
+    const selectedOrders = allOrders.filter((order) => selectedSet.has(getOrderIdentity(order)));
 
     // 先回退已结算收入，避免删单后账目不一致
     let rollbackFailedCount = 0;
@@ -822,7 +860,7 @@ async function deleteSelected() {
             const res = await rollbackWakeOrderIncomeIfSettled(order, new Date());
             if (res.rolledBack !== true) {
                 rollbackFailedCount += 1;
-                console.error("删除叫醒订单时回退结算失败：", { serialnumber: order.serialnumber, reason: res.reason });
+                console.error("删除叫醒订单时回退结算失败：", { orderId: order.id, serialnumber: order.serialnumber, reason: res.reason });
             }
         }
     }
@@ -832,7 +870,7 @@ async function deleteSelected() {
     }
 
     // 删除订单
-    allOrders = allOrders.filter(item => !selectedSet.has(item.serialnumber));
+    allOrders = allOrders.filter((item) => !selectedSet.has(getOrderIdentity(item)));
     await saveOrders(allOrders);
 
     loadOrders();
@@ -841,13 +879,14 @@ async function deleteSelected() {
 
 // 修改选中订单
 async function editSelected() {
-    const checkedSerials = Array.from(document.querySelectorAll(".order-checkbox:checked"))
-        .map(cb => parseInt(cb.value));
+    const checkedKeys = Array.from(document.querySelectorAll(".order-checkbox:checked"))
+        .map((cb) => String(cb.value || "").trim())
+        .filter(Boolean);
 
-    if (checkedSerials.length !== 1) return alert("请仅选择一条订单进行修改！");
+    if (checkedKeys.length !== 1) return alert("请仅选择一条订单进行修改！");
 
     let allOrders = await getOrders();
-    const targetIndex = allOrders.findIndex(item => item.serialnumber === checkedSerials[0]);
+    const targetIndex = allOrders.findIndex((item) => getOrderIdentity(item) === checkedKeys[0]);
     if (targetIndex === -1) return alert("订单不存在！");
 
     const target = allOrders[targetIndex];
