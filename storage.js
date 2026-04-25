@@ -29,12 +29,6 @@ async function getOrders() {
 
 async function saveOrders(orders) {
     try {
-        // 获取当前时间（UTC）
-        function getChinaTime() {
-            const now = new Date();
-            return now;
-        }
-
         // 确保订单数据结构正确，使用数据库字段名
         const validOrders = orders.map(order => ({
             id: order.id || Math.floor(Math.random() * 1000000), // 使用6位随机数作为ID，避免超出整数范围
@@ -49,68 +43,17 @@ async function saveOrders(orders) {
             salarysettled: Boolean(order.salarysettled || false),
             submittime: order.submittime || new Date().toISOString()
         }));
-
-        // 先获取数据库中已有的订单
-        const { data: existingOrders, error: fetchError } = await supabaseClient
-            .from('wake_orders')
-            .select('id');
-
-        if (fetchError) {
-            throw new Error(`获取现有订单失败：${fetchError.message}`);
-        }
-
-        // 提取现有订单的ID
-        const existingIds = new Set(existingOrders?.map(order => order.id) || []);
-        // 提取当前订单的ID
-        const currentIds = new Set(validOrders.map(order => order.id));
-
-        // 找出需要删除的订单ID（数据库中有但当前列表中没有）
-        const ordersToDelete = Array.from(existingIds).filter(id => !currentIds.has(id));
-
-        // 批量删除订单（使用 in 操作符）
-        if (ordersToDelete.length > 0) {
-            const deleteResult = await supabaseClient
-                .from('wake_orders')
-                .delete()
-                .in('id', ordersToDelete);
-            if (deleteResult.error) {
-                console.error(`批量删除订单失败：${deleteResult.error.message}`);
-            }
-        }
-
-        // 只有在有订单时才进行插入和更新操作
         if (validOrders.length > 0) {
-            // 分离新订单和现有订单
-            const newOrders = validOrders.filter(order => !existingIds.has(order.id));
-            const existingOrdersToUpdate = validOrders.filter(order => existingIds.has(order.id));
-
-            // 批量插入新订单
-            if (newOrders.length > 0) {
-                // 分批插入，每批最多100个
-                for (let i = 0; i < newOrders.length; i += 100) {
-                    const batch = newOrders.slice(i, i + 100);
-                    const insertResult = await supabaseClient.from('wake_orders').insert(batch);
-                    if (insertResult.error) {
-                        throw new Error(`插入新订单失败：${insertResult.error.message}`);
-                    }
+            // 仅做分批 upsert，避免“本地视图不全导致误删云端数据”
+            for (let i = 0; i < validOrders.length; i += 100) {
+                const batch = validOrders.slice(i, i + 100);
+                const { error } = await supabaseClient
+                    .from('wake_orders')
+                    .upsert(batch, { onConflict: 'id' });
+                if (error) {
+                    throw new Error(`批量保存订单失败：${error.message}`);
                 }
             }
-
-            // 批量更新现有订单（使用 upsert）
-            if (existingOrdersToUpdate.length > 0) {
-                // 分批更新，每批最多100个
-                for (let i = 0; i < existingOrdersToUpdate.length; i += 100) {
-                    const batch = existingOrdersToUpdate.slice(i, i + 100);
-                    const updateResult = await supabaseClient
-                        .from('wake_orders')
-                        .upsert(batch, { onConflict: 'id' });
-                    if (updateResult.error) {
-                        console.error(`批量更新订单失败：${updateResult.error.message}`);
-                    }
-                }
-            }
-        } else {
-            console.log("订单数量为0，跳过插入和更新操作");
         }
     } catch (e) {
         console.error("Supabase 保存订单失败，仅保存到本地：", e);
@@ -168,56 +111,15 @@ async function saveStaffList(staffList) {
             salarymethod: normalizeSalaryMethodForDb(staff.salaryMethod),
             salaryaccount: String(staff.salaryAccount || "").trim()
         }));
-
-        // 先获取数据库中已有的员工
-        const { data: existingStaff, error: fetchError } = await supabaseClient
-            .from('staff_list')
-            .select('id');
-
-        if (fetchError) {
-            throw new Error(`获取现有员工失败：${fetchError.message}`);
-        }
-
-        // 提取现有员工的ID
-        const existingIds = new Set(existingStaff?.map(staff => staff.id) || []);
-        // 提取当前员工的ID
-        const currentIds = new Set(validStaffList.map(staff => staff.id));
-
-        // 找出需要删除的员工ID（数据库中有但当前列表中没有）
-        const staffToDelete = Array.from(existingIds).filter(id => !currentIds.has(id));
-
-        // 批量删除员工
-        if (staffToDelete.length > 0) {
-            const deleteResult = await supabaseClient
-                .from('staff_list')
-                .delete()
-                .in('id', staffToDelete);
-            if (deleteResult.error) {
-                console.error(`批量删除员工失败：${deleteResult.error.message}`);
-            }
-        }
-
-        // 只有在有员工时才进行插入和更新操作
         if (validStaffList.length > 0) {
-            // 分离新员工和现有员工
-            const newStaff = validStaffList.filter(staff => !existingIds.has(staff.id));
-            const existingStaffToUpdate = validStaffList.filter(staff => existingIds.has(staff.id));
-
-            // 批量插入新员工
-            if (newStaff.length > 0) {
-                const insertResult = await supabaseClient.from('staff_list').insert(newStaff);
-                if (insertResult.error) {
-                    throw new Error(`插入新员工失败：${insertResult.error.message}`);
-                }
-            }
-
-            // 批量更新现有员工（使用 upsert）
-            if (existingStaffToUpdate.length > 0) {
-                const updateResult = await supabaseClient
+            // 仅做 upsert，避免多端并发时“谁最后写谁删别人”
+            for (let i = 0; i < validStaffList.length; i += 100) {
+                const batch = validStaffList.slice(i, i + 100);
+                const { error } = await supabaseClient
                     .from('staff_list')
-                    .upsert(existingStaffToUpdate, { onConflict: 'id' });
-                if (updateResult.error) {
-                    console.error(`批量更新员工失败：${updateResult.error.message}`);
+                    .upsert(batch, { onConflict: 'id' });
+                if (error) {
+                    throw new Error(`批量保存员工失败：${error.message}`);
                 }
             }
         }
@@ -291,9 +193,33 @@ async function updateStaffProfileById(staffId, patch) {
     }
 }
 
+function normalizeSalaryDetailItem(detail) {
+    return {
+        ...detail,
+        id: String(detail?.id || "").trim(),
+        staffid: String(detail?.staffid || "").trim(),
+        amount: Number(detail?.amount || 0),
+        type: String(detail?.type || "").trim(),
+        description: String(detail?.description || "").trim(),
+        createdat: String(detail?.createdat || "").trim(),
+        settle_key: String(detail?.settle_key || detail?.settleKey || "").trim(),
+        order_id: detail?.order_id ?? detail?.orderId ?? null
+    };
+}
+
+function buildSalaryDetailDedupKey(detail) {
+    // 优先使用幂等 key（同一订单结算跨端最稳定）
+    if (detail.settle_key) return `settle:${detail.settle_key}`;
+    const createdAtMs = new Date(detail.createdat || 0).getTime();
+    const createdAtSec = Number.isFinite(createdAtMs) && createdAtMs > 0 ? Math.floor(createdAtMs / 1000) : 0;
+    // 其次按业务组合去重（不使用 id，避免“同一事件不同 id”重复显示）
+    return `fallback:${detail.staffid}|${createdAtSec}|${Number(detail.amount || 0)}|${detail.type}|${detail.description}`;
+}
+
 // 余额明细存储
 async function getSalaryDetails() {
-    const localDetails = JSON.parse(localStorage.getItem("salaryDetails") || "[]");
+    const localDetailsRaw = JSON.parse(localStorage.getItem("salaryDetails") || "[]");
+    const localDetails = Array.isArray(localDetailsRaw) ? localDetailsRaw.map(normalizeSalaryDetailItem) : [];
     try {
         const { data, error } = await supabaseClient
             .from('salary_details')
@@ -302,15 +228,14 @@ async function getSalaryDetails() {
 
         if (!error && data) {
             // 云端成功时，与本地兜底明细合并，避免“余额已变但明细看不到”
-            const merged = [...data];
-            const cloudKeySet = new Set(
-                data.map((d) => `${d.id || ""}|${d.staffid || ""}|${d.createdat || ""}|${d.amount || 0}|${d.type || ""}|${d.description || ""}`)
-            );
+            const cloudDetails = Array.isArray(data) ? data.map(normalizeSalaryDetailItem) : [];
+            const merged = [...cloudDetails];
+            const keySet = new Set(cloudDetails.map(buildSalaryDetailDedupKey));
             localDetails.forEach((d) => {
-                const key = `${d.id || ""}|${d.staffid || ""}|${d.createdat || ""}|${d.amount || 0}|${d.type || ""}|${d.description || ""}`;
-                if (!cloudKeySet.has(key)) {
+                const key = buildSalaryDetailDedupKey(d);
+                if (!keySet.has(key)) {
                     merged.push(d);
-                    cloudKeySet.add(key);
+                    keySet.add(key);
                 }
             });
             merged.sort((a, b) => {
@@ -326,7 +251,11 @@ async function getSalaryDetails() {
     } catch (e) {
         console.error("Supabase 读取余额明细异常：", e);
     }
-    return localDetails;
+    return localDetails.sort((a, b) => {
+        const ta = new Date(a.createdat || 0).getTime() || 0;
+        const tb = new Date(b.createdat || 0).getTime() || 0;
+        return tb - ta;
+    });
 }
 
 // 原先的 saveSalaryDetails 会“全表删除再插入”，会引发并发重复/覆盖问题。
