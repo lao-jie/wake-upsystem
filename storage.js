@@ -227,24 +227,15 @@ async function getSalaryDetails() {
             .order('createdat', { ascending: false });
 
         if (!error && data) {
-            // 云端成功时，与本地兜底明细合并，避免“余额已变但明细看不到”
+            // 云端可用时以云端为准，避免“数据库已删除但本地缓存仍显示”
             const cloudDetails = Array.isArray(data) ? data.map(normalizeSalaryDetailItem) : [];
-            const merged = [...cloudDetails];
-            const keySet = new Set(cloudDetails.map(buildSalaryDetailDedupKey));
-            localDetails.forEach((d) => {
-                const key = buildSalaryDetailDedupKey(d);
-                if (!keySet.has(key)) {
-                    merged.push(d);
-                    keySet.add(key);
-                }
-            });
-            merged.sort((a, b) => {
+            cloudDetails.sort((a, b) => {
                 const ta = new Date(a.createdat || 0).getTime() || 0;
                 const tb = new Date(b.createdat || 0).getTime() || 0;
                 return tb - ta;
             });
-            localStorage.setItem("salaryDetails", JSON.stringify(merged));
-            return merged;
+            localStorage.setItem("salaryDetails", JSON.stringify(cloudDetails));
+            return cloudDetails;
         } else if (error) {
             console.error("Supabase 读取余额明细失败：", error);
         }
