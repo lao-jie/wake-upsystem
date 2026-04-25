@@ -2000,7 +2000,17 @@ async function submitSalaryMethod() {
 // 渲染余额明细
 async function renderBalanceDetail(container) {
     const allDetails = await getSalaryDetails();
-    const myDetails = allDetails.filter(item => item.staffid === user.id);
+    const myDetails = allDetails.filter((item) => String(item?.staffid || "").trim() === String(user?.id || "").trim());
+    // 与个人中心口径保持一致：当前余额统一以 staff_list.salary 为准
+    let latestBalance = 0;
+    try {
+        const staffList = await getStaffList();
+        const me = (staffList || []).find((s) => String(s?.id || "").trim() === String(user?.id || "").trim());
+        latestBalance = Number(me?.salary || 0);
+    } catch (_) {
+        // 读取失败时兜底用明细求和，保证组件可用
+        latestBalance = myDetails.reduce((sum, item) => sum + Number(item?.amount || 0), 0);
+    }
 
     if (myDetails.length === 0) {
         container.innerHTML = `
@@ -2013,13 +2023,10 @@ async function renderBalanceDetail(container) {
         return;
     }
 
-    // 计算总余额
-    const totalBalance = myDetails.reduce((sum, item) => sum + Number(item.amount), 0);
-
     let html = `
         <div style="margin-bottom: 16px; padding: 16px; background: linear-gradient(135deg, #dcfce7 0%, #bbf7d0 100%); border-radius: 12px;">
             <div style="font-size: 13px; color: #166534; margin-bottom: 4px;">当前余额</div>
-            <div style="font-size: 28px; font-weight: 700; color: #166534;">${totalBalance.toFixed(2)} 元</div>
+            <div style="font-size: 28px; font-weight: 700; color: #166534;">${latestBalance.toFixed(2)} 元</div>
         </div>
         <div style="display: flex; flex-direction: column; gap: 8px;">
     `;
