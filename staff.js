@@ -90,7 +90,8 @@ async function settleSelectedTeamStaff() {
         settledAmount += amount;
 
         // 添加余额变动记录（结算为负数）
-        await addSalaryDetail(staffId, -amount, '结算', '管理员批量结算');
+        const actionKey = `batch_settle:${staffId}:${Math.round(amount * 100)}:${Math.floor(Date.now() / 1000)}`;
+        await addSalaryDetail(staffId, -amount, '结算', '管理员批量结算', new Date(), { settleKey: actionKey });
     }
 
     await saveStaffList(staffList);
@@ -132,7 +133,8 @@ async function rewardSelectedTeamStaff() {
         rewardCount++;
         totalReward += amount;
 
-        await addSalaryDetail(staffId, amount, '奖励', '管理员批量奖励');
+        const actionKey = `batch_reward:${staffId}:${Math.round(amount * 100)}:${Math.floor(Date.now() / 1000)}`;
+        await addSalaryDetail(staffId, amount, '奖励', '管理员批量奖励', new Date(), { settleKey: actionKey });
     }
 
     await saveStaffList(staffList);
@@ -227,11 +229,16 @@ async function settleStaffSalary(staffId) {
     let staffList = await getStaffList();
     const index = staffList.findIndex(staff => staff.id === staffId);
     if (index !== -1) {
-        const settledAmount = staffList[index].salary || 0;
+        const settledAmount = Number(staffList[index].salary || 0);
+        if (!Number.isFinite(settledAmount) || settledAmount <= 0) {
+            showToast("该员工当前无可结算余额。", "warning");
+            return;
+        }
         staffList[index].salary = 0;
         await saveStaffList(staffList);
+        const actionKey = `manual_settle:${staffId}:${Math.round(settledAmount * 100)}:${Math.floor(Date.now() / 1000)}`;
         // 添加余额变动记录（结算为负数）
-        await addSalaryDetail(staffId, -settledAmount, '结算', '管理员手动结算');
+        await addSalaryDetail(staffId, -settledAmount, '结算', '管理员手动结算', new Date(), { settleKey: actionKey });
         renderTeamTable();
         alert(`已结算该员工薪资 ${settledAmount.toFixed(2)} 元，余额已清零！`);
     }
@@ -242,7 +249,7 @@ async function rewardStaff(staffId) {
     const rewardAmount = prompt("请输入奖励金额（元）：", "0");
     if (rewardAmount === null) return;
     const amount = parseFloat(rewardAmount);
-    if (isNaN(amount) || amount < 0) {
+    if (!Number.isFinite(amount) || amount <= 0) {
         alert("请输入有效的正数金额！");
         return;
     }
@@ -252,8 +259,9 @@ async function rewardStaff(staffId) {
     if (index !== -1) {
         staffList[index].salary = (staffList[index].salary || 0) + amount;
         await saveStaffList(staffList);
+        const actionKey = `manual_reward:${staffId}:${Math.round(amount * 100)}:${Math.floor(Date.now() / 1000)}`;
         // 添加余额变动记录
-        await addSalaryDetail(staffId, amount, '奖励', '管理员手动奖励');
+        await addSalaryDetail(staffId, amount, '奖励', '管理员手动奖励', new Date(), { settleKey: actionKey });
         renderTeamTable();
         alert(`已奖励该员工 ${amount.toFixed(2)} 元，当前余额：${staffList[index].salary.toFixed(2)} 元`);
     }
@@ -264,7 +272,7 @@ async function punishStaff(staffId) {
     const punishAmount = prompt("请输入惩罚扣除金额（元）：", "0");
     if (punishAmount === null) return;
     const amount = parseFloat(punishAmount);
-    if (isNaN(amount) || amount < 0) {
+    if (!Number.isFinite(amount) || amount <= 0) {
         alert("请输入有效的正数金额！");
         return;
     }
@@ -281,8 +289,9 @@ async function punishStaff(staffId) {
 
         staffList[index].salary = Math.max(0, currentSalary - amount);
         await saveStaffList(staffList);
+        const actionKey = `manual_punish:${staffId}:${Math.round(amount * 100)}:${Math.floor(Date.now() / 1000)}`;
         // 添加余额变动记录（惩罚为负数）
-        await addSalaryDetail(staffId, -amount, '惩罚', '管理员手动惩罚');
+        await addSalaryDetail(staffId, -amount, '惩罚', '管理员手动惩罚', new Date(), { settleKey: actionKey });
         renderTeamTable();
         alert(`已扣除该员工 ${amount.toFixed(2)} 元，当前余额：${staffList[index].salary.toFixed(2)} 元`);
     }
@@ -532,8 +541,9 @@ async function openSalaryDetailModal(staffId) {
     let html = "";
     if (staffDetails.length > 0) {
         staffDetails.forEach(detail => {
-            const amountClass = detail.amount >= 0 ? "salary-amount salary-amount--pos" : "salary-amount salary-amount--neg";
-            const amountText = detail.amount >= 0 ? `+${detail.amount.toFixed(2)}` : detail.amount.toFixed(2);
+            const amount = Number(detail.amount || 0);
+            const amountClass = amount >= 0 ? "salary-amount salary-amount--pos" : "salary-amount salary-amount--neg";
+            const amountText = amount >= 0 ? `+${amount.toFixed(2)}` : amount.toFixed(2);
 
             let typeText = "";
             switch (detail.type) {
@@ -541,6 +551,7 @@ async function openSalaryDetailModal(staffId) {
                 case "奖励": typeText = "奖励"; break;
                 case "惩罚": typeText = "惩罚"; break;
                 case "结算": typeText = "结算"; break;
+                default: typeText = detail.type || "其他"; break;
             }
 
             html += `
