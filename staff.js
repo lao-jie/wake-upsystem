@@ -529,7 +529,15 @@ async function openSalaryDetailModal(staffId) {
     const staff = staffList.find(s => s.id === staffId);
     if (staff) {
         title.innerText = `${staff.name}的余额明细`;
-        balanceEl.innerText = (staff.salary || 0).toFixed(2);
+        const latestBalance = Number(staff.salary || 0);
+        balanceEl.innerText = latestBalance.toFixed(2);
+        // 员工本人打开明细时，同步刷新个人中心上的累计余额，避免两个区域显示不同步
+        if (String(staffId || "").trim() === String(user?.id || "").trim()) {
+            const totalBalanceEl = document.getElementById("totalBalance");
+            if (totalBalanceEl) {
+                totalBalanceEl.innerText = latestBalance.toFixed(2);
+            }
+        }
     }
 
     // 获取余额明细
