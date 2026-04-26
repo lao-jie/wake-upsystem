@@ -1,7 +1,16 @@
 // 检查登录状态，如果未登录则跳转到登录页
 (function checkLoginStatus() {
-    const user = JSON.parse(localStorage.getItem("loginUser"));
-    if (!user) {
+    if (typeof requireLoginOrRedirect === "function") {
+        requireLoginOrRedirect("index.html");
+        return;
+    }
+    // 兼容兜底：若 utils.js 未加载（异常情况），保持原逻辑
+    try {
+        const user = JSON.parse(localStorage.getItem("loginUser"));
+        if (!user) {
+            window.location.href = "index.html";
+        }
+    } catch (_) {
         window.location.href = "index.html";
     }
 })();
@@ -176,6 +185,11 @@ function showPage(page) {
     if (!document.getElementById(`page_${page}`)) {
         page = "home";
     }
+
+    // 离开首页时停止排行榜自动刷新，避免无意义轮询
+    if (currentPage === "home" && page !== "home") {
+        stopStaffLeaderboardAutoRefresh();
+    }
     currentPage = page;
     // 切换页面时自动收起下拉，避免遮挡底部导航点击
     closeSubMenu();
@@ -217,6 +231,9 @@ function showPage(page) {
         document.getElementById("nav-home").classList.add("active");
         loadHomeOrderSummary();
         loadHomePendingPanel();
+        // 员工首页排行榜
+        loadStaffLeaderboard();
+        startStaffLeaderboardAutoRefresh();
     } else if (page === "wake") {
         document.getElementById("nav-taobao").classList.add("active");
         document.getElementById("sub-wake").classList.add("active");
@@ -235,6 +252,257 @@ function showPage(page) {
         // 刷新公告预览
         loadNoticeSettingsPreview();
     }
+}
+
+function safeText(v, fallback = "-") {
+    const s = String(v == null ? "" : v).trim();
+    return s ? s : fallback;
+}
+
+function money(v) {
+    const n = Number(v);
+    if (!Number.isFinite(n)) return 0;
+    return n;
+}
+
+function formatMoney(v) {
+    return money(v).toFixed(2);
+}
+
+function getMonthRangeLocal() {
+    const now = new Date();
+    const start = new Date(now.getFullYear(), now.getMonth(), 1);
+    const end = new Date(now.getFullYear(), now.getMonth() + 1, 1);
+    return { start, end };
+}
+
+let staffLeaderboardTimer = null;
+let staffLeaderboardVisibilityBound = false;
+
+function startStaffLeaderboardAutoRefresh() {
+    if (!isStaff) return;
+    if (staffLeaderboardTimer) return;
+    // 首页停留时，定时刷新（轻量但“实时”）
+    staffLeaderboardTimer = setInterval(() => {
+        if (currentPage !== "home") return;
+        if (document.visibilityState === "hidden") return;
+        loadStaffLeaderboard();
+    }, 20000);
+
+    if (!staffLeaderboardVisibilityBound) {
+        staffLeaderboardVisibilityBound = true;
+        document.addEventListener("visibilitychange", () => {
+            if (currentPage !== "home") return;
+            if (document.visibilityState === "visible") {
+                loadStaffLeaderboard();
+            }
+        });
+    }
+}
+
+function stopStaffLeaderboardAutoRefresh() {
+    if (staffLeaderboardTimer) {
+        clearInterval(staffLeaderboardTimer);
+        staffLeaderboardTimer = null;
+    }
+}
+
+async function loadStaffLeaderboard() {
+    const section = document.getElementById("staffLeaderboardSection");
+    const listEl = document.getElementById("staffLeaderboardList");
+    const refreshBtn = document.getElementById("staffLeaderboardRefreshBtn");
+    const filterEl = document.getElementById("staffLeaderboardProjectFilter");
+    if (!section) return;
+
+    // 只在员工端展示
+    section.style.display = isStaff ? "flex" : "none";
+    if (!isStaff) return;
+
+    const modal = document.getElementById("staffLeaderboardModal");
+    const modalVisible = !!modal && modal.style.display === "flex";
+
+    // 绑定一次刷新按钮
+    if (refreshBtn && !refreshBtn.__bound) {
+        refreshBtn.__bound = true;
+        refreshBtn.addEventListener("click", () => {
+            loadStaffLeaderboard();
+        });
+    }
+
+    // 首页“查看排行榜”按钮
+    const openBtn = document.getElementById("staffLeaderboardOpenBtn");
+    if (openBtn && !openBtn.__bound) {
+        openBtn.__bound = true;
+        openBtn.addEventListener("click", () => {
+            openStaffLeaderboardModal();
+        });
+    }
+
+    // 项目筛选（记住选择）
+    const filterKey = "staffLeaderboardProjectFilter";
+    if (filterEl && !filterEl.__bound) {
+        filterEl.__bound = true;
+        try {
+            const saved = localStorage.getItem(filterKey);
+            if (saved) filterEl.value = saved;
+        } catch (_) { }
+        filterEl.addEventListener("change", () => {
+            try { localStorage.setItem(filterKey, String(filterEl.value || "all")); } catch (_) { }
+            loadStaffLeaderboard();
+        });
+    }
+
+    if (listEl && modalVisible) {
+        listEl.innerHTML = `<div style="font-size:13px;color:#64748b;">加载中...</div>`;
+    }
+    if (typeof showGlobalLoading === "function") showGlobalLoading("生成排行榜中…");
+
+    try {
+        const filterValue = String(filterEl?.value || "all");
+        const needWake = filterValue === "all" || filterValue === "wake";
+        const needSupervise = filterValue === "all" || filterValue === "supervise" || filterValue.startsWith("supervise:");
+        const superviseProject = filterValue.startsWith("supervise:") ? filterValue.slice("supervise:".length) : "";
+
+        const [wakeOrders, superviseOrders, staffList] = await Promise.all([
+            needWake ? getOrders() : Promise.resolve([]),
+            needSupervise ? getSuperviseOrdersForHomeSummary() : Promise.resolve([]),
+            getStaffList()
+        ]);
+
+        const { start, end } = getMonthRangeLocal();
+        const wakeRows = Array.isArray(wakeOrders) ? wakeOrders : [];
+        const superviseRows = Array.isArray(superviseOrders) ? superviseOrders : [];
+        const staffs = Array.isArray(staffList) ? staffList : [];
+
+        const nameById = new Map();
+        staffs.forEach((s) => {
+            const id = String(s?.id || "").trim();
+            if (!id) return;
+            nameById.set(id, safeText(s?.name || id));
+        });
+
+        // 统计口径：本月提交的订单中，已被接单（staffid 非空且状态非“待接单”）
+        const map = new Map();
+        const addRow = (staffId, amount) => {
+            const sid = String(staffId || "").trim();
+            if (!sid) return;
+            const prev = map.get(sid) || { staffId: sid, count: 0, amount: 0 };
+            prev.count += 1;
+            prev.amount += money(amount);
+            map.set(sid, prev);
+        };
+
+        // 叫醒订单
+        wakeRows.forEach((o) => {
+            const submit = new Date(o?.submittime || "");
+            if (!(submit >= start && submit < end)) return;
+            const status = String(o?.status || "").trim();
+            const staffId = String(o?.staffid || "").trim();
+            if (!staffId) return;
+            if (status === "待接单") return;
+            addRow(staffId, o?.amount ?? o?.money ?? 0);
+        });
+
+        // 监督订单（可按项目进一步细分）
+        superviseRows.forEach((o) => {
+            const submit = new Date(o?.submittime || "");
+            if (!(submit >= start && submit < end)) return;
+            const effectiveStatus = typeof getSuperviseEffectiveStatusForHome === "function"
+                ? getSuperviseEffectiveStatusForHome(o)
+                : String(o?.status || "").trim();
+            if (effectiveStatus === "待接单") return;
+
+            const staffId = String(o?.staffid || "").trim();
+            if (!staffId) return;
+
+            const project = String(o?.project || "").trim();
+            if (superviseProject && project !== superviseProject) return;
+
+            addRow(staffId, o?.price ?? o?.amount ?? o?.money ?? 0);
+        });
+
+        // 只展示有接单的数据（没接单的不进榜单）
+        const items = Array.from(map.values())
+            .filter((x) => Number(x?.count || 0) > 0)
+            .map((x) => ({
+                ...x,
+                name: nameById.get(x.staffId) || x.staffId
+            }))
+            .sort((a, b) => {
+                if (b.count !== a.count) return b.count - a.count;
+                if (b.amount !== a.amount) return b.amount - a.amount;
+                return String(a.staffId).localeCompare(String(b.staffId));
+            });
+
+        const myId = String(user?.id || "").trim();
+        const myIndex = items.findIndex((x) => String(x.staffId) === myId);
+        const myRow = myIndex >= 0 ? items[myIndex] : { count: 0, amount: 0 };
+
+        const myRankEl = document.getElementById("staffMyRank");
+        const myCountEl = document.getElementById("staffMyCount");
+        const myAmountEl = document.getElementById("staffMyAmount");
+        if (myRankEl) myRankEl.textContent = myIndex >= 0 ? String(myIndex + 1) : "-";
+        if (myCountEl) myCountEl.textContent = String(myRow.count || 0);
+        if (myAmountEl) myAmountEl.textContent = formatMoney(myRow.amount || 0);
+
+        // 只有在弹窗打开时才渲染完整榜单，避免占用首页空间
+        if (!listEl || !modalVisible) {
+            return;
+        }
+        if (items.length === 0) {
+            listEl.innerHTML = `<div style="font-size:13px;color:#94a3b8;">暂无数据</div>`;
+            return;
+        }
+
+        let html = "";
+        items.forEach((it, idx) => {
+            const rank = idx + 1;
+            const isMe = String(it.staffId) === myId;
+            const rankClass = rank === 1 ? "top1" : rank === 2 ? "top2" : rank === 3 ? "top3" : "";
+            html += `
+                <div class="leaderboard-row ${isMe ? "is-me" : ""}">
+                    <div class="leaderboard-rank ${rankClass}">${rank}</div>
+                    <div class="leaderboard-main">
+                        <div class="leaderboard-name">${safeText(it.name)}</div>
+                        <div class="leaderboard-sub">${safeText(it.staffId)}</div>
+                    </div>
+                    <div class="leaderboard-metrics" aria-label="指标">
+                        <div class="m">
+                            <div class="v">${it.count}</div>
+                            <div class="k">接单数</div>
+                        </div>
+                        <div class="m">
+                            <div class="v">${formatMoney(it.amount)}</div>
+                            <div class="k">金额(元)</div>
+                        </div>
+                    </div>
+                </div>
+            `;
+        });
+        listEl.innerHTML = html;
+        renderLucideIcons();
+    } catch (e) {
+        console.error("加载员工排行榜失败：", e);
+        if (listEl && modalVisible) {
+            listEl.innerHTML = `<div style="font-size:13px;color:#ef4444;">加载失败，请稍后重试</div>`;
+        }
+    } finally {
+        if (typeof hideGlobalLoading === "function") hideGlobalLoading();
+    }
+}
+
+function openStaffLeaderboardModal() {
+    const modal = document.getElementById("staffLeaderboardModal");
+    if (!modal) return;
+    modal.style.display = "flex";
+    renderLucideIcons();
+    loadStaffLeaderboard();
+}
+
+function closeStaffLeaderboardModal() {
+    const modal = document.getElementById("staffLeaderboardModal");
+    if (!modal) return;
+    modal.style.display = "none";
 }
 
 function getDatePartFromDateTime(value) {
@@ -1060,6 +1328,47 @@ window.onload = async function () {
         loadHomePendingPanel();
     }
     renderLucideIcons();
+
+    // ===== 搜索体验增强：回车搜索 + 输入防抖 + 关键字高亮 =====
+    // 叫醒页搜索
+    const wakeSearchInput = document.getElementById("searchInput");
+    const wakeClearBtn = document.querySelector("button[onclick=\"clearSearch()\"]");
+    let wakeSearchTimer = null;
+    if (wakeSearchInput) {
+        wakeSearchInput.addEventListener("keydown", (e) => {
+            if (e.key === "Enter") {
+                e.preventDefault();
+                if (wakeSearchTimer) clearTimeout(wakeSearchTimer);
+                if (typeof searchOrders === "function") searchOrders();
+            }
+        });
+        wakeSearchInput.addEventListener("input", () => {
+            if (wakeSearchTimer) clearTimeout(wakeSearchTimer);
+            wakeSearchTimer = setTimeout(() => {
+                if (typeof searchOrders === "function") searchOrders();
+            }, 260);
+        });
+    }
+    if (wakeClearBtn) {
+        wakeClearBtn.addEventListener("click", () => {
+            window.__wakeSearchKeyword = "";
+            if (typeof clearKeywordHighlights === "function") {
+                clearKeywordHighlights(document.getElementById("orderCards"));
+                clearKeywordHighlights(document.getElementById("orderTable"));
+            }
+        });
+    }
+
+    // 团队页搜索：回车触发（输入防抖已在 staff.js 的 handleTeamSearch 内实现）
+    const teamSearchInput = document.getElementById("teamSearchInput");
+    if (teamSearchInput) {
+        teamSearchInput.addEventListener("keydown", (e) => {
+            if (e.key === "Enter") {
+                e.preventDefault();
+                if (typeof submitTeamSearch === "function") submitTeamSearch();
+            }
+        });
+    }
 };
 
 async function switchUser(userId) {

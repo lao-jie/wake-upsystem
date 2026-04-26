@@ -84,6 +84,14 @@
     <!-- 轻提示 Toast（替代难看的 alert 弹框） -->
     <div id="toast" class="toast" aria-live="polite" aria-atomic="true"></div>
 
+    <!-- 全局 Loading 遮罩（跨模块统一体验） -->
+    <div id="globalLoadingOverlay" class="global-loading" aria-live="polite" aria-busy="true">
+        <div class="global-loading__box">
+            <div class="global-loading__spinner" aria-hidden="true"></div>
+            <div class="global-loading__text">加载中…</div>
+        </div>
+    </div>
+
     <!-- 右侧内容 -->
     <div class="main-content">
         <!-- 首页 -->
@@ -139,6 +147,57 @@
                 </div>
                 <div id="homePendingStats" style="font-size:13px; color:#64748b; margin-bottom:8px;">待处理 0 条</div>
                 <div id="homePendingList"></div>
+            </div>
+
+            <!-- 员工：首页排行榜 -->
+            <div class="admin-form" id="staffLeaderboardSection" style="display:none; margin-top: 14px; flex-direction: column;">
+                <div class="leaderboard-header">
+                    <h3 class="leaderboard-title">
+                        <i data-lucide="trophy"></i> 本月排行榜
+                    </h3>
+                    <div class="leaderboard-actions">
+                        <span class="leaderboard-hint" id="staffLeaderboardHint">统计：本月已接单</span>
+                        <button type="button" class="ghost" id="staffLeaderboardOpenBtn">查看排行榜</button>
+                    </div>
+                </div>
+                <div class="leaderboard-grid leaderboard-grid--me">
+                    <div class="leaderboard-card">
+                        <div class="leaderboard-card__label">我的排名</div>
+                        <div class="leaderboard-card__value" id="staffMyRank">-</div>
+                    </div>
+                    <div class="leaderboard-card">
+                        <div class="leaderboard-card__label">我的接单数</div>
+                        <div class="leaderboard-card__value" id="staffMyCount">0</div>
+                    </div>
+                    <div class="leaderboard-card">
+                        <div class="leaderboard-card__label">我的金额</div>
+                        <div class="leaderboard-card__value" id="staffMyAmount">0.00</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 员工：首页排行榜详情弹窗 -->
+            <div class="modal-overlay" id="staffLeaderboardModal">
+                <div class="modal-box" style="width: 92vw; max-width: 860px; max-height: 80vh; overflow-y: auto;">
+                    <div style="display:flex; justify-content:space-between; align-items:center; gap:10px; margin-bottom: 12px; flex-wrap:wrap;">
+                        <h3 style="margin:0; display:flex; align-items:center; gap:8px;">
+                            <i data-lucide="trophy"></i> 本月排行榜
+                        </h3>
+                        <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
+                            <select id="staffLeaderboardProjectFilter" style="min-width: 180px;">
+                                <option value="all">全部项目</option>
+                                <option value="wake">叫醒订单</option>
+                                <option value="supervise">监督（全部）</option>
+                                <option value="supervise:监督早睡">监督早睡</option>
+                                <option value="supervise:监督早起">监督早起</option>
+                                <option value="supervise:监督早睡早起">监督早睡早起</option>
+                            </select>
+                            <button type="button" class="ghost" id="staffLeaderboardRefreshBtn">刷新</button>
+                            <button type="button" class="ghost" onclick="closeStaffLeaderboardModal()">关闭</button>
+                        </div>
+                    </div>
+                    <div id="staffLeaderboardList" class="leaderboard-list"></div>
+                </div>
             </div>
         </div>
 

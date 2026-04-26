@@ -4,11 +4,16 @@ let superviseIsStaff = false;
 let pendingTakeTaskId = "";
 
 (function checkLoginStatus() {
-    currentSuperviseUser = JSON.parse(localStorage.getItem("loginUser"));
-    if (!currentSuperviseUser) {
-        window.location.href = "index.html";
-        return;
+    if (typeof requireLoginOrRedirect === "function") {
+        currentSuperviseUser = requireLoginOrRedirect("index.html");
+    } else {
+        try {
+            currentSuperviseUser = JSON.parse(localStorage.getItem("loginUser"));
+        } catch (_) {
+            currentSuperviseUser = null;
+        }
     }
+    if (!currentSuperviseUser) return;
 
     const userNameEl = document.getElementById("superviseUserName");
     if (userNameEl) {
@@ -2159,6 +2164,9 @@ async function finishSuperviseTask(id) {
 async function loadSuperviseDashboard() {
     const loadingEl = document.getElementById("superviseLoadingIndicator");
     if (loadingEl) loadingEl.style.display = "flex";
+    if (typeof showGlobalLoading === "function") {
+        showGlobalLoading("加载监督任务中…");
+    }
     try {
         const allOrders = await getSuperviseOrders();
         let ordered = [...allOrders].sort((a, b) => {
@@ -2190,6 +2198,9 @@ async function loadSuperviseDashboard() {
         }
     } finally {
         if (loadingEl) loadingEl.style.display = "none";
+        if (typeof hideGlobalLoading === "function") {
+            hideGlobalLoading();
+        }
     }
 }
 

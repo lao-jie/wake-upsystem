@@ -15,6 +15,13 @@
 </head>
 
 <body class="supervise-page">
+    <!-- 全局 Loading 遮罩（跨页面统一体验） -->
+    <div id="globalLoadingOverlay" class="global-loading" aria-live="polite" aria-busy="true">
+        <div class="global-loading__box">
+            <div class="global-loading__spinner" aria-hidden="true"></div>
+            <div class="global-loading__text">加载中…</div>
+        </div>
+    </div>
     <div class="sidebar">
         <div class="sidebar-header">
             <span class="sidebar-brand">老街网创</span>
@@ -24,7 +31,7 @@
         </div>
 
         <div class="nav-row">
-            <div class="nav-item" onclick="window.location.href='jiaoxing.html'">
+            <div class="nav-item" onclick="window.location.href='jiaoxing.html?page=home'">
                 <span class="icon"><i data-lucide="house"></i></span>
                 <span>首页</span>
             </div>
@@ -40,13 +47,13 @@
                 <div class="sub-item active">监督</div>
             </div>
 
-            <div class="nav-item" onclick="window.location.href='jiaoxing.html'">
+            <div class="nav-item" onclick="window.location.href='jiaoxing.html?page=team'">
                 <span class="icon"><i data-lucide="users"></i></span>
                 <span id="navTeamText">团队管理</span>
             </div>
 
             <div class="nav-item" id="nav-notice-setting" style="display:none;"
-                onclick="window.location.href='jiaoxing.html'">
+                onclick="window.location.href='jiaoxing.html?page=noticeSetting'">
                 <span class="icon"><i data-lucide="settings"></i></span>
                 <span>公告设置</span>
             </div>

@@ -32,6 +32,324 @@ body {
     color: var(--silver);
 }
 
+/* ==================== Global Loading Overlay ==================== */
+.global-loading {
+    position: fixed;
+    inset: 0;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    background: rgba(15, 23, 42, 0.22);
+    backdrop-filter: blur(4px);
+    z-index: 9999;
+}
+
+.global-loading.show {
+    display: flex;
+}
+
+.global-loading__box {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 14px 16px;
+    border-radius: 12px;
+    background: rgba(255, 255, 255, 0.96);
+    border: 1px solid rgba(148, 163, 184, 0.35);
+    box-shadow: 0 12px 36px rgba(15, 23, 42, 0.14);
+    color: #0f172a;
+    max-width: min(92vw, 420px);
+}
+
+.global-loading__spinner {
+    width: 18px;
+    height: 18px;
+    border-radius: 999px;
+    border: 2px solid rgba(15, 23, 42, 0.18);
+    border-top-color: rgba(13, 148, 136, 0.95);
+    animation: globalSpin 0.8s linear infinite;
+}
+
+.global-loading__text {
+    font-size: 14px;
+    font-weight: 650;
+    color: #0f172a;
+    letter-spacing: 0.02em;
+}
+
+@keyframes globalSpin {
+    to {
+        transform: rotate(360deg);
+    }
+}
+
+/* ==================== Keyword Highlight ==================== */
+mark.kw {
+    padding: 0 2px;
+    border-radius: 4px;
+    background: rgba(250, 204, 21, 0.35);
+    color: #0f172a;
+}
+
+/* ==================== Staff Leaderboard ==================== */
+#staffLeaderboardSection {
+    background: linear-gradient(135deg, rgba(255, 255, 255, 0.98) 0%, rgba(248, 250, 252, 0.95) 100%);
+    border-radius: 16px;
+    border: 1px solid rgba(148, 163, 184, 0.3);
+    box-shadow: 0 4px 12px rgba(15, 23, 42, 0.08);
+    /* override .admin-form flex-wrap layout */
+    flex-direction: column;
+    flex-wrap: nowrap;
+    align-items: stretch;
+    gap: 12px;
+}
+
+.leaderboard-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 12px;
+    flex-wrap: wrap;
+    margin-bottom: 12px;
+}
+
+.leaderboard-title {
+    margin: 0;
+    color: #1e293b;
+    font-size: 16px;
+    font-weight: 800;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    letter-spacing: 0.04em;
+}
+
+.leaderboard-actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+.leaderboard-hint {
+    font-size: 12px;
+    color: #64748b;
+}
+
+.leaderboard-grid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 10px;
+}
+
+.leaderboard-grid--me {
+    margin-top: 8px;
+    margin-bottom: 12px;
+}
+
+.leaderboard-card {
+    padding: 12px;
+    border-radius: 12px;
+    background: rgba(255, 255, 255, 0.88);
+    border: 1px solid rgba(148, 163, 184, 0.25);
+    box-shadow: 0 4px 12px rgba(15, 23, 42, 0.06);
+}
+
+.leaderboard-card__label {
+    font-size: 12px;
+    color: #64748b;
+    margin-bottom: 6px;
+}
+
+.leaderboard-card__value {
+    font-size: 20px;
+    font-weight: 800;
+    color: #0f172a;
+    letter-spacing: 0.02em;
+}
+
+.leaderboard-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin-top: 6px;
+    width: 100%;
+}
+
+.leaderboard-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 12px;
+    border-radius: 12px;
+    background: rgba(248, 250, 252, 0.92);
+    border: 1px solid rgba(148, 163, 184, 0.18);
+    transition: transform 0.2s var(--ease-out), box-shadow 0.2s var(--ease-out), border-color 0.2s var(--ease-out);
+    width: 100%;
+}
+
+.leaderboard-row:hover {
+    transform: translateY(-1px);
+    border-color: rgba(45, 212, 191, 0.35);
+    box-shadow: 0 10px 24px rgba(15, 23, 42, 0.06);
+}
+
+.leaderboard-rank {
+    width: 34px;
+    height: 28px;
+    border-radius: 10px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 900;
+    color: #0f172a;
+    background: rgba(226, 232, 240, 0.9);
+    border: 1px solid rgba(148, 163, 184, 0.35);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.85);
+    flex-shrink: 0;
+}
+
+/* 4名之后：统一“普通序号牌”，与前三名形成明显对比 */
+.leaderboard-rank:not(.top1):not(.top2):not(.top3) {
+    background: linear-gradient(180deg, rgba(248, 250, 252, 0.98) 0%, rgba(226, 232, 240, 0.9) 100%);
+    color: #0f172a;
+    border-color: rgba(148, 163, 184, 0.4);
+}
+
+/* 前三名：奖牌徽章（更显眼） */
+.leaderboard-rank.top1,
+.leaderboard-rank.top2,
+.leaderboard-rank.top3 {
+    width: 36px;
+    height: 34px;
+    border-radius: 14px;
+    color: #0f172a;
+    border: 1px solid rgba(15, 23, 42, 0.12);
+    box-shadow:
+        0 10px 22px rgba(15, 23, 42, 0.12),
+        inset 0 1px 0 rgba(255, 255, 255, 0.75);
+    position: relative;
+    overflow: hidden;
+}
+
+.leaderboard-rank.top1 {
+    background: linear-gradient(135deg, rgba(250, 204, 21, 0.95) 0%, rgba(245, 158, 11, 0.92) 55%, rgba(234, 179, 8, 0.92) 100%);
+}
+.leaderboard-rank.top2 {
+    background: linear-gradient(135deg, rgba(226, 232, 240, 0.98) 0%, rgba(148, 163, 184, 0.9) 55%, rgba(203, 213, 225, 0.95) 100%);
+}
+.leaderboard-rank.top3 {
+    background: linear-gradient(135deg, rgba(251, 146, 60, 0.95) 0%, rgba(249, 115, 22, 0.92) 55%, rgba(253, 186, 116, 0.94) 100%);
+}
+
+/* 奖牌高光 */
+.leaderboard-rank.top1::before,
+.leaderboard-rank.top2::before,
+.leaderboard-rank.top3::before {
+    content: "";
+    position: absolute;
+    inset: -40% -30%;
+    background: radial-gradient(circle at 30% 30%, rgba(255, 255, 255, 0.65) 0%, rgba(255, 255, 255, 0) 55%);
+    transform: rotate(-12deg);
+    pointer-events: none;
+}
+
+/* 左上角小标识：让前三名一眼就不同 */
+.leaderboard-rank.top1::after,
+.leaderboard-rank.top2::after,
+.leaderboard-rank.top3::after {
+    position: absolute;
+    top: 4px;
+    left: 6px;
+    font-size: 12px;
+    line-height: 1;
+    opacity: 0.9;
+    filter: drop-shadow(0 1px 2px rgba(15, 23, 42, 0.18));
+    pointer-events: none;
+}
+.leaderboard-rank.top1::after { content: "★"; }
+.leaderboard-rank.top2::after { content: "◆"; }
+.leaderboard-rank.top3::after { content: "●"; }
+
+.leaderboard-main {
+    flex: 1;
+    min-width: 0;
+}
+
+.leaderboard-name {
+    font-weight: 800;
+    color: #0f172a;
+    font-size: 14px;
+    line-height: 1.2;
+    margin-bottom: 2px;
+}
+
+.leaderboard-sub {
+    font-size: 12px;
+    color: #64748b;
+}
+
+.leaderboard-metrics {
+    display: flex;
+    gap: 10px;
+    align-items: baseline;
+    flex-shrink: 0;
+}
+
+.leaderboard-metrics .m {
+    text-align: right;
+    min-width: 74px;
+}
+
+.leaderboard-metrics .m .v {
+    font-weight: 900;
+    color: #0f172a;
+    font-size: 14px;
+}
+
+.leaderboard-metrics .m .k {
+    font-size: 11px;
+    color: #64748b;
+}
+
+.leaderboard-row.is-me {
+    border-color: rgba(20, 184, 166, 0.55);
+    box-shadow: 0 6px 22px rgba(20, 184, 166, 0.12);
+}
+
+@media (max-width: 768px) {
+    .leaderboard-grid {
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+    .leaderboard-metrics .m {
+        min-width: 64px;
+    }
+    .leaderboard-row {
+        align-items: flex-start;
+    }
+    .leaderboard-metrics {
+        flex-direction: column;
+        gap: 6px;
+        align-items: flex-end;
+    }
+    .leaderboard-name {
+        font-size: 14px;
+    }
+    .leaderboard-sub {
+        font-size: 11px;
+    }
+}
+
+/* filter select */
+#staffLeaderboardProjectFilter {
+    padding: 6px 10px;
+    border-radius: 10px;
+    border: 1px solid rgba(148, 163, 184, 0.35);
+    background: rgba(255, 255, 255, 0.95);
+    color: #0f172a;
+    font-size: 13px;
+}
+
 .lucide {
     width: 1em;
     height: 1em;
@@ -453,6 +771,60 @@ textarea {
     grid-template-columns: minmax(220px, 1fr) 170px 180px auto auto;
     gap: 10px;
     align-items: center;
+}
+
+/* 监督项目：复选框美化（不影响功能，仅替换外观） */
+input[type="checkbox"].supervise-checkbox {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 18px;
+    height: 18px;
+    border-radius: 6px;
+    border: 1.5px solid rgba(148, 163, 184, 0.75);
+    background: linear-gradient(180deg, #ffffff 0%, #f8fafc 100%);
+    box-shadow:
+        inset 0 1px 0 rgba(255, 255, 255, 0.9),
+        0 2px 6px rgba(15, 23, 42, 0.06);
+    cursor: pointer;
+    position: relative;
+    vertical-align: middle;
+    transition: transform 0.15s var(--ease-out), border-color 0.15s var(--ease-out), box-shadow 0.15s var(--ease-out), background 0.15s var(--ease-out);
+}
+
+input[type="checkbox"].supervise-checkbox:hover {
+    border-color: rgba(45, 212, 191, 0.85);
+    box-shadow:
+        0 0 0 3px rgba(45, 212, 191, 0.14),
+        0 4px 10px rgba(13, 148, 136, 0.1);
+    transform: translateY(-1px);
+}
+
+input[type="checkbox"].supervise-checkbox:focus-visible {
+    outline: none;
+    box-shadow:
+        0 0 0 3px rgba(59, 130, 246, 0.22),
+        0 4px 10px rgba(37, 99, 235, 0.12);
+    border-color: rgba(59, 130, 246, 0.8);
+}
+
+input[type="checkbox"].supervise-checkbox:checked {
+    border-color: rgba(20, 184, 166, 0.9);
+    background: linear-gradient(135deg, rgba(20, 184, 166, 0.95) 0%, rgba(13, 148, 136, 0.95) 100%);
+    box-shadow:
+        0 0 0 3px rgba(45, 212, 191, 0.18),
+        0 6px 14px rgba(13, 148, 136, 0.16);
+}
+
+input[type="checkbox"].supervise-checkbox:checked::after {
+    content: "";
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    width: 9px;
+    height: 5px;
+    border-left: 2px solid rgba(255, 255, 255, 0.98);
+    border-bottom: 2px solid rgba(255, 255, 255, 0.98);
+    transform: translate(-50%, -55%) rotate(-45deg);
 }
 
 .supervise-toolbar input,

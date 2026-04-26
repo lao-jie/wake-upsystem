@@ -104,3 +104,105 @@ function generateFixedSerial(orders) {
 
     return result;
 }
+
+// ==================== Global Loading Overlay ====================
+let __globalLoadingCount = 0;
+
+function showGlobalLoading(message = "加载中…") {
+    __globalLoadingCount += 1;
+    const overlay = document.getElementById("globalLoadingOverlay");
+    if (!overlay) return;
+    const text = overlay.querySelector(".global-loading__text");
+    if (text) text.textContent = String(message || "加载中…");
+    overlay.classList.add("show");
+}
+
+function hideGlobalLoading() {
+    __globalLoadingCount = Math.max(0, __globalLoadingCount - 1);
+    if (__globalLoadingCount !== 0) return;
+    const overlay = document.getElementById("globalLoadingOverlay");
+    if (!overlay) return;
+    overlay.classList.remove("show");
+}
+
+// ==================== Keyword Highlight ====================
+function clearKeywordHighlights(root) {
+    const container = typeof root === "string" ? document.querySelector(root) : root;
+    if (!container) return;
+    container.querySelectorAll("mark.kw").forEach((mark) => {
+        const parent = mark.parentNode;
+        if (!parent) return;
+        parent.replaceChild(document.createTextNode(mark.textContent || ""), mark);
+        parent.normalize();
+    });
+}
+
+function highlightKeyword(root, keyword) {
+    const container = typeof root === "string" ? document.querySelector(root) : root;
+    if (!container) return;
+    const kw = String(keyword || "").trim();
+    clearKeywordHighlights(container);
+    if (!kw) return;
+
+    const lowerKw = kw.toLowerCase();
+    const blockedTags = new Set(["SCRIPT", "STYLE", "NOSCRIPT", "TEXTAREA", "INPUT", "SELECT", "OPTION", "BUTTON"]);
+    const walker = document.createTreeWalker(container, NodeFilter.SHOW_TEXT, {
+        acceptNode(node) {
+            const v = node?.nodeValue;
+            if (!v || !String(v).trim()) return NodeFilter.FILTER_REJECT;
+            const p = node.parentElement;
+            if (!p) return NodeFilter.FILTER_REJECT;
+            if (blockedTags.has(p.tagName)) return NodeFilter.FILTER_REJECT;
+            if (p.closest("mark.kw")) return NodeFilter.FILTER_REJECT;
+            if (String(v).toLowerCase().includes(lowerKw)) return NodeFilter.FILTER_ACCEPT;
+            return NodeFilter.FILTER_REJECT;
+        }
+    });
+
+    const nodes = [];
+    while (walker.nextNode()) nodes.push(walker.currentNode);
+    nodes.forEach((node) => {
+        const text = String(node.nodeValue || "");
+        const lower = text.toLowerCase();
+        const idx = lower.indexOf(lowerKw);
+        if (idx < 0) return;
+
+        const frag = document.createDocumentFragment();
+        const before = text.slice(0, idx);
+        const hit = text.slice(idx, idx + kw.length);
+        const after = text.slice(idx + kw.length);
+        if (before) frag.appendChild(document.createTextNode(before));
+        const mark = document.createElement("mark");
+        mark.className = "kw";
+        mark.textContent = hit;
+        frag.appendChild(mark);
+        if (after) frag.appendChild(document.createTextNode(after));
+        node.parentNode.replaceChild(frag, node);
+    });
+}
+
+// ==================== Auth Helpers ====================
+function getLoginUserSafe() {
+    try {
+        const raw = localStorage.getItem("loginUser");
+        if (!raw) return null;
+        const parsed = JSON.parse(raw);
+        if (!parsed || typeof parsed !== "object") return null;
+        const id = String(parsed.id || "").trim();
+        if (!id) return null;
+        return parsed;
+    } catch (_) {
+        return null;
+    }
+}
+
+function requireLoginOrRedirect(redirectTo = "index.html") {
+    const user = getLoginUserSafe();
+    if (user) return user;
+    try {
+        window.location.href = redirectTo;
+    } catch (_) {
+        // ignore
+    }
+    return null;
+}

@@ -11,23 +11,35 @@ async function initStaffData() {
 }
 
 let teamSearchKeyword = "";
+let teamSearchRawKeyword = "";
+let teamSearchDebounceTimer = null;
 
 function handleTeamSearch(keyword) {
-    teamSearchKeyword = (keyword || "").trim().toLowerCase();
-    renderTeamTable();
+    teamSearchRawKeyword = String(keyword || "").trim();
+    teamSearchKeyword = teamSearchRawKeyword.toLowerCase();
+    if (teamSearchDebounceTimer) clearTimeout(teamSearchDebounceTimer);
+    teamSearchDebounceTimer = setTimeout(() => {
+        renderTeamTable();
+    }, 260);
 }
 
 function submitTeamSearch() {
     const input = document.getElementById("teamSearchInput");
     if (!input) return;
-    handleTeamSearch(input.value);
+    if (teamSearchDebounceTimer) clearTimeout(teamSearchDebounceTimer);
+    teamSearchRawKeyword = String(input.value || "").trim();
+    teamSearchKeyword = teamSearchRawKeyword.toLowerCase();
+    renderTeamTable();
 }
 
 function clearTeamSearch() {
     const input = document.getElementById("teamSearchInput");
     if (!input) return;
     input.value = "";
-    handleTeamSearch("");
+    if (teamSearchDebounceTimer) clearTimeout(teamSearchDebounceTimer);
+    teamSearchRawKeyword = "";
+    teamSearchKeyword = "";
+    renderTeamTable();
 }
 
 function handleTeamSearchKeydown(event) {
@@ -206,6 +218,10 @@ async function renderTeamTable() {
             <td colspan="8" style="text-align:center; color:#64748b; padding:20px;">未匹配到员工数据</td>
         </tr>
     `;
+    const kw = String(teamSearchRawKeyword || "").trim();
+    if (kw && typeof highlightKeyword === "function") {
+        highlightKeyword(document.getElementById("teamTable"), kw);
+    }
 }
 
 // 重置员工密码

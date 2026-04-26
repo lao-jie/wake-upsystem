@@ -74,6 +74,9 @@ async function loadOrders() {
     if (loadingElement) {
         loadingElement.style.display = 'block';
     }
+    if (typeof showGlobalLoading === "function") {
+        showGlobalLoading("加载订单中…");
+    }
 
     try {
         let allOrders = await getOrders();
@@ -152,6 +155,9 @@ async function loadOrders() {
         if (loadingElement && currentToken === latestLoadOrdersToken) {
             loadingElement.style.display = 'none';
         }
+        if (typeof hideGlobalLoading === "function") {
+            hideGlobalLoading();
+        }
     }
 }
 
@@ -173,6 +179,11 @@ function renderOrders(orders) {
             } else {
                 perfLog('渲染桌面端表格');
                 renderTable(orders);
+            }
+            const kw = String(window.__wakeSearchKeyword || "").trim();
+            if (kw && typeof highlightKeyword === "function") {
+                highlightKeyword(document.getElementById("orderCards"), kw);
+                highlightKeyword(document.getElementById("orderTable"), kw);
             }
         } catch (error) {
             console.error('渲染订单失败:', error);
@@ -916,7 +927,9 @@ async function editSelected() {
 // 搜索订单
 function searchOrders() {
     const searchInput = document.getElementById("searchInput");
-    const searchTerm = searchInput.value.trim().toLowerCase();
+    const rawTerm = String(searchInput?.value || "").trim();
+    const searchTerm = rawTerm.toLowerCase();
+    window.__wakeSearchKeyword = rawTerm;
     if (!searchTerm) {
         renderOrders(originalOrders || []);
         return;
@@ -948,8 +961,6 @@ function searchOrders() {
     });
 
     renderOrders(filteredOrders);
-    // 搜索后清空搜索栏
-    searchInput.value = "";
 }
 
 // 清空搜索
