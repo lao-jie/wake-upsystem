@@ -63,6 +63,108 @@ async function saveOrders(orders) {
     }
 }
 
+// ==============================
+// 价格策略（管理员可配置）
+// - 优先读写 Supabase 表 price_strategy（单行：id='default'）
+// - 失败则回退 localStorage
+// ==============================
+const PRICE_STRATEGY_LS_KEY = "priceStrategy";
+const PRICE_STRATEGY_DB_TABLE = "price_strategy";
+
+function getDefaultPriceStrategy() {
+    const wakeRules = (typeof PRICE_RULE === "object" && PRICE_RULE) ? { ...PRICE_RULE } : {
+        "06:00-06:30": 0.8,
+        "06:31-07:00": 0.7,
+        "07:01-08:00": 0.6,
+        "08:01-24:00": 0.5
+    };
+    return {
+        version: 1,
+        wake: {
+            rules: wakeRules
+        },
+        supervise: {
+            unitPricePerDay: {
+                "监督早睡": 1.35,
+                "监督早起": 1.35,
+                "监督早睡早起": 2.7
+            }
+        },
+        updatedAt: new Date().toISOString()
+    };
+}
+
+function readPriceStrategyFromLocal() {
+    try {
+        const raw = localStorage.getItem(PRICE_STRATEGY_LS_KEY);
+        if (!raw) return null;
+        const parsed = JSON.parse(raw);
+        return parsed && typeof parsed === "object" ? parsed : null;
+    } catch (_) {
+        return null;
+    }
+}
+
+function savePriceStrategyToLocal(strategy) {
+    try {
+        localStorage.setItem(PRICE_STRATEGY_LS_KEY, JSON.stringify(strategy));
+    } catch (_) { }
+}
+
+async function getPriceStrategy() {
+    try {
+        const { data, error } = await supabaseClient
+            .from(PRICE_STRATEGY_DB_TABLE)
+            .select("*")
+            .eq("id", "default")
+            .single();
+        if (!error && data) {
+            const strategy = data?.data && typeof data.data === "object" ? data.data : null;
+            if (strategy) {
+                savePriceStrategyToLocal(strategy);
+                return strategy;
+            }
+        }
+    } catch (e) {
+        console.warn("读取价格策略失败，改用本地缓存：", e);
+    }
+    return readPriceStrategyFromLocal() || getDefaultPriceStrategy();
+}
+
+async function savePriceStrategy(strategy) {
+    const next = strategy && typeof strategy === "object" ? strategy : getDefaultPriceStrategy();
+    next.updatedAt = new Date().toISOString();
+    let saved = false;
+    try {
+        const { error } = await supabaseClient
+            .from(PRICE_STRATEGY_DB_TABLE)
+            .upsert([{ id: "default", data: next, updated_at: next.updatedAt }], { onConflict: "id" });
+        if (!error) {
+            saved = true;
+        } else {
+            console.error("保存价格策略失败：", error);
+        }
+    } catch (e) {
+        console.warn("保存价格策略异常，仅保存到本地：", e);
+    } finally {
+        savePriceStrategyToLocal(next);
+    }
+    return { savedToCloud: saved, strategy: next };
+}
+
+// PostgREST 常把 numeric 序列化成字符串；统一成 number，避免前端 .toFixed / 加减出错
+function normalizeStaffRecord(staff) {
+    if (!staff || typeof staff !== "object") return staff;
+    const sal = Number.parseFloat(staff.salary);
+    return {
+        ...staff,
+        salary: Number.isFinite(sal) ? sal : 0,
+        phone: String(staff.phone || "").trim(),
+        salaryMethod: staff.salaryMethod || staff.salarymethod || staff.salary_method || "",
+        salaryAccount: staff.salaryAccount || staff.salaryaccount || staff.salary_account || ""
+    };
+}
+
 async function getStaffList() {
     try {
         const { data, error } = await supabaseClient
@@ -70,12 +172,7 @@ async function getStaffList() {
             .select('*');
 
         if (!error && data) {
-            const normalized = data.map((staff) => ({
-                ...staff,
-                phone: staff.phone || '',
-                salaryMethod: staff.salaryMethod || staff.salarymethod || staff.salary_method || '',
-                salaryAccount: staff.salaryAccount || staff.salaryaccount || staff.salary_account || ''
-            }));
+            const normalized = data.map(normalizeStaffRecord);
             // 同步到本地存储
             localStorage.setItem("staffList", JSON.stringify(normalized));
             return normalized;
@@ -85,7 +182,12 @@ async function getStaffList() {
     } catch (e) {
         console.error("Supabase 读取员工异常：", e);
     }
-    return JSON.parse(localStorage.getItem("staffList") || "[]");
+    try {
+        const local = JSON.parse(localStorage.getItem("staffList") || "[]");
+        return Array.isArray(local) ? local.map(normalizeStaffRecord) : [];
+    } catch (_) {
+        return [];
+    }
 }
 
 function normalizeSalaryMethodForDb(rawValue) {
@@ -303,12 +405,24 @@ async function insertSalaryDetail(detail) {
 // 添加余额变动记录（返回 inserted，用于幂等结算判断）
 async function addSalaryDetail(staffid, amount, type, description, completedTime = new Date(), opts = {}) {
     const normalizedStaffId = String(staffid || "").trim();
+    const normalizedType = String(type || "").trim();
+    const normalizedDesc = String(description || "").trim();
+
+    // 保护：订单收入（自动结算）必须有 settle_key + order_id，否则拒绝写入，避免产生脏数据（NULL order_id/settle_key）
+    if (normalizedType === "订单收入" && /自动结算/.test(normalizedDesc)) {
+        const sk = String(opts?.settleKey || "").trim();
+        const oid = opts?.orderId;
+        if (!sk || oid === undefined || oid === null || oid === "") {
+            console.warn("已阻止无幂等键/订单ID的订单收入明细写入：", { staffid: normalizedStaffId, amount, type: normalizedType, description: normalizedDesc, opts });
+            return { inserted: false, reason: "missing_settle_key_or_order_id" };
+        }
+    }
     const newDetail = {
         id: (opts.id || `${Date.now()}-${Math.floor(Math.random() * 1000000)}`),
         staffid: normalizedStaffId,
         amount,
-        type, // 类型：订单收入、奖励、惩罚、结算
-        description,
+        type: normalizedType, // 类型：订单收入、奖励、惩罚、结算
+        description: normalizedDesc,
         createdat: completedTime.toISOString(),
         settle_key: opts.settleKey || null,
         order_id: opts.orderId || null

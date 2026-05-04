@@ -217,12 +217,15 @@ function normalizeDurationText(rawDuration) {
 function getAutoPriceByProjectAndDuration(project, duration) {
     const days = getDurationDays(duration);
     if (!project) return "";
-    const unitPriceMap = {
-        "监督早睡": 1.35,
-        "监督早起": 1.35,
-        "监督早睡早起": 2.7
-    };
-    const unitPrice = unitPriceMap[project];
+    const strategy = (typeof getPriceStrategyCache === "function" ? getPriceStrategyCache() : null) || {};
+    const unitPriceMap = strategy?.supervise?.unitPricePerDay && typeof strategy.supervise.unitPricePerDay === "object"
+        ? strategy.supervise.unitPricePerDay
+        : {
+            "监督早睡": 1.35,
+            "监督早起": 1.35,
+            "监督早睡早起": 2.7
+        };
+    const unitPrice = Number(unitPriceMap[project]);
     if (!unitPrice) return "";
     return unitPrice * days;
 }

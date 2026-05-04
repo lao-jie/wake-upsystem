@@ -91,12 +91,18 @@ export default async function handler(req, res) {
     for (const order of updatedOrders) {
       const staffId = String(order?.staffid || "").trim();
       const amount = parseFloat(order?.amount || order?.money || 0);
+      const orderId = order?.id;
+      if (orderId === undefined || orderId === null || orderId === "") {
+        // 严格：无订单 id 不结算，避免产生 NULL 明细/重复
+        failedOrderIds.push(orderId);
+        continue;
+      }
       if (!staffId || !(amount > 0)) {
         failedOrderIds.push(order.id);
         continue;
       }
 
-      const settleKey = `order_income:${order.id}`;
+      const settleKey = `order_income:${orderId}`;
       // 先查是否已结算过，避免重复加余额
       const existedResp = await fetch(
         `${SUPABASE_URL}/rest/v1/salary_details?settle_key=eq.${encodeURIComponent(settleKey)}&select=id&limit=1`,
@@ -118,14 +124,14 @@ export default async function handler(req, res) {
       }
 
       const detailPayload = [{
-        id: `${Date.now()}-${Math.floor(Math.random() * 1000000)}-${order.id}`,
+        id: `${Date.now()}-${Math.floor(Math.random() * 1000000)}-${orderId}`,
         staffid: staffId,
         amount: amount,
         type: "订单收入",
         description: "订单完成自动结算",
         createdat: new Date().toISOString(),
         settle_key: settleKey,
-        order_id: order.id
+        order_id: orderId
       }];
 
       const detailResponse = await fetch(

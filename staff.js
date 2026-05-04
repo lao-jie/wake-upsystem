@@ -180,7 +180,8 @@ async function renderTeamTable() {
         );
         const todayCount = todayOrders.length;
 
-        const totalSalary = (staff.salary || 0).toFixed(2);
+        const totalSalary = Number.parseFloat(staff.salary);
+        const totalSalaryText = (Number.isFinite(totalSalary) ? totalSalary : 0).toFixed(2);
         const localStaff = localStaffMap.get(staff.id) || {};
         const phone = (staff.phone || localStaff.phone || "").trim();
         const salaryAccount = (staff.salaryAccount || localStaff.salaryAccount || "").trim();
@@ -209,7 +210,7 @@ async function renderTeamTable() {
             <td>${phoneText}</td>
             <td>${salaryAccountText}</td>
             <td>${todayCount}</td>
-            <td>${totalSalary}</td>
+            <td>${totalSalaryText}</td>
             <td>${actionBtns}</td>
         </tr>`;
     });
@@ -273,13 +274,14 @@ async function rewardStaff(staffId) {
     let staffList = await getStaffList();
     const index = staffList.findIndex(staff => staff.id === staffId);
     if (index !== -1) {
-        staffList[index].salary = (staffList[index].salary || 0) + amount;
+        const baseSal = Number.parseFloat(staffList[index].salary || 0);
+        staffList[index].salary = (Number.isFinite(baseSal) ? baseSal : 0) + amount;
         await saveStaffList(staffList);
         const actionKey = `manual_reward:${staffId}:${Math.round(amount * 100)}:${Math.floor(Date.now() / 1000)}`;
         // 添加余额变动记录
         await addSalaryDetail(staffId, amount, '奖励', '管理员手动奖励', new Date(), { settleKey: actionKey });
         renderTeamTable();
-        alert(`已奖励该员工 ${amount.toFixed(2)} 元，当前余额：${staffList[index].salary.toFixed(2)} 元`);
+        alert(`已奖励该员工 ${amount.toFixed(2)} 元，当前余额：${formatMoneyDisplay(staffList[index].salary)} 元`);
     }
 }
 
@@ -296,20 +298,21 @@ async function punishStaff(staffId) {
     let staffList = await getStaffList();
     const index = staffList.findIndex(staff => staff.id === staffId);
     if (index !== -1) {
-        const currentSalary = staffList[index].salary || 0;
-        if (amount > currentSalary) {
-            if (!confirm(`该员工当前余额仅 ${currentSalary.toFixed(2)} 元，扣除金额超过余额，是否继续？`)) {
+        const currentSalary = Number.parseFloat(staffList[index].salary || 0);
+        const safeCurrentSalary = Number.isFinite(currentSalary) ? currentSalary : 0;
+        if (amount > safeCurrentSalary) {
+            if (!confirm(`该员工当前余额仅 ${safeCurrentSalary.toFixed(2)} 元，扣除金额超过余额，是否继续？`)) {
                 return;
             }
         }
 
-        staffList[index].salary = Math.max(0, currentSalary - amount);
+        staffList[index].salary = Math.max(0, safeCurrentSalary - amount);
         await saveStaffList(staffList);
         const actionKey = `manual_punish:${staffId}:${Math.round(amount * 100)}:${Math.floor(Date.now() / 1000)}`;
         // 添加余额变动记录（惩罚为负数）
         await addSalaryDetail(staffId, -amount, '惩罚', '管理员手动惩罚', new Date(), { settleKey: actionKey });
         renderTeamTable();
-        alert(`已扣除该员工 ${amount.toFixed(2)} 元，当前余额：${staffList[index].salary.toFixed(2)} 元`);
+        alert(`已扣除该员工 ${amount.toFixed(2)} 元，当前余额：${formatMoneyDisplay(staffList[index].salary)} 元`);
     }
 }
 
@@ -344,7 +347,8 @@ async function renderProfilePage() {
     ).length;
     document.getElementById("todayOrderCount").innerText = todayCount;
 
-    document.getElementById("totalBalance").innerText = myInfo.salary.toFixed(2);
+    const profileBal = Number.parseFloat(myInfo.salary);
+    document.getElementById("totalBalance").innerText = (Number.isFinite(profileBal) ? profileBal : 0).toFixed(2);
 }
 
 // 渲染个人中心卡片（移动端）
@@ -379,7 +383,7 @@ function renderProfileCards(orders) {
                             <td style="padding: 12px; width: 60px;">${order.serialnumber}</td>
                             <td style="padding: 12px;">${showTime}</td>
                             <td style="padding: 12px;">${order.phone}</td>
-                            <td style="padding: 12px;">${(order.amount || order.money).toFixed(2)}</td>
+                            <td style="padding: 12px;">${formatMoneyDisplay(order.amount ?? order.money)}</td>
                             <td style="padding: 12px;">${order.status}</td>
                             <td style="padding: 12px;">${settleStatus}</td>
                         </tr>
@@ -440,7 +444,7 @@ function renderProfileCards(orders) {
                         </div>
                         <div style="display:flex;align-items:center;gap:8px;">
                             <span class="status-badge ${statusClass}">${order.status}</span>
-                            <span class="order-money">${(order.amount || order.money).toFixed(2)} 元</span>
+                            <span class="order-money">${formatMoneyDisplay(order.amount ?? order.money)} 元</span>
                         </div>
                     </div>
                     <div class="order-card-body">
@@ -474,8 +478,11 @@ async function addSalary(staffId, amount, completedTime = new Date()) {
     // 使用原子性更好的余额更新函数
     const ok = await addStaffSalary(staffId, amount);
     if (ok) {
-        // 添加余额变动记录
-        await addSalaryDetail(staffId, amount, '订单收入', '订单完成自动结算', completedTime);
+        // 保护：这里是旧函数，没有订单上下文（无 order.id / settle_key），
+        // 避免写入“订单收入自动结算”的脏明细（会出现 order_id/settle_key 为空）
+        await addSalaryDetail(staffId, amount, '奖励', '余额调整', completedTime, {
+            settleKey: `salary_adjust:${String(staffId || "").trim()}:${Math.round(Number(amount || 0) * 100)}:${Math.floor(Date.now() / 1000)}`
+        });
     }
 }
 
@@ -485,15 +492,11 @@ async function addSalary(staffId, amount, completedTime = new Date()) {
 // - 只有写入成功才给员工余额加钱
 // ==============================
 function getOrderSettleKey(order) {
-    // 优先使用订单 id（saveOrders 会确保有 id）
+    // 严格模式：没有订单 id 就不允许结算（不写明细、不加余额）
     if (order && order.id !== undefined && order.id !== null && order.id !== "") {
         return `order_income:${order.id}`;
     }
-    // 兜底：使用业务字段拼 key（尽量稳定）
-    const wt = order?.waketime || "";
-    const st = order?.submittime || "";
-    const phone = order?.phone || "";
-    return `order_income_fallback:${st}:${phone}:${wt}`;
+    return "";
 }
 
 async function settleOrderIncomeOnce(order, completedTime = new Date()) {
@@ -506,7 +509,8 @@ async function settleOrderIncomeOnce(order, completedTime = new Date()) {
     }
 
     const settleKey = getOrderSettleKey(order);
-    const orderId = order.id ?? null;
+    if (!settleKey) return { settled: false, reason: "missing_order_id" };
+    const orderId = order.id;
 
     // 1) 先插入结算明细（幂等关键）
     const detailRes = await addSalaryDetail(
@@ -565,9 +569,10 @@ async function openSalaryDetailModal(staffId) {
     let html = "";
     if (staffDetails.length > 0) {
         staffDetails.forEach(detail => {
-            const amount = Number(detail.amount || 0);
-            const amountClass = amount >= 0 ? "salary-amount salary-amount--pos" : "salary-amount salary-amount--neg";
-            const amountText = amount >= 0 ? `+${amount.toFixed(2)}` : amount.toFixed(2);
+            const amount = Number.parseFloat(detail.amount);
+            const amountSafe = Number.isFinite(amount) ? amount : 0;
+            const amountClass = amountSafe >= 0 ? "salary-amount salary-amount--pos" : "salary-amount salary-amount--neg";
+            const amountText = amountSafe >= 0 ? `+${formatMoneyDisplay(amountSafe)}` : formatMoneyDisplay(amountSafe);
 
             let typeText = "";
             switch (detail.type) {

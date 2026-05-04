@@ -1,3 +1,9 @@
+/** PostgREST / JSON 常把 numeric 变成字符串；避免对字符串调用 .toFixed 或错误拼接 */
+function formatMoneyDisplay(value) {
+    const n = Number.parseFloat(value);
+    return (Number.isFinite(n) ? n : 0).toFixed(2);
+}
+
 // 格式化时间为北京时间（Asia/Shanghai）。勿在解析后再手动 +8h：与 timeZone 叠加会重复偏移。
 function formatTime(timeStr) {
     if (timeStr == null || timeStr === "") return "-";
@@ -21,10 +27,24 @@ function calculateAmountByTime(timeStr) {
     const [hour, minute] = timeStr.split(":").map(Number);
     const totalMin = hour * 60 + minute;
 
-    if (totalMin >= 6 * 60 && totalMin <= 6 * 60 + 30) return PRICE_RULE["06:00-06:30"];
-    if (totalMin >= 6 * 60 + 31 && totalMin <= 7 * 60) return PRICE_RULE["06:31-07:00"];
-    if (totalMin >= 7 * 60 + 1 && totalMin <= 8 * 60) return PRICE_RULE["07:01-08:00"];
-    return PRICE_RULE["08:01-24:00"];
+    const strategy = (typeof getPriceStrategyCache === "function" ? getPriceStrategyCache() : null) || {};
+    const wakeRules = strategy?.wake?.rules && typeof strategy.wake.rules === "object" ? strategy.wake.rules : null;
+    const rules = wakeRules || (typeof PRICE_RULE === "object" ? PRICE_RULE : {});
+
+    if (totalMin >= 6 * 60 && totalMin <= 6 * 60 + 30) return Number(rules["06:00-06:30"] || 0);
+    if (totalMin >= 6 * 60 + 31 && totalMin <= 7 * 60) return Number(rules["06:31-07:00"] || 0);
+    if (totalMin >= 7 * 60 + 1 && totalMin <= 8 * 60) return Number(rules["07:01-08:00"] || 0);
+    return Number(rules["08:01-24:00"] || 0);
+}
+
+// 价格策略：全局缓存（用于同步计算金额，避免到处 await）
+function getPriceStrategyCache() {
+    const c = window.__priceStrategyCache;
+    return c && typeof c === "object" ? c : null;
+}
+
+function setPriceStrategyCache(next) {
+    window.__priceStrategyCache = next && typeof next === "object" ? next : null;
 }
 
 // 归一化时间格式（HH:mm，供批量识别等使用）

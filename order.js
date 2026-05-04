@@ -231,7 +231,7 @@ function renderOrders(orders) {
                             <td>${item.phone}</td>
                             <td>${item.note || '-'}</td>
                             <td><span class="status-badge ${statusClass}">${item.status}</span></td>
-                            <td>${(item.amount || item.money || 0).toFixed(2)} 元</td>
+                            <td>${formatMoneyDisplay(item.amount ?? item.money)} 元</td>
                             <td>${actionHtml}</td>
                             <td>${formatTime(item.submittime)}</td>
                         </tr>
@@ -301,7 +301,7 @@ function renderCards(orders) {
                             <td>${item.phone}</td>
                             <td>${item.note || '-'}</td>
                             <td><span class="status-badge ${statusClass}">${item.status}</span></td>
-                            <td>${(item.amount || item.money || 0).toFixed(2)} 元</td>
+                            <td>${formatMoneyDisplay(item.amount ?? item.money)} 元</td>
                             <td>${actionHtml}</td>
                             <td>${formatTime(item.submittime)}</td>
                         </tr>
@@ -345,7 +345,7 @@ function renderCards(orders) {
                         </div>
                         <div style="display:flex;align-items:center;gap:8px;">
                             <span class="status-badge ${statusClass}">${item.status}</span>
-                            <span class="order-money">${(item.amount || item.money || 0).toFixed(2)} 元</span>
+                            <span class="order-money">${formatMoneyDisplay(item.amount ?? item.money)} 元</span>
                         </div>
                     </div>
                     <div class="order-card-body">
@@ -465,7 +465,7 @@ function renderTable(orders) {
                     <td>${item.note || '-'}</td>
                     <td>${item.staffname || '-'}</td>
                     <td><span class="status-badge ${statusClass}">${item.status}</span></td>
-                    <td>${(item.amount || item.money).toFixed(2)} 元</td>
+                    <td>${formatMoneyDisplay(item.amount ?? item.money)} 元</td>
                     <td>${actionBtn}</td>
                     <td>${formatTime(item.submittime)}</td>
                 </tr>
@@ -535,7 +535,7 @@ function renderTable(orders) {
       <td>${item.note || '-'}</td>
       <td>${item.staffname || '-'}</td>
       <td><span class="status-badge ${statusClass}">${item.status}</span></td>
-      <td>${(item.amount || item.money).toFixed(2)} 元</td>
+      <td>${formatMoneyDisplay(item.amount ?? item.money)} 元</td>
       <td>${actionBtn}</td>
       <td>${formatTime(item.submittime)}</td>
     </tr>`;

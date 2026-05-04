@@ -62,7 +62,8 @@ function applyBrightness(percentage) {
 function initUser() {
     const staffList = JSON.parse(localStorage.getItem("staffList") || "[]");
     const testUsers = {
-        admin: { id: "admin001", name: "管理员", role: "admin" }
+        // 与 login.js 保持一致：管理员账号 id 使用 admin
+        admin: { id: "admin", name: "管理员", role: "admin" }
     };
     staffList.forEach(staff => {
         testUsers[staff.id] = {
@@ -138,6 +139,14 @@ if (isAdmin) {
     const noticeSettingNav = document.getElementById("nav-notice-setting");
     if (noticeSettingNav) {
         noticeSettingNav.style.display = "flex";
+    }
+    const priceStrategyNav = document.getElementById("nav-price-strategy");
+    if (priceStrategyNav) {
+        priceStrategyNav.style.display = "flex";
+    }
+    const performanceNav = document.getElementById("nav-performance-board");
+    if (performanceNav) {
+        performanceNav.style.display = "flex";
     }
 }
 
@@ -251,7 +260,745 @@ function showPage(page) {
         }
         // 刷新公告预览
         loadNoticeSettingsPreview();
+    } else if (page === "priceStrategy") {
+        const nav = document.getElementById("nav-price-strategy");
+        if (nav) nav.classList.add("active");
+        const userNameEl = document.getElementById("priceStrategyUserName");
+        if (userNameEl) userNameEl.innerText = user.name;
+        loadPriceStrategyPage();
+    } else if (page === "performanceBoard") {
+        const nav = document.getElementById("nav-performance-board");
+        if (nav) nav.classList.add("active");
+        const userNameEl = document.getElementById("performanceBoardUserName");
+        if (userNameEl) userNameEl.innerText = user.name;
+        loadPerformanceBoard();
     }
+}
+
+function parseDurationDaysSimple(duration) {
+    const s = String(duration || "").trim();
+    const m = s.match(/(\d+)\s*(?:次|天)?/);
+    const n = m ? parseInt(m[1], 10) : NaN;
+    return Number.isFinite(n) && n > 0 ? n : 1;
+}
+
+function getStrategyUnitPrice(project, fallback) {
+    const strategy = (typeof getPriceStrategyCache === "function" ? getPriceStrategyCache() : null) || {};
+    const map = strategy?.supervise?.unitPricePerDay && typeof strategy.supervise.unitPricePerDay === "object"
+        ? strategy.supervise.unitPricePerDay
+        : null;
+    const v = map ? Number(map[String(project || "").trim()]) : NaN;
+    return Number.isFinite(v) && v >= 0 ? v : fallback;
+}
+
+async function loadPriceStrategyPage() {
+    if (!isAdmin) return;
+    const saveBtn = document.getElementById("priceStrategySaveBtn");
+    const reloadBtn = document.getElementById("priceStrategyReloadBtn");
+    const applyBtn = document.getElementById("priceStrategyApplyBtn");
+
+    if (saveBtn && !saveBtn.__bound) {
+        saveBtn.__bound = true;
+        saveBtn.addEventListener("click", async () => {
+            await savePriceStrategyPage();
+        });
+    }
+    if (reloadBtn && !reloadBtn.__bound) {
+        reloadBtn.__bound = true;
+        reloadBtn.addEventListener("click", async () => {
+            await hydratePriceStrategyInputs();
+        });
+    }
+    if (applyBtn && !applyBtn.__bound) {
+        applyBtn.__bound = true;
+        applyBtn.addEventListener("click", async () => {
+            await applyPriceStrategyToUnsettledOrders();
+        });
+    }
+
+    await hydratePriceStrategyInputs();
+    renderLucideIcons();
+}
+
+function setInputNumber(id, value) {
+    const el = document.getElementById(id);
+    if (!el) return;
+    const n = Number(value);
+    el.value = Number.isFinite(n) ? n.toFixed(2) : "";
+}
+
+function readInputNumber(id, fallback = 0) {
+    const el = document.getElementById(id);
+    if (!el) return fallback;
+    const n = Number(el.value);
+    return Number.isFinite(n) && n >= 0 ? n : fallback;
+}
+
+async function hydratePriceStrategyInputs() {
+    if (typeof getPriceStrategy !== "function") return;
+    const strategy = await getPriceStrategy();
+    if (typeof setPriceStrategyCache === "function") {
+        setPriceStrategyCache(strategy);
+    }
+
+    const wakeRules = strategy?.wake?.rules || {};
+    setInputNumber("psWake_0600_0630", wakeRules["06:00-06:30"]);
+    setInputNumber("psWake_0631_0700", wakeRules["06:31-07:00"]);
+    setInputNumber("psWake_0701_0800", wakeRules["07:01-08:00"]);
+    setInputNumber("psWake_0801_2400", wakeRules["08:01-24:00"]);
+
+    const unit = strategy?.supervise?.unitPricePerDay || {};
+    setInputNumber("psSvUnit_sleep", unit["监督早睡"]);
+    setInputNumber("psSvUnit_wake", unit["监督早起"]);
+    setInputNumber("psSvUnit_combo", unit["监督早睡早起"]);
+}
+
+async function savePriceStrategyPage() {
+    if (!isAdmin) return;
+    if (typeof savePriceStrategy !== "function") return;
+
+    const strategy = {
+        version: 1,
+        wake: {
+            rules: {
+                "06:00-06:30": readInputNumber("psWake_0600_0630", 0.8),
+                "06:31-07:00": readInputNumber("psWake_0631_0700", 0.7),
+                "07:01-08:00": readInputNumber("psWake_0701_0800", 0.6),
+                "08:01-24:00": readInputNumber("psWake_0801_2400", 0.5)
+            }
+        },
+        supervise: {
+            unitPricePerDay: {
+                "监督早睡": readInputNumber("psSvUnit_sleep", 1.35),
+                "监督早起": readInputNumber("psSvUnit_wake", 1.35),
+                "监督早睡早起": readInputNumber("psSvUnit_combo", 2.7)
+            }
+        }
+    };
+
+    const res = await savePriceStrategy(strategy);
+    if (typeof setPriceStrategyCache === "function") {
+        setPriceStrategyCache(res.strategy);
+    }
+    if (typeof showToast === "function") {
+        showToast(res.savedToCloud ? "价格策略已保存（云端）" : "价格策略已保存（本地）", "success");
+    } else {
+        alert("价格策略已保存");
+    }
+}
+
+async function applyPriceStrategyToUnsettledOrders() {
+    if (!isAdmin) return;
+    if (!confirm("确定将当前“价格策略”应用到可变更订单金额吗？（已接单或已结算订单不会修改）")) return;
+
+    let wakeChanged = 0;
+    let svChanged = 0;
+
+    try {
+        // 1) 叫醒订单：按时间重算 amount
+        const allWake = await getOrders();
+        const nextWake = (allWake || []).map((o) => ({ ...o }));
+        nextWake.forEach((o) => {
+            const hasStaff = String(o?.staffid || "").trim() !== "";
+            const status = String(o?.status || "").trim();
+            const isTaken = hasStaff || (status && status !== "待接单");
+            if (isTaken) return; // 被接走后金额锁定，不再受价格策略影响
+            if (o.salarysettled === true) return;
+            const t = String(o?.waketime || "");
+            const m = t.match(/(\d{1,2}):(\d{2})/);
+            if (!m) return;
+            const hh = String(Number(m[1])).padStart(2, "0");
+            const timeStr = `${hh}:${m[2]}`;
+            const newAmount = Number(calculateAmountByTime(timeStr));
+            const oldAmount = Number(o.amount || o.money || 0);
+            if (Number.isFinite(newAmount) && Math.abs(newAmount - oldAmount) > 0.0001) {
+                o.amount = newAmount;
+                wakeChanged += 1;
+            }
+        });
+        if (wakeChanged > 0) {
+            await saveOrders(nextWake);
+        }
+    } catch (e) {
+        console.error("应用叫醒订单价格失败：", e);
+    }
+
+    try {
+        // 2) 监督订单：按项目单价/天 × 次数 重算 price/amount，并写回 meta note
+        const { data, error } = await supabaseClient
+            .from("supervise_orders")
+            .select("*");
+        if (error || !Array.isArray(data)) {
+            throw error || new Error("读取监督订单失败");
+        }
+        const rows = data.map(parseSuperviseOrderMeta);
+        const patched = [];
+        rows.forEach((row) => {
+            const hasStaff = String(row?.staffid || "").trim() !== "";
+            const status = String(row?.status || "").trim();
+            const isTaken = hasStaff || (status && status !== "待接单");
+            if (isTaken) return; // 被接走后金额锁定，不再受价格策略影响
+            if (row.salarysettled === true) return;
+            const project = String(row.project || "").trim();
+            if (!project) return;
+            const days = parseDurationDaysSimple(row.duration || "1次");
+            const unitFallback = project === "监督早睡早起" ? 2.7 : 1.35;
+            const unit = getStrategyUnitPrice(project, unitFallback);
+            const nextPrice = Number(unit) * Number(days);
+            if (!Number.isFinite(nextPrice) || nextPrice < 0) return;
+            const oldPrice = Number(row.price || row.amount || 0);
+            if (Math.abs(nextPrice - oldPrice) <= 0.0001) return;
+            const nextRow = { ...row, price: nextPrice, amount: nextPrice };
+            patched.push({
+                id: nextRow.id,
+                waketime: nextRow.waketime,
+                phone: nextRow.phone || "",
+                note: buildSuperviseOrderNote(nextRow),
+                amount: parseFloat(nextRow.amount || 0),
+                status: nextRow.status || "待接单",
+                serialnumber: nextRow.serialnumber || null,
+                staffid: nextRow.staffid || "",
+                staffname: nextRow.staffname || "",
+                salarysettled: Boolean(nextRow.salarysettled || false),
+                submittime: nextRow.submittime || new Date().toISOString()
+            });
+        });
+        if (patched.length > 0) {
+            for (let i = 0; i < patched.length; i += 200) {
+                const batch = patched.slice(i, i + 200);
+                const { error: upsertErr } = await supabaseClient
+                    .from("supervise_orders")
+                    .upsert(batch, { onConflict: "id" });
+                if (upsertErr) throw upsertErr;
+            }
+            svChanged = patched.length;
+        }
+    } catch (e) {
+        console.error("应用监督订单价格失败：", e);
+    }
+
+    if (typeof showToast === "function") {
+        showToast(`已应用：叫醒订单 ${wakeChanged} 条、监督订单 ${svChanged} 条`, "success");
+    } else {
+        alert(`已应用：叫醒订单 ${wakeChanged} 条、监督订单 ${svChanged} 条`);
+    }
+}
+
+let performanceBoardMode = "month";
+let performanceBoardBound = false;
+let performanceChartMetric = "count";
+let performanceSortKey = "count"; // count | orderAmount | settledAmount
+let performanceSortDir = "desc"; // asc | desc
+let performanceLastItems = [];
+let performanceDetailBound = false;
+let performanceDetailFilter = "all"; // all | wake | supervise
+let performanceDetailCache = { staffId: "", name: "", rangeText: "", items: [] };
+
+function getBoardRangeByMode(mode) {
+    const now = new Date();
+    const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    if (mode === "week") {
+        const day = todayStart.getDay();
+        const diff = day === 0 ? 6 : day - 1; // 周一作为一周起点
+        const start = new Date(todayStart.getFullYear(), todayStart.getMonth(), todayStart.getDate() - diff);
+        const end = new Date(start.getFullYear(), start.getMonth(), start.getDate() + 7);
+        return { start, end, text: `${start.toLocaleDateString("zh-CN")} - ${new Date(end.getTime() - 1).toLocaleDateString("zh-CN")}` };
+    }
+    if (mode === "month") {
+        const start = new Date(now.getFullYear(), now.getMonth(), 1);
+        const end = new Date(now.getFullYear(), now.getMonth() + 1, 1);
+        return { start, end, text: `${start.toLocaleDateString("zh-CN")} - ${new Date(end.getTime() - 1).toLocaleDateString("zh-CN")}` };
+    }
+    const start = todayStart;
+    const end = new Date(todayStart.getFullYear(), todayStart.getMonth(), todayStart.getDate() + 1);
+    return { start, end, text: todayStart.toLocaleDateString("zh-CN") };
+}
+
+function setPerformanceTab(mode) {
+    performanceBoardMode = mode === "week" || mode === "month" ? mode : "day";
+    const tabDay = document.getElementById("perfTabDay");
+    const tabWeek = document.getElementById("perfTabWeek");
+    const tabMonth = document.getElementById("perfTabMonth");
+    if (tabDay) tabDay.classList.toggle("is-active", performanceBoardMode === "day");
+    if (tabWeek) tabWeek.classList.toggle("is-active", performanceBoardMode === "week");
+    if (tabMonth) tabMonth.classList.toggle("is-active", performanceBoardMode === "month");
+}
+
+function formatBoardMoney(v) {
+    const n = Number(v);
+    return Number.isFinite(n) ? n.toFixed(2) : "0.00";
+}
+
+function setPerformanceChartMetric(metric) {
+    performanceChartMetric = metric === "amount" || metric === "settled" ? metric : "count";
+    const tabCount = document.getElementById("perfChartTabCount");
+    const tabAmount = document.getElementById("perfChartTabAmount");
+    const tabSettled = document.getElementById("perfChartTabSettled");
+    if (tabCount) tabCount.classList.toggle("is-active", performanceChartMetric === "count");
+    if (tabAmount) tabAmount.classList.toggle("is-active", performanceChartMetric === "amount");
+    if (tabSettled) tabSettled.classList.toggle("is-active", performanceChartMetric === "settled");
+
+    // 同步表格排序字段（点击“接单数/接单金额/结算金额”后，表格按同口径排序）
+    performanceSortKey =
+        performanceChartMetric === "amount"
+            ? "orderAmount"
+            : performanceChartMetric === "settled"
+                ? "settledAmount"
+                : "count";
+    performanceSortDir = "desc";
+    applyPerformanceSortUI();
+    const sorted = sortPerformanceItems(performanceLastItems);
+    renderPerformanceBoardTable(sorted);
+    renderPerformanceBarChart(sorted);
+}
+
+function renderPerformanceBarChart(items) {
+    const chartEl = document.getElementById("performanceBarChart");
+    if (!chartEl) return;
+    const isMobile = window.matchMedia && window.matchMedia("(max-width: 768px)").matches;
+    const maxBars = isMobile ? 10 : 15;
+    const rows = (items || []).slice(0, maxBars);
+    if (rows.length === 0) {
+        chartEl.innerHTML = `<div class="performance-chart-empty">暂无可视化数据</div>`;
+        return;
+    }
+
+    const getValue = (it) => {
+        if (performanceChartMetric === "amount") return Number(it?.orderAmount || 0);
+        if (performanceChartMetric === "settled") return Number(it?.settledAmount || 0);
+        return Number(it?.count || 0);
+    };
+    const maxValue = Math.max(1, ...rows.map((r) => getValue(r)));
+    const valueText = (v) => performanceChartMetric === "count" ? String(Math.round(v)) : formatBoardMoney(v);
+
+    let html = "";
+    rows.forEach((it) => {
+        const value = getValue(it);
+        const width = Math.max(3, (value / maxValue) * 100);
+        html += `
+            <div class="performance-bar-row">
+                <div class="performance-bar-label">${safeText(it.name)}</div>
+                <div class="performance-bar-track">
+                    <div class="performance-bar-fill" style="width:${width}%;"></div>
+                </div>
+                <div class="performance-bar-value">${valueText(value)}</div>
+            </div>
+        `;
+    });
+    chartEl.innerHTML = html;
+}
+
+function applyPerformanceSortUI() {
+    const ths = [
+        document.getElementById("perfThCount"),
+        document.getElementById("perfThAmount"),
+        document.getElementById("perfThSettled")
+    ].filter(Boolean);
+    ths.forEach((th) => {
+        const key = String(th.getAttribute("data-sort-key") || "");
+        const ind = th.querySelector(".perf-sort-ind");
+        if (!ind) return;
+        if (key === performanceSortKey) {
+            ind.textContent = performanceSortDir === "asc" ? "▲" : "▼";
+        } else {
+            ind.textContent = "";
+        }
+    });
+}
+
+function sortPerformanceItems(items) {
+    const arr = (items || []).slice();
+    const dir = performanceSortDir === "asc" ? 1 : -1;
+    const key = performanceSortKey;
+    arr.sort((a, b) => {
+        const av = key === "count" ? Number(a?.count || 0) : money(a?.[key] || 0);
+        const bv = key === "count" ? Number(b?.count || 0) : money(b?.[key] || 0);
+        if (bv !== av) return (bv - av) * dir;
+        // tie-breakers: count -> orderAmount -> staffId; amount/settled -> count -> staffId
+        if (key !== "count") {
+            const ac = Number(a?.count || 0);
+            const bc = Number(b?.count || 0);
+            if (bc !== ac) return (bc - ac) * dir;
+        } else {
+            const aa = money(a?.orderAmount || 0);
+            const ba = money(b?.orderAmount || 0);
+            if (ba !== aa) return (ba - aa) * dir;
+        }
+        return String(a?.staffId || "").localeCompare(String(b?.staffId || ""));
+    });
+    return arr;
+}
+
+function bindPerformanceSortingOnce() {
+    const thEls = Array.from(document.querySelectorAll("#page_performanceBoard th.perf-sortable"));
+    thEls.forEach((th) => {
+        if (th.__bound) return;
+        th.__bound = true;
+        th.addEventListener("click", () => {
+            const key = String(th.getAttribute("data-sort-key") || "");
+            if (!key) return;
+            if (performanceSortKey === key) {
+                performanceSortDir = performanceSortDir === "asc" ? "desc" : "asc";
+            } else {
+                performanceSortKey = key;
+                performanceSortDir = "desc";
+            }
+            applyPerformanceSortUI();
+            // 只重绘表格和图表，不重复拉取数据
+            const sorted = sortPerformanceItems(performanceLastItems);
+            renderPerformanceBoardTable(sorted);
+            renderPerformanceBarChart(sorted);
+        });
+    });
+}
+
+function renderPerformanceBoardTable(items) {
+    const bodyEl = document.getElementById("performanceBoardTableBody");
+    if (!bodyEl) return;
+    if (!Array.isArray(items) || items.length === 0) {
+        bodyEl.innerHTML = `<tr><td colspan="6" style="text-align:center; color:#64748b; padding:16px;">暂无员工数据</td></tr>`;
+        return;
+    }
+    let html = "";
+    items.forEach((it, idx) => {
+        const rank = idx + 1;
+        html += `
+            <tr>
+                <td>${rank}</td>
+                <td>${safeText(it.staffId)}</td>
+                <td>${safeText(it.name)}</td>
+                <td>${Number(it.count || 0)}</td>
+                <td>${formatBoardMoney(it.orderAmount)}</td>
+                <td>${formatBoardMoney(it.settledAmount)}</td>
+            </tr>
+        `;
+    });
+    bodyEl.innerHTML = html;
+}
+
+function openPerformanceDetailModal() {
+    const modal = document.getElementById("performanceDetailModal");
+    if (!modal) return;
+    modal.style.display = "flex";
+    renderLucideIcons();
+}
+
+function closePerformanceDetailModal() {
+    const modal = document.getElementById("performanceDetailModal");
+    if (!modal) return;
+    modal.style.display = "none";
+}
+
+function setPerformanceDetailFilter(mode) {
+    performanceDetailFilter = mode === "wake" || mode === "supervise" ? mode : "all";
+    const tabAll = document.getElementById("perfDetailTabAll");
+    const tabWake = document.getElementById("perfDetailTabWake");
+    const tabSv = document.getElementById("perfDetailTabSupervise");
+    if (tabAll) tabAll.classList.toggle("is-active", performanceDetailFilter === "all");
+    if (tabWake) tabWake.classList.toggle("is-active", performanceDetailFilter === "wake");
+    if (tabSv) tabSv.classList.toggle("is-active", performanceDetailFilter === "supervise");
+}
+
+function renderPerformanceDetailTable() {
+    const bodyEl = document.getElementById("performanceDetailTableBody");
+    if (!bodyEl) return;
+    const titleEl = document.getElementById("performanceDetailTitle");
+    const rangeEl = document.getElementById("performanceDetailRange");
+    const countEl = document.getElementById("performanceDetailCount");
+    const amountEl = document.getElementById("performanceDetailAmount");
+    const settledEl = document.getElementById("performanceDetailSettled");
+
+    const all = Array.isArray(performanceDetailCache.items) ? performanceDetailCache.items : [];
+    const rows = performanceDetailFilter === "all"
+        ? all
+        : all.filter((x) => x.type === performanceDetailFilter);
+
+    if (titleEl) titleEl.textContent = `${safeText(performanceDetailCache.name)}（${safeText(performanceDetailCache.staffId)}）明细`;
+    if (rangeEl) rangeEl.textContent = performanceDetailCache.rangeText || "--";
+
+    const count = rows.length;
+    const amount = rows.reduce((s, x) => s + money(x.amount), 0);
+    const settled = rows.reduce((s, x) => s + (x.salarysettled ? money(x.amount) : 0), 0);
+    if (countEl) countEl.textContent = String(count);
+    if (amountEl) amountEl.textContent = formatBoardMoney(amount);
+    if (settledEl) settledEl.textContent = formatBoardMoney(settled);
+
+    if (rows.length === 0) {
+        bodyEl.innerHTML = `<tr><td colspan="7" style="text-align:center; color:#64748b; padding:16px;">暂无数据</td></tr>`;
+        return;
+    }
+
+    let html = "";
+    rows.forEach((r) => {
+        html += `
+            <tr>
+                <td>${r.type === "wake" ? "叫醒" : "监督"}</td>
+                <td>${safeText(r.ref)}</td>
+                <td>${safeText(r.timeText)}</td>
+                <td>${formatBoardMoney(r.amount)}</td>
+                <td>${safeText(r.status)}</td>
+                <td>${r.salarysettled ? "已结算" : "未结算"}</td>
+                <td>${safeText(r.submitText)}</td>
+            </tr>
+        `;
+    });
+    bodyEl.innerHTML = html;
+}
+
+async function openPerformanceDetailForStaff(staffId, staffName) {
+    const sid = String(staffId || "").trim();
+    if (!sid) return;
+    const { start, end, text } = getBoardRangeByMode(performanceBoardMode);
+    performanceDetailCache = { staffId: sid, name: String(staffName || sid).trim(), rangeText: text, items: [] };
+    setPerformanceDetailFilter("all");
+    openPerformanceDetailModal();
+
+    const bodyEl = document.getElementById("performanceDetailTableBody");
+    if (bodyEl) {
+        bodyEl.innerHTML = `<tr><td colspan="7" style="text-align:center; color:#64748b; padding:16px;">加载中...</td></tr>`;
+    }
+
+    try {
+        const [wakeOrders, superviseOrders] = await Promise.all([
+            getOrders(),
+            getSuperviseOrdersForHomeSummary()
+        ]);
+        const inRange = (d) => d instanceof Date && !Number.isNaN(d.getTime()) && d >= start && d < end;
+        const items = [];
+
+        (wakeOrders || []).forEach((o) => {
+            const submit = new Date(o?.submittime || "");
+            if (!inRange(submit)) return;
+            if (String(o?.staffid || "").trim() !== sid) return;
+            const status = String(o?.status || "").trim();
+            if (status === "待接单") return;
+            const t = String(o?.waketime || "");
+            const m = t.match(/(\d{1,2}):(\d{2})/);
+            const timeText = m ? `${String(Number(m[1])).padStart(2, "0")}:${m[2]}` : (t || "-");
+            items.push({
+                type: "wake",
+                ref: String(o?.phone || "-"),
+                timeText,
+                amount: money(o?.amount ?? o?.money ?? 0),
+                status,
+                salarysettled: o?.salarysettled === true,
+                submitText: typeof formatTime === "function" ? formatTime(o?.submittime) : String(o?.submittime || "-")
+            });
+        });
+
+        (superviseOrders || []).forEach((o) => {
+            const submit = new Date(o?.submittime || "");
+            if (!inRange(submit)) return;
+            if (String(o?.staffid || "").trim() !== sid) return;
+            const status = typeof getSuperviseEffectiveStatusForHome === "function"
+                ? getSuperviseEffectiveStatusForHome(o)
+                : String(o?.status || "").trim();
+            if (status === "待接单") return;
+            const ref = String(o?.orderno || o?.id || "-");
+            const timeText = String(o?.project || "").trim()
+                ? `${String(o?.project || "").trim()}｜${String(o?.duration || "").trim() || "-"}`
+                : "-";
+            items.push({
+                type: "supervise",
+                ref,
+                timeText,
+                amount: money(o?.price ?? o?.amount ?? o?.money ?? 0),
+                status,
+                salarysettled: o?.salarysettled === true,
+                submitText: typeof formatTime === "function" ? formatTime(o?.submittime) : String(o?.submittime || "-")
+            });
+        });
+
+        // 时间倒序
+        items.sort((a, b) => String(b.submitText).localeCompare(String(a.submitText)));
+        performanceDetailCache.items = items;
+        renderPerformanceDetailTable();
+    } catch (e) {
+        console.error("加载员工明细失败：", e);
+        const body = document.getElementById("performanceDetailTableBody");
+        if (body) body.innerHTML = `<tr><td colspan="7" style="text-align:center; color:#ef4444; padding:16px;">加载失败，请稍后重试</td></tr>`;
+    }
+}
+
+async function loadPerformanceBoard() {
+    if (!isAdmin) return;
+    const bodyEl = document.getElementById("performanceBoardTableBody");
+    if (!bodyEl) return;
+
+    const tabDay = document.getElementById("perfTabDay");
+    const tabWeek = document.getElementById("perfTabWeek");
+    const tabMonth = document.getElementById("perfTabMonth");
+    const refreshBtn = document.getElementById("performanceBoardRefreshBtn");
+    const chartTabCount = document.getElementById("perfChartTabCount");
+    const chartTabAmount = document.getElementById("perfChartTabAmount");
+    const chartTabSettled = document.getElementById("perfChartTabSettled");
+    const detailCloseBtn = document.getElementById("performanceDetailCloseBtn");
+    const detailTabAll = document.getElementById("perfDetailTabAll");
+    const detailTabWake = document.getElementById("perfDetailTabWake");
+    const detailTabSv = document.getElementById("perfDetailTabSupervise");
+
+    if (!performanceBoardBound) {
+        performanceBoardBound = true;
+        if (tabDay) tabDay.addEventListener("click", () => { setPerformanceTab("day"); loadPerformanceBoard(); });
+        if (tabWeek) tabWeek.addEventListener("click", () => { setPerformanceTab("week"); loadPerformanceBoard(); });
+        if (tabMonth) tabMonth.addEventListener("click", () => { setPerformanceTab("month"); loadPerformanceBoard(); });
+        if (refreshBtn) refreshBtn.addEventListener("click", () => loadPerformanceBoard());
+        if (chartTabCount) chartTabCount.addEventListener("click", () => { setPerformanceChartMetric("count"); loadPerformanceBoard(); });
+        if (chartTabAmount) chartTabAmount.addEventListener("click", () => { setPerformanceChartMetric("amount"); loadPerformanceBoard(); });
+        if (chartTabSettled) chartTabSettled.addEventListener("click", () => { setPerformanceChartMetric("settled"); loadPerformanceBoard(); });
+    }
+    setPerformanceTab(performanceBoardMode);
+    setPerformanceChartMetric(performanceChartMetric);
+    bindPerformanceSortingOnce();
+    applyPerformanceSortUI();
+
+    if (!performanceDetailBound) {
+        performanceDetailBound = true;
+        // 表格行点击（事件委托）
+        const tableBody = document.getElementById("performanceBoardTableBody");
+        if (tableBody) {
+            tableBody.addEventListener("click", (e) => {
+                const tr = e.target && e.target.closest ? e.target.closest("tr[data-staffid]") : null;
+                if (!tr) return;
+                const sid = String(tr.getAttribute("data-staffid") || "").trim();
+                const name = String(tr.getAttribute("data-staffname") || "").trim();
+                openPerformanceDetailForStaff(sid, name);
+            });
+        }
+        if (detailCloseBtn) detailCloseBtn.addEventListener("click", () => closePerformanceDetailModal());
+        if (detailTabAll) detailTabAll.addEventListener("click", () => { setPerformanceDetailFilter("all"); renderPerformanceDetailTable(); });
+        if (detailTabWake) detailTabWake.addEventListener("click", () => { setPerformanceDetailFilter("wake"); renderPerformanceDetailTable(); });
+        if (detailTabSv) detailTabSv.addEventListener("click", () => { setPerformanceDetailFilter("supervise"); renderPerformanceDetailTable(); });
+    }
+
+    bodyEl.innerHTML = `<tr><td colspan="6" style="text-align:center; color:#64748b; padding:16px;">加载中...</td></tr>`;
+    const rangeEl = document.getElementById("performanceBoardRangeText");
+    const { start, end, text } = getBoardRangeByMode(performanceBoardMode);
+    if (rangeEl) rangeEl.textContent = `统计区间：${text}`;
+
+    try {
+        const [wakeOrders, superviseOrders, staffList] = await Promise.all([
+            getOrders(),
+            getSuperviseOrdersForHomeSummary(),
+            getStaffList()
+        ]);
+
+        const nameById = new Map();
+        (staffList || []).forEach((s) => {
+            const sid = String(s?.id || "").trim();
+            if (!sid) return;
+            nameById.set(sid, String(s?.name || sid).trim());
+        });
+
+        const map = new Map();
+        const getOrCreate = (sid) => {
+            const id = String(sid || "").trim();
+            if (!id) return null;
+            if (!map.has(id)) {
+                map.set(id, { staffId: id, count: 0, orderAmount: 0, settledAmount: 0 });
+            }
+            return map.get(id);
+        };
+
+        const inRange = (d) => d instanceof Date && !Number.isNaN(d.getTime()) && d >= start && d < end;
+
+        (wakeOrders || []).forEach((o) => {
+            const submit = new Date(o?.submittime || "");
+            if (!inRange(submit)) return;
+            const staffId = String(o?.staffid || "").trim();
+            const status = String(o?.status || "").trim();
+            if (!staffId || status === "待接单") return;
+            const row = getOrCreate(staffId);
+            if (!row) return;
+            const amount = money(o?.amount ?? o?.money ?? 0);
+            row.count += 1;
+            row.orderAmount += amount;
+            if (o?.salarysettled === true) row.settledAmount += amount;
+        });
+
+        (superviseOrders || []).forEach((o) => {
+            const submit = new Date(o?.submittime || "");
+            if (!inRange(submit)) return;
+            const staffId = String(o?.staffid || "").trim();
+            if (!staffId) return;
+            const status = typeof getSuperviseEffectiveStatusForHome === "function"
+                ? getSuperviseEffectiveStatusForHome(o)
+                : String(o?.status || "").trim();
+            if (status === "待接单") return;
+            const row = getOrCreate(staffId);
+            if (!row) return;
+            const amount = money(o?.price ?? o?.amount ?? o?.money ?? 0);
+            row.count += 1;
+            row.orderAmount += amount;
+            if (o?.salarysettled === true) row.settledAmount += amount;
+        });
+
+        const items = (staffList || []).map((s) => {
+            const sid = String(s?.id || "").trim();
+            const base = map.get(sid) || { staffId: sid, count: 0, orderAmount: 0, settledAmount: 0 };
+            return {
+                ...base,
+                staffId: sid,
+                name: nameById.get(sid) || sid
+            };
+        }).filter((x) => !!x.staffId)
+            ;
+
+        performanceLastItems = items;
+        const sortedItems = sortPerformanceItems(items);
+
+        const totalCount = items.reduce((s, x) => s + Number(x.count || 0), 0);
+        const totalAmount = items.reduce((s, x) => s + money(x.orderAmount), 0);
+        const totalSettled = items.reduce((s, x) => s + money(x.settledAmount), 0);
+
+        const setText = (id, v) => {
+            const el = document.getElementById(id);
+            if (el) el.textContent = String(v);
+        };
+        setText("perfTotalCount", totalCount);
+        setText("perfTotalAmount", formatBoardMoney(totalAmount));
+        setText("perfSettledAmount", formatBoardMoney(totalSettled));
+        setText("perfStaffCount", items.length);
+
+        if (items.length === 0) {
+            renderPerformanceBoardTable([]);
+            renderPerformanceBarChart([]);
+            return;
+        }
+        // 行点击需要 staffId/name
+        const bodyEl2 = document.getElementById("performanceBoardTableBody");
+        if (bodyEl2) {
+            let html = "";
+            sortedItems.forEach((it, idx) => {
+                const rank = idx + 1;
+                html += `
+                    <tr data-staffid="${escapeHtml(String(it.staffId || ""))}" data-staffname="${escapeHtml(String(it.name || ""))}">
+                        <td>${rank}</td>
+                        <td>${safeText(it.staffId)}</td>
+                        <td>${safeText(it.name)}</td>
+                        <td>${Number(it.count || 0)}</td>
+                        <td>${formatBoardMoney(it.orderAmount)}</td>
+                        <td>${formatBoardMoney(it.settledAmount)}</td>
+                    </tr>
+                `;
+            });
+            bodyEl2.innerHTML = html || `<tr><td colspan="6" style="text-align:center; color:#64748b; padding:16px;">暂无员工数据</td></tr>`;
+        }
+        renderPerformanceBarChart(sortedItems);
+    } catch (e) {
+        console.error("加载绩效看板失败：", e);
+        bodyEl.innerHTML = `<tr><td colspan="6" style="text-align:center; color:#ef4444; padding:16px;">加载失败，请稍后重试</td></tr>`;
+        renderPerformanceBarChart([]);
+    }
+}
+
+function escapeHtml(s) {
+    return String(s || "")
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#39;");
 }
 
 function safeText(v, fallback = "-") {
@@ -309,7 +1056,8 @@ function stopStaffLeaderboardAutoRefresh() {
 
 async function loadStaffLeaderboard() {
     const section = document.getElementById("staffLeaderboardSection");
-    const listEl = document.getElementById("staffLeaderboardList");
+    const listCountEl = document.getElementById("staffLeaderboardListCount");
+    const listAmountEl = document.getElementById("staffLeaderboardListAmount");
     const refreshBtn = document.getElementById("staffLeaderboardRefreshBtn");
     const filterEl = document.getElementById("staffLeaderboardProjectFilter");
     if (!section) return;
@@ -320,6 +1068,47 @@ async function loadStaffLeaderboard() {
 
     const modal = document.getElementById("staffLeaderboardModal");
     const modalVisible = !!modal && modal.style.display === "flex";
+
+    // 排序切换（记住选择）
+    const sortKey = "staffLeaderboardSortMode";
+    const tabCount = document.getElementById("staffLeaderboardTabCount");
+    const tabAmount = document.getElementById("staffLeaderboardTabAmount");
+    const applySortUI = (mode) => {
+        const m = mode === "amount" ? "amount" : "count";
+        if (tabCount) {
+            tabCount.classList.toggle("is-active", m === "count");
+            tabCount.setAttribute("aria-selected", m === "count" ? "true" : "false");
+        }
+        if (tabAmount) {
+            tabAmount.classList.toggle("is-active", m === "amount");
+            tabAmount.setAttribute("aria-selected", m === "amount" ? "true" : "false");
+        }
+        if (listCountEl) listCountEl.style.display = m === "count" ? "" : "none";
+        if (listAmountEl) listAmountEl.style.display = m === "amount" ? "" : "none";
+        return m;
+    };
+    const getSortMode = () => {
+        try {
+            const saved = localStorage.getItem(sortKey);
+            return saved === "amount" ? "amount" : "count";
+        } catch (_) {
+            return "count";
+        }
+    };
+    const setSortMode = (mode) => {
+        const m = mode === "amount" ? "amount" : "count";
+        try { localStorage.setItem(sortKey, m); } catch (_) { }
+        applySortUI(m);
+    };
+    if (tabCount && !tabCount.__bound) {
+        tabCount.__bound = true;
+        tabCount.addEventListener("click", () => setSortMode("count"));
+    }
+    if (tabAmount && !tabAmount.__bound) {
+        tabAmount.__bound = true;
+        tabAmount.addEventListener("click", () => setSortMode("amount"));
+    }
+    const sortMode = applySortUI(getSortMode());
 
     // 绑定一次刷新按钮
     if (refreshBtn && !refreshBtn.__bound) {
@@ -352,8 +1141,13 @@ async function loadStaffLeaderboard() {
         });
     }
 
-    if (listEl && modalVisible) {
-        listEl.innerHTML = `<div style="font-size:13px;color:#64748b;">加载中...</div>`;
+    if (modalVisible) {
+        const loadingHtml = `<div style="font-size:13px;color:#64748b;">加载中...</div>`;
+        if (sortMode === "count") {
+            if (listCountEl) listCountEl.innerHTML = loadingHtml;
+        } else {
+            if (listAmountEl) listAmountEl.innerHTML = loadingHtml;
+        }
     }
     if (typeof showGlobalLoading === "function") showGlobalLoading("生成排行榜中…");
 
@@ -422,17 +1216,26 @@ async function loadStaffLeaderboard() {
         });
 
         // 只展示有接单的数据（没接单的不进榜单）
-        const items = Array.from(map.values())
+        const baseItems = Array.from(map.values())
             .filter((x) => Number(x?.count || 0) > 0)
             .map((x) => ({
                 ...x,
                 name: nameById.get(x.staffId) || x.staffId
-            }))
-            .sort((a, b) => {
-                if (b.count !== a.count) return b.count - a.count;
-                if (b.amount !== a.amount) return b.amount - a.amount;
-                return String(a.staffId).localeCompare(String(b.staffId));
-            });
+            }));
+
+        const itemsByCount = baseItems.slice().sort((a, b) => {
+            if (b.count !== a.count) return b.count - a.count;
+            if (b.amount !== a.amount) return b.amount - a.amount;
+            return String(a.staffId).localeCompare(String(b.staffId));
+        });
+
+        const itemsByAmount = baseItems.slice().sort((a, b) => {
+            if (b.amount !== a.amount) return b.amount - a.amount;
+            if (b.count !== a.count) return b.count - a.count;
+            return String(a.staffId).localeCompare(String(b.staffId));
+        });
+
+        const items = sortMode === "amount" ? itemsByAmount : itemsByCount;
 
         const myId = String(user?.id || "").trim();
         const myIndex = items.findIndex((x) => String(x.staffId) === myId);
@@ -446,45 +1249,50 @@ async function loadStaffLeaderboard() {
         if (myAmountEl) myAmountEl.textContent = formatMoney(myRow.amount || 0);
 
         // 只有在弹窗打开时才渲染完整榜单，避免占用首页空间
-        if (!listEl || !modalVisible) {
-            return;
-        }
-        if (items.length === 0) {
-            listEl.innerHTML = `<div style="font-size:13px;color:#94a3b8;">暂无数据</div>`;
+        if (!modalVisible) {
             return;
         }
 
-        let html = "";
-        items.forEach((it, idx) => {
-            const rank = idx + 1;
-            const isMe = String(it.staffId) === myId;
-            const rankClass = rank === 1 ? "top1" : rank === 2 ? "top2" : rank === 3 ? "top3" : "";
-            html += `
-                <div class="leaderboard-row ${isMe ? "is-me" : ""}">
-                    <div class="leaderboard-rank ${rankClass}">${rank}</div>
-                    <div class="leaderboard-main">
-                        <div class="leaderboard-name">${safeText(it.name)}</div>
-                        <div class="leaderboard-sub">${safeText(it.staffId)}</div>
-                    </div>
-                    <div class="leaderboard-metrics" aria-label="指标">
-                        <div class="m">
-                            <div class="v">${it.count}</div>
-                            <div class="k">接单数</div>
+        const emptyHtml = `<div style="font-size:13px;color:#94a3b8;">暂无数据</div>`;
+        const renderList = (arr) => {
+            if (!Array.isArray(arr) || arr.length === 0) return emptyHtml;
+            let html = "";
+            arr.forEach((it, idx) => {
+                const rank = idx + 1;
+                const isMe = String(it.staffId) === myId;
+                const rankClass = rank === 1 ? "top1" : rank === 2 ? "top2" : rank === 3 ? "top3" : "";
+                html += `
+                    <div class="leaderboard-row ${isMe ? "is-me" : ""}">
+                        <div class="leaderboard-rank ${rankClass}">${rank}</div>
+                        <div class="leaderboard-main">
+                            <div class="leaderboard-name">${safeText(it.name)}</div>
+                            <div class="leaderboard-sub">${safeText(it.staffId)}</div>
                         </div>
-                        <div class="m">
-                            <div class="v">${formatMoney(it.amount)}</div>
-                            <div class="k">金额(元)</div>
+                        <div class="leaderboard-metrics" aria-label="指标">
+                            <div class="m">
+                                <div class="v">${it.count}</div>
+                                <div class="k">接单数</div>
+                            </div>
+                            <div class="m">
+                                <div class="v">${formatMoney(it.amount)}</div>
+                                <div class="k">金额(元)</div>
+                            </div>
                         </div>
                     </div>
-                </div>
-            `;
-        });
-        listEl.innerHTML = html;
+                `;
+            });
+            return html;
+        };
+
+        if (listCountEl) listCountEl.innerHTML = renderList(itemsByCount);
+        if (listAmountEl) listAmountEl.innerHTML = renderList(itemsByAmount);
         renderLucideIcons();
     } catch (e) {
         console.error("加载员工排行榜失败：", e);
-        if (listEl && modalVisible) {
-            listEl.innerHTML = `<div style="font-size:13px;color:#ef4444;">加载失败，请稍后重试</div>`;
+        if (modalVisible) {
+            const errHtml = `<div style="font-size:13px;color:#ef4444;">加载失败，请稍后重试</div>`;
+            if (listCountEl) listCountEl.innerHTML = errHtml;
+            if (listAmountEl) listAmountEl.innerHTML = errHtml;
         }
     } finally {
         if (typeof hideGlobalLoading === "function") hideGlobalLoading();
@@ -1299,6 +2107,11 @@ window.onload = async function () {
 
     await initStaffData();
 
+    // 首屏若在团队页，renderTeamTable 可能早于 initStaffData 执行（云端尚空或未种子数据），此处补刷一次
+    if (isAdmin && currentPage === "team" && typeof renderTeamTable === "function") {
+        renderTeamTable();
+    }
+
     if (isAdmin) {
         document.getElementById("navTeamText").innerText = "团队管理";
         // 管理员显示编辑按钮
@@ -1310,6 +2123,10 @@ window.onload = async function () {
         const noticeSettingNav = document.getElementById("nav-notice-setting");
         if (noticeSettingNav) {
             noticeSettingNav.style.display = "flex";
+        }
+        const performanceNav = document.getElementById("nav-performance-board");
+        if (performanceNav) {
+            performanceNav.style.display = "flex";
         }
     } else {
         document.getElementById("navTeamText").innerText = "个人中心";
@@ -1381,7 +2198,7 @@ async function switchUser(userId) {
     try {
         const staffList = await getStaffList();
         const testUsers = {
-            admin: { id: "admin001", name: "管理员", role: "admin" }
+            admin: { id: "admin", name: "管理员", role: "admin" }
         };
         staffList.forEach(staff => {
             testUsers[staff.id] = {
@@ -2315,10 +3132,14 @@ async function renderBalanceDetail(container) {
     try {
         const staffList = await getStaffList();
         const me = (staffList || []).find((s) => String(s?.id || "").trim() === String(user?.id || "").trim());
-        latestBalance = Number(me?.salary || 0);
+        const bal = Number.parseFloat(me?.salary);
+        latestBalance = Number.isFinite(bal) ? bal : 0;
     } catch (_) {
         // 读取失败时兜底用明细求和，保证组件可用
-        latestBalance = myDetails.reduce((sum, item) => sum + Number(item?.amount || 0), 0);
+        latestBalance = myDetails.reduce((sum, item) => {
+            const a = Number.parseFloat(item?.amount);
+            return sum + (Number.isFinite(a) ? a : 0);
+        }, 0);
     }
 
     if (myDetails.length === 0) {
@@ -2335,14 +3156,15 @@ async function renderBalanceDetail(container) {
     let html = `
         <div style="margin-bottom: 16px; padding: 16px; background: linear-gradient(135deg, #dcfce7 0%, #bbf7d0 100%); border-radius: 12px;">
             <div style="font-size: 13px; color: #166534; margin-bottom: 4px;">当前余额</div>
-            <div style="font-size: 28px; font-weight: 700; color: #166534;">${latestBalance.toFixed(2)} 元</div>
+            <div style="font-size: 28px; font-weight: 700; color: #166534;">${formatMoneyDisplay(latestBalance)} 元</div>
         </div>
         <div style="display: flex; flex-direction: column; gap: 8px;">
     `;
 
     myDetails.forEach(item => {
-        const amount = Number(item.amount);
-        const isPositive = amount >= 0;
+        const amount = Number.parseFloat(item.amount);
+        const amountSafe = Number.isFinite(amount) ? amount : 0;
+        const isPositive = amountSafe >= 0;
         const typeText = item.type || '其他';
         const descText = item.description || '';
         const timeText = item.createdat ? (typeof formatTime === 'function' ? formatTime(item.createdat) : item.createdat) : '';
@@ -2353,7 +3175,7 @@ async function renderBalanceDetail(container) {
                     <div style="font-weight: 500; color: #1e293b;">${typeText}${descText ? ' - ' + descText : ''}</div>
                     <div style="font-size: 12px; color: #94a3b8;">${timeText}</div>
                 </div>
-                <div style="font-weight: 600; color: ${isPositive ? '#16a34a' : '#dc2626'};">${isPositive ? '+' : ''}${amount.toFixed(2)}</div>
+                <div style="font-weight: 600; color: ${isPositive ? '#16a34a' : '#dc2626'};">${isPositive ? '+' : ''}${formatMoneyDisplay(amountSafe)}</div>
             </div>
         `;
     });

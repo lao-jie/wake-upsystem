@@ -73,6 +73,18 @@
                 <span>公告设置</span>
             </div>
 
+            <!-- 价格策略（仅管理员可见） -->
+            <div class="nav-item" id="nav-price-strategy" style="display: none;" onclick="showPage('priceStrategy')">
+                <span class="icon"><i data-lucide="badge-dollar-sign"></i></span>
+                <span>价格策略</span>
+            </div>
+
+            <!-- 绩效看板（仅管理员可见） -->
+            <div class="nav-item" id="nav-performance-board" style="display: none;" onclick="showPage('performanceBoard')">
+                <span class="icon"><i data-lucide="chart-column"></i></span>
+                <span>绩效看板</span>
+            </div>
+
             <!-- 电脑端退出按钮（在个人中心下方） -->
             <div class="nav-item logout-nav-item" onclick="logout()" title="退出登录">
                 <span class="icon"><i data-lucide="log-out"></i></span>
@@ -184,6 +196,10 @@
                             <i data-lucide="trophy"></i> 本月排行榜
                         </h3>
                         <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
+                            <div class="leaderboard-tabs" role="tablist" aria-label="排行榜排序方式">
+                                <button type="button" class="leaderboard-tab is-active" id="staffLeaderboardTabCount" role="tab" aria-selected="true">按接单数</button>
+                                <button type="button" class="leaderboard-tab" id="staffLeaderboardTabAmount" role="tab" aria-selected="false">按金额</button>
+                            </div>
                             <select id="staffLeaderboardProjectFilter" style="min-width: 180px;">
                                 <option value="all">全部项目</option>
                                 <option value="wake">叫醒订单</option>
@@ -196,7 +212,11 @@
                             <button type="button" class="ghost" onclick="closeStaffLeaderboardModal()">关闭</button>
                         </div>
                     </div>
-                    <div id="staffLeaderboardList" class="leaderboard-list"></div>
+                    <div id="staffLeaderboardListCount" class="leaderboard-list"></div>
+                    <div id="staffLeaderboardListAmount" class="leaderboard-list" style="display:none;"></div>
+                    <div class="leaderboard-rule-tip" id="staffLeaderboardRuleTip">
+                        并列规则：接单数榜同分按金额降序；金额榜同分按接单数降序；仍同分按员工账号升序。
+                    </div>
                 </div>
             </div>
         </div>
@@ -239,29 +259,10 @@
             <!-- 管理员：批量识别上传区域（员工不可见） -->
             <div id="batchUploadArea" class="admin-form" style="display:none; flex-direction: column;">
                 <h3 class="batch-upload-title">AI 批量识别上传</h3>
-                <textarea id="batchText" placeholder="粘贴订单文本（示例：
-① 15277143265 7:20
-② 同一行多时刻：18953772567 10:00 10:20 10:40（一个号码对应多条订单）
-③ 早上七点半，18108510863
-④ 17506529179 8:05
-⑤ 13590847631，8點整，提醒我去大信坐車
-...">① 15277143265 7:20
-② 早上七点半，18108510863
-③ 17506529179 8:05
-④ 13590847631，8點整，提醒我去大信坐車
-⑤ 18953772567 上午9点20
-⑥ 17722277993，早9:30叫
-⑦ 18953772567 9点40
-⑧ 今天9:45，17371992416
-⑨ 18953772567 10点
-⑩ 18953772567 10点20
-⑪ 18953772567 10点40
-⑫ 18953772567 11点
-⑬ 18953772567 11点20
-⑭ 18953772567 11点40
-⑮ 18953772567 12点
-⑯ 18953772567 12点半
-⑰ 13900001111 8:00 8:30 9:00（同号一行多时刻→生成3条订单）</textarea>
+                <textarea id="batchText" placeholder="粘贴订单文本（如：15277143265 7:20）"></textarea>
+                <div class="price-strategy-tip" style="margin-top:8px;">
+                    识别规则：1) 每条需包含手机号（11位）和叫醒时间；2) 支持中文时间（如“早上七点半”）；3) 同一行同一号码可写多个时刻（如 10:00 10:20 10:40）；4) 号码可重复出现在不同行，系统会按行拆分生成订单。
+                </div>
                 <div style="display: flex; flex-wrap: wrap; gap: 12px;">
                     <button onclick="parseBatchOrders()">识别订单</button>
                     <button id="batchUploadBtn" disabled onclick="uploadBatchOrders()">批量上传</button>
@@ -604,6 +605,199 @@
                     </div>
                     <div class="notice-setting-preview" id="noticePreview_team">未设置</div>
                 </div>
+            </div>
+        </div>
+
+        <!-- 价格策略页面（仅管理员） -->
+        <div id="page_priceStrategy" class="page">
+            <h2>价格策略</h2>
+            <div class="user-info">当前用户：<span id="priceStrategyUserName"></span></div>
+
+            <div class="admin-form" style="margin-bottom: 14px; flex-direction: column; gap: 12px;">
+                <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;">
+                    <h3 style="margin:0; font-size:16px; color:#1e293b; display:flex; align-items:center; gap:8px;">
+                        <i data-lucide="badge-dollar-sign"></i> 一键配置结算金额
+                    </h3>
+                    <div style="display:flex; gap:8px; flex-wrap:wrap;">
+                        <button type="button" class="ghost" id="priceStrategyReloadBtn">重新加载</button>
+                        <button type="button" class="success" id="priceStrategySaveBtn">保存策略</button>
+                    </div>
+                </div>
+
+                <div class="price-strategy-grid">
+                    <div class="price-strategy-card">
+                        <div class="price-strategy-card__title">叫醒订单（按时间段）</div>
+                        <div class="price-strategy-rows">
+                            <div class="price-strategy-row">
+                                <div class="k">06:00-06:30</div>
+                                <input id="psWake_0600_0630" type="number" step="0.01" min="0" placeholder="0.00">
+                            </div>
+                            <div class="price-strategy-row">
+                                <div class="k">06:31-07:00</div>
+                                <input id="psWake_0631_0700" type="number" step="0.01" min="0" placeholder="0.00">
+                            </div>
+                            <div class="price-strategy-row">
+                                <div class="k">07:01-08:00</div>
+                                <input id="psWake_0701_0800" type="number" step="0.01" min="0" placeholder="0.00">
+                            </div>
+                            <div class="price-strategy-row">
+                                <div class="k">08:01-24:00</div>
+                                <input id="psWake_0801_2400" type="number" step="0.01" min="0" placeholder="0.00">
+                            </div>
+                        </div>
+                        <div class="price-strategy-tip">
+                            说明：这里会影响新上传叫醒订单的金额计算；也可以“一键应用”到未接单且未结算订单。
+                        </div>
+                    </div>
+
+                    <div class="price-strategy-card">
+                        <div class="price-strategy-card__title">监督订单（按项目单价/天）</div>
+                        <div class="price-strategy-rows">
+                            <div class="price-strategy-row">
+                                <div class="k">监督早睡</div>
+                                <input id="psSvUnit_sleep" type="number" step="0.01" min="0" placeholder="0.00">
+                            </div>
+                            <div class="price-strategy-row">
+                                <div class="k">监督早起</div>
+                                <input id="psSvUnit_wake" type="number" step="0.01" min="0" placeholder="0.00">
+                            </div>
+                            <div class="price-strategy-row">
+                                <div class="k">监督早睡早起</div>
+                                <input id="psSvUnit_combo" type="number" step="0.01" min="0" placeholder="0.00">
+                            </div>
+                        </div>
+                        <div class="price-strategy-tip">
+                            说明：总价 = 单价/天 × 次数（如 7次）。对自定义时长会按“次数”计算。
+                        </div>
+                    </div>
+                </div>
+
+                <div class="price-strategy-actions">
+                    <button type="button" class="warning" id="priceStrategyApplyBtn">一键应用到未结算订单金额</button>
+                    <div class="price-strategy-warning">
+                        提示：只会更新“未接单且未结算（status=待接单 且 salarysettled=false）”的订单金额。被接走或已结算订单金额将锁定不变。
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 绩效看板页面（仅管理员） -->
+        <div id="page_performanceBoard" class="page">
+            <h2>员工绩效看板</h2>
+            <div class="user-info">当前用户：<span id="performanceBoardUserName"></span></div>
+
+            <div class="admin-form performance-board-wrap" style="margin-top: 14px; flex-direction: column; gap: 12px;">
+                <div class="performance-board-toolbar">
+                    <div class="performance-board-tabs" role="tablist" aria-label="绩效统计周期">
+                        <button type="button" class="performance-tab is-active" id="perfTabDay">今日</button>
+                        <button type="button" class="performance-tab" id="perfTabWeek">本周</button>
+                        <button type="button" class="performance-tab" id="perfTabMonth">本月</button>
+                    </div>
+                    <div class="performance-board-toolbar__actions">
+                        <span id="performanceBoardRangeText" class="performance-board-range">统计区间：--</span>
+                        <button type="button" class="ghost" id="performanceBoardRefreshBtn">刷新</button>
+                    </div>
+                </div>
+
+                <div class="performance-board-summary">
+                    <div class="performance-summary-card">
+                        <div class="k">总接单数</div>
+                        <div class="v" id="perfTotalCount">0</div>
+                    </div>
+                    <div class="performance-summary-card">
+                        <div class="k">总接单金额</div>
+                        <div class="v" id="perfTotalAmount">0.00</div>
+                    </div>
+                    <div class="performance-summary-card">
+                        <div class="k">总结算金额</div>
+                        <div class="v" id="perfSettledAmount">0.00</div>
+                    </div>
+                    <div class="performance-summary-card">
+                        <div class="k">参与员工数</div>
+                        <div class="v" id="perfStaffCount">0</div>
+                    </div>
+                </div>
+
+                <div class="performance-chart-card">
+                    <div class="performance-chart-head">
+                        <div class="performance-chart-title">绩效柱形图（Top 10）</div>
+                        <div class="performance-chart-tabs">
+                            <button type="button" class="performance-chart-tab is-active" id="perfChartTabCount">接单数</button>
+                            <button type="button" class="performance-chart-tab" id="perfChartTabAmount">接单金额</button>
+                            <button type="button" class="performance-chart-tab" id="perfChartTabSettled">结算金额</button>
+                        </div>
+                    </div>
+                    <div id="performanceBarChart" class="performance-bar-chart">
+                        <div class="performance-chart-empty">暂无可视化数据</div>
+                    </div>
+                </div>
+
+                <div class="table-wrapper performance-board-table-wrap">
+                    <table class="performance-board-table">
+                        <thead>
+                            <tr>
+                                <th>排名</th>
+                                <th>员工账号</th>
+                                <th>员工姓名</th>
+                                <th class="perf-sortable" data-sort-key="count" id="perfThCount">接单数 <span class="perf-sort-ind"></span></th>
+                                <th class="perf-sortable" data-sort-key="orderAmount" id="perfThAmount">接单金额（元） <span class="perf-sort-ind"></span></th>
+                                <th class="perf-sortable" data-sort-key="settledAmount" id="perfThSettled">结算金额（元） <span class="perf-sort-ind"></span></th>
+                            </tr>
+                        </thead>
+                        <tbody id="performanceBoardTableBody">
+                            <tr>
+                                <td colspan="6" style="text-align:center; color:#64748b; padding:16px;">暂无数据</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 绩效看板：员工明细弹窗 -->
+    <div class="modal-overlay" id="performanceDetailModal">
+        <div class="modal-box" style="width: 92vw; max-width: 980px; max-height: 82vh; overflow-y: auto;">
+            <div style="display:flex; justify-content:space-between; align-items:center; gap:10px; margin-bottom: 12px; flex-wrap:wrap;">
+                <h3 style="margin:0; display:flex; align-items:center; gap:8px;">
+                    <i data-lucide="file-text"></i> <span id="performanceDetailTitle">员工明细</span>
+                </h3>
+                <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
+                    <div class="performance-chart-tabs" role="tablist" aria-label="明细类型筛选">
+                        <button type="button" class="performance-chart-tab is-active" id="perfDetailTabAll">全部</button>
+                        <button type="button" class="performance-chart-tab" id="perfDetailTabWake">叫醒</button>
+                        <button type="button" class="performance-chart-tab" id="perfDetailTabSupervise">监督</button>
+                    </div>
+                    <button type="button" class="ghost" id="performanceDetailCloseBtn">关闭</button>
+                </div>
+            </div>
+
+            <div class="performance-detail-meta">
+                <div class="performance-detail-meta__item">统计区间：<span id="performanceDetailRange">--</span></div>
+                <div class="performance-detail-meta__item">接单数：<span id="performanceDetailCount">0</span></div>
+                <div class="performance-detail-meta__item">接单金额：<span id="performanceDetailAmount">0.00</span></div>
+                <div class="performance-detail-meta__item">结算金额：<span id="performanceDetailSettled">0.00</span></div>
+            </div>
+
+            <div class="table-wrapper performance-detail-table-wrap">
+                <table class="performance-detail-table">
+                    <thead>
+                        <tr>
+                            <th>类型</th>
+                            <th>标识</th>
+                            <th>时间</th>
+                            <th>金额（元）</th>
+                            <th>状态</th>
+                            <th>结算</th>
+                            <th>提交时间</th>
+                        </tr>
+                    </thead>
+                    <tbody id="performanceDetailTableBody">
+                        <tr>
+                            <td colspan="7" style="text-align:center; color:#64748b; padding:16px;">暂无数据</td>
+                        </tr>
+                    </tbody>
+                </table>
             </div>
         </div>
     </div>

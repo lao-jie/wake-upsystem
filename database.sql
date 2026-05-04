@@ -198,13 +198,48 @@ update public.salary_details set createdat = now() where createdat is null;
 alter table public.salary_details alter column description set default '';
 alter table public.salary_details alter column createdat set default now();
 
+-- settle_key 幂等键：用于防重复结算（非空必须唯一；空值允许重复）
+-- 说明：Postgres 的 UNIQUE 对 NULL 天然不冲突，因此不需要 partial unique index，
+-- 也更便于在客户端/服务端使用 on_conflict / upsert 语义。
 create unique index if not exists uq_salary_details_settle_key
-  on public.salary_details(settle_key)
-  where settle_key is not null;
+  on public.salary_details(settle_key);
 create index if not exists idx_salary_details_staffid_createdat
   on public.salary_details(staffid, createdat desc);
 create index if not exists idx_salary_details_order_id
   on public.salary_details(order_id);
+
+-- =====================================================
+-- E) price_strategy：价格策略（管理员可在线配置）
+-- 说明：单行配置即可（id='default'），data 存 JSON 规则
+-- =====================================================
+create table if not exists public.price_strategy (
+  id text primary key,
+  data jsonb not null default '{}'::jsonb,
+  updated_at timestamptz not null default now()
+);
+
+alter table public.price_strategy add column if not exists data jsonb;
+alter table public.price_strategy add column if not exists updated_at timestamptz;
+
+update public.price_strategy set data = '{}'::jsonb where data is null;
+update public.price_strategy set updated_at = now() where updated_at is null;
+
+alter table public.price_strategy alter column data set default '{}'::jsonb;
+alter table public.price_strategy alter column updated_at set default now();
+
+create index if not exists idx_price_strategy_updated_at
+  on public.price_strategy(updated_at desc);
+
+-- =====================================================
+-- （可选）历史数据排查/清理建议
+-- 1) 找出“订单收入自动结算”但 settle_key 为空的老数据（会导致新版本再次结算时产生重复）
+-- select * from public.salary_details
+-- where type='订单收入' and description like '%自动结算%' and (settle_key is null or btrim(settle_key)='')
+-- order by createdat desc;
+--
+-- 2) 若确认这些为空的数据为历史重复项，可先备份后删除（谨慎执行！）
+-- delete from public.salary_details
+-- where type='订单收入' and description like '%自动结算%' and (settle_key is null or btrim(settle_key)='');
 
 
 -- =====================================================
