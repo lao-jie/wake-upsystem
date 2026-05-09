@@ -47,6 +47,34 @@ function setPriceStrategyCache(next) {
     window.__priceStrategyCache = next && typeof next === "object" ? next : null;
 }
 
+const WAKE_REASSIGN_PENALTY_DEFAULT = 0.3;
+
+/** 从价格策略读取叫醒单转派处罚金额（元），缺省或非法时用 0.3 */
+function getWakeReassignPenaltyAmountFromStrategy(strategy) {
+    const s = strategy && typeof strategy === "object" ? strategy : {};
+    const raw = s.wake?.reassignPenalty ?? s.wake?.reassign_penalty;
+    const n = Number(raw);
+    return Number.isFinite(n) && n >= 0 ? n : WAKE_REASSIGN_PENALTY_DEFAULT;
+}
+
+/** 叫醒单归属到「叫醒员」的日历锚点：转派/接单后的 wake_staff_since，否则用 submittime */
+function getWakeStaffDayAnchorDate(order) {
+    const raw = order?.wake_staff_since || order?.wakeStaffSince;
+    if (raw) {
+        const d = new Date(raw);
+        if (!Number.isNaN(d.getTime())) return d;
+    }
+    return new Date(order?.submittime || "");
+}
+
+/** 某订单是否在该本地自然日内计入指定叫醒员的「今日单」 */
+function isWakeOrderAssignedToStaffOnLocalCalendarDay(order, staffId, dayStart, dayEnd) {
+    if (String(order?.staffid || "").trim() !== String(staffId || "").trim()) return false;
+    const anchor = getWakeStaffDayAnchorDate(order);
+    if (Number.isNaN(anchor.getTime())) return false;
+    return anchor >= dayStart && anchor < dayEnd;
+}
+
 // 归一化时间格式（HH:mm，供批量识别等使用）
 const normalizeTime = (timeStr) => {
     if (timeStr == null || timeStr === "") {
@@ -225,4 +253,41 @@ function requireLoginOrRedirect(redirectTo = "index.html") {
         // ignore
     }
     return null;
+}
+
+// ==================== 移动端底栏：淘宝子菜单对齐 ====================
+function isSubMenuPanelOpen(sub) {
+    if (!sub) return false;
+    if (sub.style.display === "none") return false;
+    if (sub.style.display === "block") return true;
+    return window.getComputedStyle(sub).display !== "none";
+}
+
+function positionTaobaoSubmenuMobile() {
+    const sub = document.getElementById("subMenu");
+    const tab = document.getElementById("nav-taobao");
+    if (!sub || !tab) return;
+    if (typeof window.matchMedia === "function" && window.matchMedia("(max-width: 768px)").matches) {
+        const r = tab.getBoundingClientRect();
+        const pad = 4;
+        const left = Math.max(8, r.left - pad);
+        const maxW = window.innerWidth - left - 8;
+        const w = Math.min(maxW, Math.max(r.width + pad * 2, 120));
+        sub.style.left = `${left}px`;
+        sub.style.width = `${w}px`;
+    } else {
+        sub.style.left = "";
+        sub.style.width = "";
+    }
+}
+
+if (typeof window !== "undefined") {
+    window.addEventListener(
+        "resize",
+        () => {
+            const sub = document.getElementById("subMenu");
+            if (sub && isSubMenuPanelOpen(sub)) positionTaobaoSubmenuMobile();
+        },
+        { passive: true }
+    );
 }

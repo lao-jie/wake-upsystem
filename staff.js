@@ -14,6 +14,13 @@ let teamSearchKeyword = "";
 let teamSearchRawKeyword = "";
 let teamSearchDebounceTimer = null;
 
+/** 团队奖励/惩罚弹窗上下文：{ mode, staffId?, staffIds?, staffName? } */
+let teamSalaryActionContext = null;
+
+function teamSalaryActionUniqueSuffix() {
+    return `${Math.floor(Date.now() / 1000)}:${Math.floor(Math.random() * 1e9)}`;
+}
+
 function handleTeamSearch(keyword) {
     teamSearchRawKeyword = String(keyword || "").trim();
     teamSearchKeyword = teamSearchRawKeyword.toLowerCase();
@@ -68,13 +75,6 @@ function clearSelectedTeamStaff() {
     });
 }
 
-function invertSelectedTeamStaff() {
-    const checkboxes = document.querySelectorAll(".staff-checkbox");
-    checkboxes.forEach((checkbox) => {
-        checkbox.checked = !checkbox.checked;
-    });
-}
-
 async function settleSelectedTeamStaff() {
     const selectedIds = getSelectedTeamStaffIds();
     if (selectedIds.length === 0) {
@@ -123,41 +123,7 @@ async function rewardSelectedTeamStaff() {
         showToast("请先选中要奖励的员工。", "warning");
         return;
     }
-
-    const rewardAmount = prompt("请输入每位已选员工的奖励金额（元）：", "10");
-    if (rewardAmount === null) return;
-
-    const amount = parseFloat(rewardAmount);
-    if (!Number.isFinite(amount) || amount <= 0) {
-        showToast("请输入有效的正数金额。", "warning");
-        return;
-    }
-
-    let staffList = await getStaffList();
-    let rewardCount = 0;
-    let totalReward = 0;
-
-    for (const staffId of selectedIds) {
-        const index = staffList.findIndex(staff => staff.id === staffId);
-        if (index === -1) continue;
-
-        staffList[index].salary = parseFloat(staffList[index].salary || 0) + amount;
-        rewardCount++;
-        totalReward += amount;
-
-        const actionKey = `batch_reward:${staffId}:${Math.round(amount * 100)}:${Math.floor(Date.now() / 1000)}`;
-        await addSalaryDetail(staffId, amount, '奖励', '管理员批量奖励', new Date(), { settleKey: actionKey });
-    }
-
-    await saveStaffList(staffList);
-    renderTeamTable();
-
-    if (rewardCount === 0) {
-        showToast("未找到可奖励员工。", "warning");
-        return;
-    }
-
-    showToast(`批量奖励完成：${rewardCount} 人，合计 ${totalReward.toFixed(2)} 元。`, "success");
+    await openTeamSalaryActionModal({ mode: "reward_batch", staffIds: [...selectedIds] });
 }
 
 // 渲染团队管理表格
@@ -173,10 +139,12 @@ async function renderTeamTable() {
         const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
         const todayEnd = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
 
-        const todayOrders = allOrders.filter(order =>
-            order.staffid === staff.id &&
-            new Date(order.submittime) >= todayStart &&
-            new Date(order.submittime) < todayEnd
+        const todayOrders = allOrders.filter((order) =>
+            typeof isWakeOrderAssignedToStaffOnLocalCalendarDay === "function"
+                ? isWakeOrderAssignedToStaffOnLocalCalendarDay(order, staff.id, todayStart, todayEnd)
+                : order.staffid === staff.id &&
+                  new Date(order.submittime) >= todayStart &&
+                  new Date(order.submittime) < todayEnd
         );
         const todayCount = todayOrders.length;
 
@@ -261,59 +229,214 @@ async function settleStaffSalary(staffId) {
     }
 }
 
-// 奖励员工
-async function rewardStaff(staffId) {
-    const rewardAmount = prompt("请输入奖励金额（元）：", "0");
-    if (rewardAmount === null) return;
-    const amount = parseFloat(rewardAmount);
-    if (!Number.isFinite(amount) || amount <= 0) {
-        alert("请输入有效的正数金额！");
+function closeTeamSalaryActionModal() {
+    const modal = document.getElementById("teamSalaryActionModal");
+    if (modal) modal.style.display = "none";
+    teamSalaryActionContext = null;
+}
+
+async function openTeamSalaryActionModal(ctx) {
+    const mode = ctx?.mode;
+    if (mode === "reward_batch" && (!Array.isArray(ctx.staffIds) || ctx.staffIds.length === 0)) {
+        if (typeof showToast === "function") showToast("批量奖励缺少选中员工。", "warning");
+        return;
+    }
+    if ((mode === "reward_single" || mode === "punish_single") && !ctx?.staffId) {
+        if (typeof showToast === "function") showToast("缺少员工信息。", "warning");
         return;
     }
 
+    teamSalaryActionContext = { ...ctx };
+    const modal = document.getElementById("teamSalaryActionModal");
+    const titleEl = document.getElementById("teamSalaryActionTitle");
+    const subEl = document.getElementById("teamSalaryActionSubtitle");
+    const amountEl = document.getElementById("teamSalaryActionAmount");
+    const reasonEl = document.getElementById("teamSalaryActionReason");
+    const reasonLabel = document.getElementById("teamSalaryActionReasonLabel");
+    const confirmBtn = document.getElementById("teamSalaryActionConfirmBtn");
+    if (!modal || !titleEl || !subEl || !amountEl || !reasonEl) return;
+
+    if (mode === "reward_single" || mode === "punish_single") {
+        const staffList = await getStaffList();
+        const st = staffList.find((s) => s.id === ctx.staffId);
+        const displayName = st?.name || ctx.staffId;
+        teamSalaryActionContext.staffName = displayName;
+        subEl.textContent = `员工：${displayName}（${ctx.staffId}）`;
+        titleEl.textContent = mode === "reward_single" ? "奖励员工" : "处罚员工";
+        amountEl.value = "";
+        reasonEl.value = "";
+        if (reasonLabel) {
+            reasonLabel.textContent =
+                mode === "punish_single"
+                    ? "处罚原因（必填，将写入余额明细）"
+                    : "奖励说明（选填，将写入余额明细）";
+        }
+        reasonEl.placeholder =
+            mode === "punish_single"
+                ? "请填写处罚原因，例如：迟到、漏单、服务态度等"
+                : "不填写则记为「管理员手动奖励」";
+        if (confirmBtn) {
+            confirmBtn.className = mode === "punish_single" ? "danger" : "success";
+            confirmBtn.textContent = mode === "punish_single" ? "确认处罚" : "确认奖励";
+        }
+    } else if (mode === "reward_batch") {
+        titleEl.textContent = "批量奖励";
+        subEl.textContent = `已选 ${ctx.staffIds.length} 人：每人相同金额，说明将分别记入各自余额明细。`;
+        amountEl.value = "10";
+        reasonEl.value = "";
+        if (reasonLabel) reasonLabel.textContent = "奖励说明（选填，将写入余额明细）";
+        reasonEl.placeholder = "不填写则记为「管理员批量奖励」";
+        if (confirmBtn) {
+            confirmBtn.className = "success";
+            confirmBtn.textContent = "确认批量奖励";
+        }
+    } else {
+        if (typeof showToast === "function") showToast("未知的操作类型。", "warning");
+        teamSalaryActionContext = null;
+        return;
+    }
+
+    modal.style.display = "flex";
+    amountEl.focus();
+}
+
+async function submitTeamSalaryActionModal() {
+    const ctx = teamSalaryActionContext;
+    if (!ctx) return;
+
+    const btn = document.getElementById("teamSalaryActionConfirmBtn");
+    if (btn && btn.getAttribute("aria-busy") === "true") return;
+    if (btn) {
+        btn.setAttribute("aria-busy", "true");
+        btn.disabled = true;
+    }
+
+    try {
+        const amount = parseFloat(String(document.getElementById("teamSalaryActionAmount")?.value || "").trim());
+        const reasonRaw = String(document.getElementById("teamSalaryActionReason")?.value || "").trim();
+
+        if (!Number.isFinite(amount) || amount <= 0) {
+            if (typeof showToast === "function") showToast("请输入有效的正数金额。", "warning");
+            else alert("请输入有效的正数金额！");
+            return;
+        }
+
+        if (ctx.mode === "punish_single" && !reasonRaw) {
+            if (typeof showToast === "function") showToast("请填写处罚原因。", "warning");
+            else alert("请填写处罚原因。");
+            return;
+        }
+
+        const descRewardSingle = reasonRaw || "管理员手动奖励";
+        const descRewardBatch = reasonRaw || "管理员批量奖励";
+
+        let ok = false;
+        if (ctx.mode === "reward_single") {
+            ok = await applyTeamRewardSingle(ctx.staffId, amount, descRewardSingle);
+        } else if (ctx.mode === "punish_single") {
+            ok = await applyTeamPunishSingle(ctx.staffId, amount, reasonRaw);
+        } else if (ctx.mode === "reward_batch" && Array.isArray(ctx.staffIds)) {
+            ok = await applyTeamRewardBatch(ctx.staffIds, amount, descRewardBatch);
+        } else {
+            if (typeof showToast === "function") showToast("操作已失效，请关闭后重试。", "warning");
+        }
+
+        if (ok) closeTeamSalaryActionModal();
+    } finally {
+        if (btn) {
+            btn.removeAttribute("aria-busy");
+            btn.disabled = false;
+        }
+    }
+}
+
+async function applyTeamRewardSingle(staffId, amount, description) {
     let staffList = await getStaffList();
-    const index = staffList.findIndex(staff => staff.id === staffId);
-    if (index !== -1) {
+    const index = staffList.findIndex((staff) => staff.id === staffId);
+    if (index === -1) {
+        if (typeof showToast === "function") showToast("未找到该员工。", "warning");
+        return false;
+    }
+    const baseSal = Number.parseFloat(staffList[index].salary || 0);
+    staffList[index].salary = (Number.isFinite(baseSal) ? baseSal : 0) + amount;
+    await saveStaffList(staffList);
+    const actionKey = `manual_reward:${staffId}:${Math.round(amount * 100)}:${teamSalaryActionUniqueSuffix()}`;
+    await addSalaryDetail(staffId, amount, "奖励", description, new Date(), { settleKey: actionKey });
+    renderTeamTable();
+    const msg = `已奖励 ${amount.toFixed(2)} 元，当前余额：${formatMoneyDisplay(staffList[index].salary)} 元`;
+    if (typeof showToast === "function") showToast(msg, "success");
+    else alert(msg);
+    return true;
+}
+
+async function applyTeamPunishSingle(staffId, amount, description) {
+    let staffList = await getStaffList();
+    const index = staffList.findIndex((staff) => staff.id === staffId);
+    if (index === -1) {
+        if (typeof showToast === "function") showToast("未找到该员工。", "warning");
+        return false;
+    }
+    const currentSalary = Number.parseFloat(staffList[index].salary || 0);
+    const safeCurrentSalary = Number.isFinite(currentSalary) ? currentSalary : 0;
+    if (amount > safeCurrentSalary) {
+        if (!confirm(`该员工当前余额仅 ${safeCurrentSalary.toFixed(2)} 元，扣除金额超过余额，是否继续？`)) {
+            return false;
+        }
+    }
+
+    staffList[index].salary = Math.max(0, safeCurrentSalary - amount);
+    await saveStaffList(staffList);
+    const actionKey = `manual_punish:${staffId}:${Math.round(amount * 100)}:${teamSalaryActionUniqueSuffix()}`;
+    await addSalaryDetail(staffId, -amount, "惩罚", description, new Date(), { settleKey: actionKey });
+    renderTeamTable();
+    const msg = `已扣除 ${amount.toFixed(2)} 元，当前余额：${formatMoneyDisplay(staffList[index].salary)} 元`;
+    if (typeof showToast === "function") showToast(msg, "success");
+    else alert(msg);
+    return true;
+}
+
+async function applyTeamRewardBatch(selectedIds, amount, description) {
+    let staffList = await getStaffList();
+    let rewardCount = 0;
+    let totalReward = 0;
+
+    for (const staffId of selectedIds) {
+        const index = staffList.findIndex((staff) => staff.id === staffId);
+        if (index === -1) continue;
+
         const baseSal = Number.parseFloat(staffList[index].salary || 0);
         staffList[index].salary = (Number.isFinite(baseSal) ? baseSal : 0) + amount;
-        await saveStaffList(staffList);
-        const actionKey = `manual_reward:${staffId}:${Math.round(amount * 100)}:${Math.floor(Date.now() / 1000)}`;
-        // 添加余额变动记录
-        await addSalaryDetail(staffId, amount, '奖励', '管理员手动奖励', new Date(), { settleKey: actionKey });
-        renderTeamTable();
-        alert(`已奖励该员工 ${amount.toFixed(2)} 元，当前余额：${formatMoneyDisplay(staffList[index].salary)} 元`);
+        rewardCount++;
+        totalReward += amount;
+
+        const actionKey = `batch_reward:${staffId}:${Math.round(amount * 100)}:${teamSalaryActionUniqueSuffix()}`;
+        await addSalaryDetail(staffId, amount, "奖励", description, new Date(), { settleKey: actionKey });
     }
+
+    await saveStaffList(staffList);
+    renderTeamTable();
+
+    if (rewardCount === 0) {
+        if (typeof showToast === "function") showToast("未找到可奖励员工。", "warning");
+        return false;
+    }
+
+    if (typeof showToast === "function") {
+        showToast(`批量奖励完成：${rewardCount} 人，合计 ${totalReward.toFixed(2)} 元。`, "success");
+    } else {
+        alert(`批量奖励完成：${rewardCount} 人，合计 ${totalReward.toFixed(2)} 元。`);
+    }
+    return true;
+}
+
+// 奖励员工
+async function rewardStaff(staffId) {
+    await openTeamSalaryActionModal({ mode: "reward_single", staffId });
 }
 
 // 惩罚员工
 async function punishStaff(staffId) {
-    const punishAmount = prompt("请输入惩罚扣除金额（元）：", "0");
-    if (punishAmount === null) return;
-    const amount = parseFloat(punishAmount);
-    if (!Number.isFinite(amount) || amount <= 0) {
-        alert("请输入有效的正数金额！");
-        return;
-    }
-
-    let staffList = await getStaffList();
-    const index = staffList.findIndex(staff => staff.id === staffId);
-    if (index !== -1) {
-        const currentSalary = Number.parseFloat(staffList[index].salary || 0);
-        const safeCurrentSalary = Number.isFinite(currentSalary) ? currentSalary : 0;
-        if (amount > safeCurrentSalary) {
-            if (!confirm(`该员工当前余额仅 ${safeCurrentSalary.toFixed(2)} 元，扣除金额超过余额，是否继续？`)) {
-                return;
-            }
-        }
-
-        staffList[index].salary = Math.max(0, safeCurrentSalary - amount);
-        await saveStaffList(staffList);
-        const actionKey = `manual_punish:${staffId}:${Math.round(amount * 100)}:${Math.floor(Date.now() / 1000)}`;
-        // 添加余额变动记录（惩罚为负数）
-        await addSalaryDetail(staffId, -amount, '惩罚', '管理员手动惩罚', new Date(), { settleKey: actionKey });
-        renderTeamTable();
-        alert(`已扣除该员工 ${amount.toFixed(2)} 元，当前余额：${formatMoneyDisplay(staffList[index].salary)} 元`);
-    }
+    await openTeamSalaryActionModal({ mode: "punish_single", staffId });
 }
 
 // 渲染个人中心
@@ -341,9 +464,13 @@ async function renderProfilePage() {
         }
     }
 
-    const today = new Date().toLocaleDateString();
-    const todayCount = myOrders.filter(order =>
-        new Date(order.submittime).toLocaleDateString() === today
+    const now = new Date();
+    const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const todayEnd = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
+    const todayCount = myOrders.filter((order) =>
+        typeof isWakeOrderAssignedToStaffOnLocalCalendarDay === "function"
+            ? isWakeOrderAssignedToStaffOnLocalCalendarDay(order, user.id, todayStart, todayEnd)
+            : new Date(order.submittime).toLocaleDateString() === now.toLocaleDateString()
     ).length;
     document.getElementById("todayOrderCount").innerText = todayCount;
 
@@ -473,19 +600,6 @@ function renderProfileCards(orders) {
     }
 }
 
-// 添加薪资
-async function addSalary(staffId, amount, completedTime = new Date()) {
-    // 使用原子性更好的余额更新函数
-    const ok = await addStaffSalary(staffId, amount);
-    if (ok) {
-        // 保护：这里是旧函数，没有订单上下文（无 order.id / settle_key），
-        // 避免写入“订单收入自动结算”的脏明细（会出现 order_id/settle_key 为空）
-        await addSalaryDetail(staffId, amount, '奖励', '余额调整', completedTime, {
-            settleKey: `salary_adjust:${String(staffId || "").trim()}:${Math.round(Number(amount || 0) * 100)}:${Math.floor(Date.now() / 1000)}`
-        });
-    }
-}
-
 // ==============================
 // 幂等订单结算（防止凌晨多端重复结算）
 // - 先写入 salary_details（带 settle_key 唯一约束）
@@ -522,9 +636,11 @@ async function settleOrderIncomeOnce(order, completedTime = new Date()) {
         { settleKey, orderId }
     );
 
-    // 已存在（唯一冲突）→ 认为已结算过，不再加余额
-    if (!detailRes.inserted && detailRes.reason === "duplicate") {
-        return { settled: false, reason: "already_settled" };
+    if (!detailRes.inserted) {
+        if (detailRes.reason === "duplicate") {
+            return { settled: false, reason: "already_settled" };
+        }
+        return { settled: false, reason: detailRes.reason || "detail_insert_failed" };
     }
 
     // 2) 只有“明细写入成功”才更新员工余额
@@ -642,7 +758,7 @@ function openAddStaffModal() {
     document.getElementById("addStaffModal").style.display = "flex";
     document.getElementById("newStaffName").value = "";
     document.getElementById("newStaffId").value = "";
-    document.getElementById("newStaffPwd").value = "";
+    document.getElementById("newStaffPwd").value = "123456";
 }
 
 // 关闭添加员工弹窗

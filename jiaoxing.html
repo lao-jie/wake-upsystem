@@ -3,8 +3,11 @@
 
 <head>
     <meta charset="UTF-8">
-    <!-- 保留视口设置，适配手机 -->
-    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+    <!-- viewport-fit=cover：配合 CSS env(safe-area-inset-*)，刘海屏/底部横条不挡内容 -->
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+    <meta name="theme-color" content="#f1f5f9">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="default">
     <title>老街网创 - 叫醒订单管理</title>
     <link rel="stylesheet" href="styles.css">
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
@@ -623,6 +626,9 @@
                         <button type="button" class="success" id="priceStrategySaveBtn">保存策略</button>
                     </div>
                 </div>
+                <p style="margin:0 0 8px; font-size:13px; color:#64748b; line-height:1.55;">
+                    本页所有金额（叫醒时段、监督单价、<strong>转接处罚</strong>）改好后点<strong>「保存策略」</strong>即写入云端并生效，<strong>无需改网页源码或重新部署</strong>。下方「一键应用」仅针对<strong>未接单</strong>叫醒单的时段单价，不含转接处罚。
+                </p>
 
                 <div class="price-strategy-grid">
                     <div class="price-strategy-card">
@@ -644,9 +650,13 @@
                                 <div class="k">08:01-24:00</div>
                                 <input id="psWake_0801_2400" type="number" step="0.01" min="0" placeholder="0.00">
                             </div>
+                            <div class="price-strategy-row">
+                                <div class="k">转接处罚（元）</div>
+                                <input id="psWake_reassign_penalty" type="number" step="0.01" min="0" placeholder="0.30" title="管理员将进行中订单转派给其他叫醒员时，从原叫醒员扣除的固定金额">
+                            </div>
                         </div>
                         <div class="price-strategy-tip">
-                            说明：这里会影响新上传叫醒订单的金额计算；也可以“一键应用”到未接单且未结算订单。
+                            说明：时段金额会影响新上传叫醒订单的金额计算，也可以「一键应用」到未接单且未结算订单。转接处罚在保存策略后，对之后每一次「叫醒员转派」按此处金额扣原叫醒员并记余额明细；填 0 表示转派不扣款。
                         </div>
                     </div>
 
@@ -864,11 +874,45 @@
             </div>
             <div class="modal-form-item">
                 <label for="newStaffPwd">员工密码</label>
-                <input type="password" id="newStaffPwd" placeholder="请输入员工密码">
+                <input type="password" id="newStaffPwd" value="123456" placeholder="默认 123456，可修改">
             </div>
             <div class="modal-footer">
                 <button type="button" class="ghost" onclick="closeAddStaffModal()">取消</button>
                 <button type="button" onclick="saveNewStaff()" class="success">确认添加</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 团队管理：奖励 / 惩罚（金额 + 原因写入余额明细） -->
+    <div class="modal-overlay" id="teamSalaryActionModal" style="display: none;">
+        <div class="modal-box" style="max-width: 440px;">
+            <h3 id="teamSalaryActionTitle" style="margin-bottom: 8px;">奖励</h3>
+            <p id="teamSalaryActionSubtitle" style="margin: 0 0 14px; font-size: 13px; color: #64748b; line-height: 1.45;"></p>
+            <div class="modal-form-item">
+                <label for="teamSalaryActionAmount">金额（元）</label>
+                <input type="number" id="teamSalaryActionAmount" step="0.01" min="0" placeholder="0.00">
+            </div>
+            <div class="modal-form-item">
+                <label for="teamSalaryActionReason" id="teamSalaryActionReasonLabel">原因说明</label>
+                <textarea id="teamSalaryActionReason" rows="3" placeholder=""
+                    style="min-height: 80px; resize: vertical; width: 100%; box-sizing: border-box;"></textarea>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="ghost" onclick="closeTeamSalaryActionModal()">取消</button>
+                <button type="button" class="success" id="teamSalaryActionConfirmBtn" onclick="submitTeamSalaryActionModal()">确认</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 叫醒单：管理员转派叫醒员 -->
+    <div class="modal-overlay" id="wakeReassignModal" style="display: none;">
+        <div class="modal-box" style="max-width: 440px;">
+            <h3>转派叫醒员</h3>
+            <p id="wakeReassignMeta" style="font-size: 13px; color: #64748b; margin: 0 0 8px; line-height: 1.5;"></p>
+            <p id="wakeReassignHint" style="font-size: 12px; color: #94a3b8; margin: 0 0 10px;">仅显示已绑定手机号与支付宝账号的员工；转派时对原叫醒员的扣款以「价格策略」中的转接处罚为准。</p>
+            <div id="wakeReassignStaffList" class="wake-reassign-list"></div>
+            <div class="modal-footer">
+                <button type="button" class="ghost" onclick="closeWakeReassignModal()">取消</button>
             </div>
         </div>
     </div>

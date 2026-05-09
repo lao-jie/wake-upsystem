@@ -3,7 +3,10 @@
 
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+    <meta name="theme-color" content="#f1f5f9">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="default">
     <title>老街网创 - 监督界面</title>
     <link rel="stylesheet" href="styles.css">
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
@@ -56,6 +59,18 @@
                 onclick="window.location.href='jiaoxing.html?page=noticeSetting'">
                 <span class="icon"><i data-lucide="settings"></i></span>
                 <span>公告设置</span>
+            </div>
+
+            <div class="nav-item" id="nav-price-strategy" style="display:none;"
+                onclick="window.location.href='jiaoxing.html?page=priceStrategy'">
+                <span class="icon"><i data-lucide="badge-dollar-sign"></i></span>
+                <span>价格策略</span>
+            </div>
+
+            <div class="nav-item" id="nav-performance-board" style="display:none;"
+                onclick="window.location.href='jiaoxing.html?page=performanceBoard'">
+                <span class="icon"><i data-lucide="chart-column"></i></span>
+                <span>绩效看板</span>
             </div>
 
             <div class="nav-item logout-nav-item" onclick="logout()" title="退出登录">

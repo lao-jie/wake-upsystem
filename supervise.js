@@ -28,6 +28,10 @@ let pendingTakeTaskId = "";
     if (navTeamText) navTeamText.textContent = superviseIsAdmin ? "团队管理" : "个人中心";
     const noticeNav = document.getElementById("nav-notice-setting");
     if (noticeNav) noticeNav.style.display = superviseIsAdmin ? "flex" : "none";
+    const priceStrategyNav = document.getElementById("nav-price-strategy");
+    if (priceStrategyNav) priceStrategyNav.style.display = superviseIsAdmin ? "flex" : "none";
+    const performanceNav = document.getElementById("nav-performance-board");
+    if (performanceNav) performanceNav.style.display = superviseIsAdmin ? "flex" : "none";
 
     if (window.lucide && typeof window.lucide.createIcons === "function") {
         window.lucide.createIcons();
@@ -58,11 +62,17 @@ function toggleSubMenu() {
     const sub = document.getElementById("subMenu");
     const arr = document.getElementById("arrow");
     if (!sub || !arr) return;
-    if (sub.style.display === "block") {
+    if (typeof isSubMenuPanelOpen === "function" && isSubMenuPanelOpen(sub)) {
         sub.style.display = "none";
+        sub.style.left = "";
+        sub.style.width = "";
         arr.innerText = "▼";
     } else {
         sub.style.display = "block";
+        if (typeof positionTaobaoSubmenuMobile === "function") {
+            positionTaobaoSubmenuMobile();
+            requestAnimationFrame(() => positionTaobaoSubmenuMobile());
+        }
         arr.innerText = "▲";
     }
 }

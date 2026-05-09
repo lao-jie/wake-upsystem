@@ -75,6 +75,8 @@ alter table public.wake_orders add column if not exists staffid text;
 alter table public.wake_orders add column if not exists staffname text;
 alter table public.wake_orders add column if not exists salarysettled boolean;
 alter table public.wake_orders add column if not exists submittime timestamptz;
+-- 接单或管理员转派到新叫醒员的时间（用于员工端「今日单」归属日）；代码见 storage.saveOrders / order.js
+alter table public.wake_orders add column if not exists wake_staff_since timestamptz;
 
 update public.wake_orders set note = '' where note is null;
 update public.wake_orders set amount = 0 where amount is null;
@@ -83,6 +85,11 @@ update public.wake_orders set staffid = '' where staffid is null;
 update public.wake_orders set staffname = '' where staffname is null;
 update public.wake_orders set salarysettled = false where salarysettled is null;
 update public.wake_orders set submittime = now() where submittime is null;
+-- 历史订单无接单锚点时可留空，逻辑上仍按 submittime 判断「今日」
+update public.wake_orders set wake_staff_since = submittime
+  where wake_staff_since is null
+    and btrim(coalesce(staffid, '')) <> ''
+    and coalesce(status, '') <> '待接单';
 
 alter table public.wake_orders alter column note set default '';
 alter table public.wake_orders alter column amount set default 0;

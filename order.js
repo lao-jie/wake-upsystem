@@ -1,12 +1,22 @@
-const PERF_DEBUG = false;
-function perfLog(...args) {
-    if (PERF_DEBUG) {
-        console.log(...args);
-    }
-}
-
 let latestLoadOrdersToken = 0;
 let renderFrameId = null;
+let wakeReassignPendingIdentity = "";
+
+async function getWakeReassignPenaltyAmount() {
+    try {
+        if (typeof getPriceStrategy === "function") {
+            const s = await getPriceStrategy();
+            if (typeof getWakeReassignPenaltyAmountFromStrategy === "function") {
+                return getWakeReassignPenaltyAmountFromStrategy(s);
+            }
+        }
+    } catch (_) { }
+    const cached = typeof getPriceStrategyCache === "function" ? getPriceStrategyCache() : null;
+    if (typeof getWakeReassignPenaltyAmountFromStrategy === "function") {
+        return getWakeReassignPenaltyAmountFromStrategy(cached);
+    }
+    return 0.3;
+}
 
 function formatWakeTimeDisplay(waketime) {
     if (typeof formatWakeTimeForDisplay === "function") {
@@ -41,6 +51,11 @@ function getOrderIdentity(order) {
     const phone = String(order?.phone || "").trim();
     const wake = String(order?.waketime || "").trim();
     return `fallback:${submit}|${phone}|${wake}`;
+}
+
+/** 与 loadOrders 去重规则一致：同提交时间+电话+叫醒时间在界面上只显示一行，删一行时应一并删库中重复行 */
+function getWakeOrderDisplayDedupeKey(order) {
+    return `${order?.submittime || ""}-${order?.phone || ""}-${order?.waketime || ""}`;
 }
 
 function escapeJsSingleQuote(value) {
@@ -116,22 +131,21 @@ async function loadOrders() {
         if (isAdmin) {
             displayOrders = [...ordersWithSerial].sort((a, b) => a.serialnumber - b.serialnumber);
         } else if (isStaff) {
-            // 员工只能看到当天提交的订单
+            // 员工：待接单池仍为「当日提交」；已接单订单按 wake_staff_since（或提交时间）落在当日则可见（含管理员转派到本日的单）
             displayOrders = ordersWithSerial.filter(item => {
-                // 检查是否是当天提交的订单
-                const orderDate = new Date(item.submittime);
-                const isTodayOrder = orderDate >= todayStart && orderDate < todayEnd;
-
-                if (!isTodayOrder) {
+                if (item.status === "待接单") {
+                    const orderDate = new Date(item.submittime);
+                    return orderDate >= todayStart && orderDate < todayEnd;
+                }
+                if (item.staffid !== user.id) {
                     return false;
                 }
-
-                // 员工可以看到：1. 待接单的订单（所有员工都可见） 2. 自己接的订单（只有接单员工本人可见）
-                if (item.status === "待接单") {
-                    return true;
-                }
-                // 检查是否是自己接的订单
-                return item.staffid === user.id;
+                return typeof isWakeOrderAssignedToStaffOnLocalCalendarDay === "function"
+                    ? isWakeOrderAssignedToStaffOnLocalCalendarDay(item, user.id, todayStart, todayEnd)
+                    : (() => {
+                        const orderDate = new Date(item.submittime);
+                        return orderDate >= todayStart && orderDate < todayEnd;
+                    })();
             }).sort((a, b) => {
                 // 优先展示未接的订单
                 if (a.status === "待接单" && b.status !== "待接单") return -1;
@@ -163,8 +177,6 @@ async function loadOrders() {
 
 // 渲染订单
 function renderOrders(orders) {
-    perfLog('渲染订单:', orders.length, '个订单，移动端:', mobileMQ.matches, '员工:', isStaff);
-
     // 合并同一帧内的多次渲染请求，减少抖动和重排
     if (renderFrameId) {
         cancelAnimationFrame(renderFrameId);
@@ -174,10 +186,8 @@ function renderOrders(orders) {
         // 确保无论是否为移动端，都能正确渲染订单
         try {
             if (isStaff && mobileMQ.matches) {
-                perfLog('渲染移动端卡片');
                 renderCards(orders);
             } else {
-                perfLog('渲染桌面端表格');
                 renderTable(orders);
             }
             const kw = String(window.__wakeSearchKeyword || "").trim();
@@ -189,7 +199,6 @@ function renderOrders(orders) {
             console.error('渲染订单失败:', error);
             // 降级处理：尝试使用表格渲染
             try {
-                perfLog('降级渲染为表格');
                 const tableContainer = document.getElementById("orderTable");
                 if (tableContainer) {
                     let html = "";
@@ -252,14 +261,11 @@ function renderOrders(orders) {
 // 渲染卡片（移动端）
 function renderCards(orders) {
     try {
-        perfLog('渲染移动端卡片，订单数量:', orders.length);
         const container = document.getElementById("orderCards");
-        perfLog('订单卡片容器:', container);
 
         if (!container) {
             // 如果没有找到容器，尝试使用表格容器
             const tableContainer = document.getElementById("orderTable");
-            perfLog('表格容器:', tableContainer);
             if (tableContainer) {
                 // 渲染简单的订单列表
                 let html = "";
@@ -369,7 +375,6 @@ function renderCards(orders) {
         }
 
         container.innerHTML = html;
-        perfLog('移动端卡片渲染完成');
     } catch (error) {
         console.error("渲染订单卡片失败：", error);
     }
@@ -463,7 +468,7 @@ function renderTable(orders) {
                     <td>${showTime}</td>
                     <td>${item.phone}</td>
                     <td>${item.note || '-'}</td>
-                    <td>${item.staffname || '-'}</td>
+                    <td>${wakeStaffNameCellHtml(item)}</td>
                     <td><span class="status-badge ${statusClass}">${item.status}</span></td>
                     <td>${formatMoneyDisplay(item.amount ?? item.money)} 元</td>
                     <td>${actionBtn}</td>
@@ -533,7 +538,7 @@ function renderTable(orders) {
       <td>${showTime}</td>
       <td>${item.phone}</td>
       <td>${item.note || '-'}</td>
-      <td>${item.staffname || '-'}</td>
+      <td>${wakeStaffNameCellHtml(item)}</td>
       <td><span class="status-badge ${statusClass}">${item.status}</span></td>
       <td>${formatMoneyDisplay(item.amount ?? item.money)} 元</td>
       <td>${actionBtn}</td>
@@ -543,6 +548,184 @@ function renderTable(orders) {
     }
 
     document.getElementById("orderTable").innerHTML = html || `<tr><td colspan="10" style="text-align: center; padding: 20px; color: #64748b;">暂无订单</td></tr>`;
+}
+
+function wakeStaffNameCellHtml(item) {
+    const rawName = item.staffname || "-";
+    const hasStaff = String(item.staffid || "").trim() !== "";
+    if (!isAdmin || item.status !== "进行中" || !hasStaff || rawName === "-") {
+        if (typeof escapeHtml === "function") return escapeHtml(rawName);
+        return String(rawName).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/"/g, "&quot;");
+    }
+    const safeName = typeof escapeHtml === "function"
+        ? escapeHtml(rawName)
+        : String(rawName).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/"/g, "&quot;");
+    const identity = escapeJsSingleQuote(getOrderIdentity(item));
+    return `<button type="button" class="wake-staff-link" title="转派给其他叫醒员" onclick="openWakeReassignModal('${identity}')">${safeName}</button>`;
+}
+
+function closeWakeReassignModal() {
+    wakeReassignPendingIdentity = "";
+    const modal = document.getElementById("wakeReassignModal");
+    if (modal) modal.style.display = "none";
+}
+
+async function openWakeReassignModal(identity) {
+    if (!isAdmin) return;
+    const modal = document.getElementById("wakeReassignModal");
+    const listEl = document.getElementById("wakeReassignStaffList");
+    const metaEl = document.getElementById("wakeReassignMeta");
+    if (!modal || !listEl || !metaEl) return;
+
+    wakeReassignPendingIdentity = String(identity || "").trim();
+    if (!wakeReassignPendingIdentity) return;
+
+    const allOrders = await getOrders();
+    const idx = findOrderIndexByIdentity(allOrders, wakeReassignPendingIdentity);
+    if (idx < 0) {
+        alert("订单不存在或已变更。");
+        wakeReassignPendingIdentity = "";
+        return;
+    }
+    const order = allOrders[idx];
+    if (order.status !== "进行中") {
+        alert("仅「进行中」的订单可以转派叫醒员。");
+        wakeReassignPendingIdentity = "";
+        return;
+    }
+
+    metaEl.textContent = `当前：${order.staffname || "-"}（${order.staffid || "-"}）｜电话 ${order.phone || "-"}｜${formatWakeTimeDisplay(order.waketime)}`;
+
+    const hintEl = document.getElementById("wakeReassignHint");
+    if (hintEl) {
+        const p = await getWakeReassignPenaltyAmount();
+        const pText = typeof formatMoneyDisplay === "function" ? formatMoneyDisplay(p) : String(p);
+        hintEl.textContent =
+            p > 0
+                ? `仅显示已绑定手机号与支付宝账号的员工；原叫醒员将扣 ${pText} 元并记入余额明细（因接错等原因处罚），金额取自「价格策略」— 叫醒订单 — 转接处罚。`
+                : "仅显示已绑定手机号与支付宝账号的员工；当前「转接处罚」为 0 元，原叫醒员不会因转派被扣款。";
+    }
+
+    const staffList = await getStaffList();
+    const eligible = staffList.filter((s) => {
+        const phone = String(s.phone || "").trim();
+        const acct = String(s.salaryAccount || "").trim();
+        const sid = String(s.id || "").trim();
+        return phone && acct && sid && sid !== String(order.staffid || "").trim();
+    });
+
+    if (eligible.length === 0) {
+        listEl.innerHTML = `<div style="color:#64748b;font-size:14px;">没有可转派的员工（需已绑定手机号与支付宝，且不能仍是当前叫醒员）。</div>`;
+        modal.style.display = "flex";
+        return;
+    }
+
+    listEl.innerHTML = eligible
+        .map((s) => {
+            const sid = escapeJsSingleQuote(s.id);
+            const snm = escapeJsSingleQuote(s.name || s.id);
+            const label = typeof escapeHtml === "function"
+                ? escapeHtml(`${s.name || s.id}（${s.id}）`)
+                : `${String(s.name || s.id).replace(/&/g, "&amp;")}（${String(s.id).replace(/&/g, "&amp;")}）`;
+            return `
+            <div class="wake-reassign-row">
+                <div style="font-size:14px;color:#1e293b;">${label}</div>
+                <button type="button" class="success" onclick="confirmWakeReassignToStaff('${sid}','${snm}')">转派给 TA</button>
+            </div>`;
+        })
+        .join("");
+
+    modal.style.display = "flex";
+}
+
+async function confirmWakeReassignToStaff(newStaffId, newStaffName) {
+    const identity = wakeReassignPendingIdentity;
+    if (!identity || !isAdmin) return;
+
+    const sid = String(newStaffId || "").trim();
+    const sname = String(newStaffName || "").trim();
+    if (!sid) return;
+
+    let allOrders = await getOrders();
+    const idx = findOrderIndexByIdentity(allOrders, identity);
+    if (idx < 0) {
+        alert("订单不存在或已变更。");
+        closeWakeReassignModal();
+        return;
+    }
+    const order = allOrders[idx];
+    if (order.status !== "进行中") {
+        alert("仅「进行中」的订单可以转派。");
+        closeWakeReassignModal();
+        return;
+    }
+
+    const oldStaffId = String(order.staffid || "").trim();
+    if (sid === oldStaffId) {
+        if (typeof showToast === "function") showToast("请选择其他员工。", "warning");
+        else alert("请选择其他员工。");
+        return;
+    }
+
+    const staffList = await getStaffList();
+    const target = staffList.find((s) => String(s.id || "").trim() === sid);
+    if (!target || !String(target.phone || "").trim() || !String(target.salaryAccount || "").trim()) {
+        alert("该员工未绑定手机号或支付宝账号，无法转派。");
+        return;
+    }
+
+    const nextName = String(target.name || sname || sid).trim() || sname;
+    const penaltyAmt = await getWakeReassignPenaltyAmount();
+    const confirmMsg =
+        penaltyAmt > 0
+            ? `确认将本单转派给「${nextName}」？\n原叫醒员将被扣款 ${formatMoneyDisplay(penaltyAmt)} 元（余额明细：因接错等原因处罚）。`
+            : `确认将本单转派给「${nextName}」？\n当前价格策略中转接处罚为 0 元，原叫醒员不会被扣款。`;
+    if (!confirm(confirmMsg)) {
+        return;
+    }
+
+    order.staffid = sid;
+    order.staffname = nextName;
+    order.wake_staff_since = getChinaTimeISO();
+
+    await saveOrders(allOrders);
+    closeWakeReassignModal();
+
+    if (oldStaffId && penaltyAmt > 0) {
+        const oid = order.id !== undefined && order.id !== null && String(order.id).trim() !== "" ? String(order.id) : identity;
+        const settleKey = `wake_reassign_penalty:${oid}:${oldStaffId}->${sid}`;
+        const detailRes = await addSalaryDetail(
+            oldStaffId,
+            -Math.abs(penaltyAmt),
+            "惩罚",
+            "因接错等原因处罚（叫醒单转派）",
+            new Date(),
+            { settleKey }
+        );
+        const dup = detailRes && detailRes.reason === "duplicate";
+        const ins = detailRes && detailRes.inserted === true;
+        if (ins) {
+            const okSal = await addStaffSalary(oldStaffId, -Math.abs(penaltyAmt));
+            if (!okSal) {
+                console.warn("转派后扣款：余额更新失败", { oldStaffId, settleKey });
+                if (typeof showToast === "function") {
+                    showToast("转派已保存，但对原叫醒员扣款未写入余额，请在团队管理中核对。", "warning");
+                }
+            }
+        } else if (!dup) {
+            console.warn("转派后扣款：明细未写入", detailRes);
+            if (typeof showToast === "function") {
+                showToast("转派已保存，但处罚明细未写入，请在团队管理中手动处理。", "warning");
+            }
+        }
+    }
+
+    if (typeof loadOrders === "function") loadOrders();
+    if (typeof showToast === "function") {
+        showToast(`已转派给「${nextName}」。订单完成后，收入将按新叫醒员结算。`, "success");
+    } else {
+        alert("转派成功。");
+    }
 }
 
 function findOrderIndexByIdentity(allOrders, identity) {
@@ -574,26 +757,11 @@ async function takeOrderByIdentity(identity) {
     targetOrder.status = "进行中";
     targetOrder.staffid = user.id;
     targetOrder.staffname = user.name;
+    targetOrder.wake_staff_since = getChinaTimeISO();
 
     await saveOrders(allOrders);
     loadOrders();
     showToast("接单成功。", "success");
-}
-
-// 兼容旧按钮参数
-async function takeOrder(serialnumber, waketime, phone) {
-    let allOrders = await getOrders();
-    const target = allOrders.find(
-        (item) =>
-            item.serialnumber === serialnumber &&
-            String(item.waketime || "") === String(waketime || "") &&
-            String(item.phone || "") === String(phone || "")
-    );
-    if (!target) {
-        alert("订单不存在！");
-        return;
-    }
-    return takeOrderByIdentity(getOrderIdentity(target));
 }
 
 // 批量接单
@@ -631,6 +799,7 @@ async function batchTakeOrders() {
             order.status = "进行中";
             order.staffid = user.id;
             order.staffname = user.name;
+            order.wake_staff_since = getChinaTimeISO();
             successCount++;
         }
     });
@@ -668,28 +837,11 @@ async function finishOrderByIdentity(identity) {
     }
 }
 
-// 兼容旧按钮参数
-async function finishOrder(serialnumber, waketime, phone) {
-    let allOrders = await getOrders();
-    const target = allOrders.find(
-        (item) =>
-            item.serialnumber === serialnumber &&
-            String(item.waketime || "") === String(waketime || "") &&
-            String(item.phone || "") === String(phone || "")
-    );
-    if (!target) {
-        alert("订单不存在！");
-        return;
-    }
-    return finishOrderByIdentity(getOrderIdentity(target));
-}
-
 // 检查过期订单
 async function checkExpiredOrders() {
     let allOrders = await getOrders();
     // 获取当前时间（本地时间，中国电脑就是UTC+8）
     const now = new Date();
-    console.log('检查过期订单，当前本地时间:', now.toLocaleString('zh-CN'));
     let isUpdated = false;
 
     for (const item of allOrders) {
@@ -716,16 +868,11 @@ async function checkExpiredOrders() {
             const currentMonth = now.getMonth();
             const currentDay = now.getDate();
 
-            console.log('订单ID:', item.id, '提交时间（UTC）:', item.submittime);
-            console.log('提交时间（本地）:', submitDate.toLocaleString('zh-CN'), '当前状态:', item.status);
-            console.log('提交日期:', `${submitYear}-${submitMonth + 1}-${submitDay}`, '当前日期:', `${currentYear}-${currentMonth + 1}-${currentDay}`);
-
             // 检查是否是昨天的订单（提交日期早于当前日期）
             const submitDateObj = new Date(submitYear, submitMonth, submitDay);
             const currentDateObj = new Date(currentYear, currentMonth, currentDay);
 
             if (submitDateObj < currentDateObj && !item.salarysettled) {
-                console.log('订单是昨天的，需要自动完成');
                 item.status = "已完成";
                 // 传递当前时间作为完成时间
                 const settleRes = await settleOrderIncomeOnce(item, now);
@@ -735,10 +882,7 @@ async function checkExpiredOrders() {
                 // 计算提交日期的午夜（本地时间）
                 const submitMidnight = new Date(submitYear, submitMonth, submitDay + 1);
 
-                console.log('订单是今天的，午夜时间:', submitMidnight.toLocaleString('zh-CN'), '当前时间:', now.toLocaleString('zh-CN'));
-
                 if (now >= submitMidnight && !item.salarysettled) {
-                    console.log('订单已过午夜，需要自动完成');
                     item.status = "已完成";
                     // 传递当前时间作为完成时间
                     const settleRes = await settleOrderIncomeOnce(item, now);
@@ -750,15 +894,15 @@ async function checkExpiredOrders() {
     }
 
     if (isUpdated) {
-        console.log('有订单状态更新，保存到数据库');
         await saveOrders(allOrders);
         loadOrders();
-    } else {
-        console.log('没有订单需要更新');
     }
 }
 
-// 清理过期订单
+// 清理过期订单（按 submittime 保留最近 7 天；须同步删除 Supabase 行，否则下次拉取仍会带回旧数据）
+//
+// 重要：此处只做「归档删行」，绝不调用 rollbackWakeOrderIncomeIfSettled。
+// 与管理员「删除选中」不同——过期清理不扣员工余额，已结算工资保持不动。
 async function cleanExpiredOrders() {
     let allOrders = await getOrders();
     const now = new Date();
@@ -770,12 +914,29 @@ async function cleanExpiredOrders() {
         return orderDate >= sevenDaysAgo;
     });
 
-    if (recentOrders.length !== allOrders.length) {
-        await saveOrders(recentOrders);
-        console.log(`已清理 ${allOrders.length - recentOrders.length} 个过期订单`);
-        return true;
+    if (recentOrders.length === allOrders.length) {
+        return false;
     }
-    return false;
+
+    const expiredOrders = allOrders.filter((order) => new Date(order.submittime) < sevenDaysAgo);
+    const idsToDelete = [
+        ...new Set(
+            expiredOrders
+                .map((o) => o.id)
+                .filter((id) => id !== undefined && id !== null && String(id).trim() !== "")
+        )
+    ];
+
+    if (typeof deleteWakeOrdersFromSupabase === "function" && idsToDelete.length > 0) {
+        const delRes = await deleteWakeOrdersFromSupabase(idsToDelete);
+        if (!delRes.ok) {
+            console.warn("清理超期叫醒订单：云端删除失败，已跳过本次清理以免数据不一致。", delRes.error);
+            return false;
+        }
+    }
+
+    await saveOrders(recentOrders);
+    return true;
 }
 
 // 获取当前时间（本地时间，中国电脑就是UTC+8）
@@ -829,6 +990,7 @@ async function addSingleOrder() {
     showToast("上传成功。", "success");
 }
 
+/** 仅用于管理员主动「删除选中」；自动清理超期订单（cleanExpiredOrders）不得调用，以免扣回已发工资。 */
 async function rollbackWakeOrderIncomeIfSettled(order, rollbackTime = new Date()) {
     if (!order) return { rolledBack: false, reason: "no_order" };
     if (order.salarysettled !== true) return { rolledBack: false, reason: "not_settled" };
@@ -863,10 +1025,24 @@ async function deleteSelected() {
     let allOrders = await getOrders();
     const selectedSet = new Set(checkedKeys);
     const selectedOrders = allOrders.filter((order) => selectedSet.has(getOrderIdentity(order)));
+    if (selectedOrders.length === 0) {
+        alert("未找到对应订单，列表可能已更新，请刷新页面后重试。");
+        return;
+    }
 
-    // 先回退已结算收入，避免删单后账目不一致
+    const dedupeKeys = new Set(selectedOrders.map((o) => getWakeOrderDisplayDedupeKey(o)));
+    const ordersToRemove = allOrders.filter((o) => dedupeKeys.has(getWakeOrderDisplayDedupeKey(o)));
+    const idsToDelete = [
+        ...new Set(
+            ordersToRemove
+                .map((o) => o.id)
+                .filter((id) => id !== undefined && id !== null && String(id).trim() !== "")
+        )
+    ];
+
+    // 先回退已结算收入，避免删单后账目不一致（含同键重复行）
     let rollbackFailedCount = 0;
-    for (const order of selectedOrders) {
+    for (const order of ordersToRemove) {
         if (order.status === "已完成" && order.salarysettled === true) {
             const res = await rollbackWakeOrderIncomeIfSettled(order, new Date());
             if (res.rolledBack !== true) {
@@ -880,12 +1056,24 @@ async function deleteSelected() {
         return;
     }
 
-    // 删除订单
-    allOrders = allOrders.filter((item) => !selectedSet.has(getOrderIdentity(item)));
+    if (typeof deleteWakeOrdersFromSupabase === "function") {
+        const delRes = await deleteWakeOrdersFromSupabase(idsToDelete);
+        if (!delRes.ok) {
+            const msg = delRes.error && delRes.error.message ? delRes.error.message : String(delRes.error || "");
+            alert(msg ? `云端删除失败：${msg}` : "云端删除失败，请稍后重试。");
+            return;
+        }
+    }
+
+    allOrders = allOrders.filter((item) => !dedupeKeys.has(getWakeOrderDisplayDedupeKey(item)));
     await saveOrders(allOrders);
 
     loadOrders();
-    alert("删除成功！");
+    if (typeof showToast === "function") {
+        showToast("删除成功。", "success");
+    } else {
+        alert("删除成功！");
+    }
 }
 
 // 修改选中订单

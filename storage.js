@@ -1,18 +1,12 @@
 // Supabase 读写
 async function getOrders() {
-    console.log('开始从数据库获取订单');
     try {
         const { data, error } = await supabaseClient
             .from('wake_orders')
             .select('*')
             .order('submittime', { ascending: true });
 
-        console.log('数据库返回数据:', data);
-        console.log('数据库返回错误:', error);
-
         if (!error && data) {
-            console.log('成功从数据库获取订单，数量:', data.length);
-            // 同步到本地存储
             localStorage.setItem("wakeOrders", JSON.stringify(data));
             return data;
         } else if (error) {
@@ -21,9 +15,7 @@ async function getOrders() {
     } catch (e) {
         console.error("Supabase 读取订单异常：", e);
     }
-    // 从本地存储获取
     const localOrders = JSON.parse(localStorage.getItem("wakeOrders") || "[]");
-    console.log('从本地存储获取订单，数量:', localOrders.length);
     return localOrders;
 }
 
@@ -41,7 +33,9 @@ async function saveOrders(orders) {
             staffid: order.staffid || '',
             staffname: order.staffname || '',
             salarysettled: Boolean(order.salarysettled || false),
-            submittime: order.submittime || new Date().toISOString()
+            submittime: order.submittime || new Date().toISOString(),
+            // 接单/转派时间，用于员工端「今日单」与列表可见日；需在 Supabase wake_orders 表增加列 wake_staff_since (timestamptz)，否则 upsert 可能报错
+            wake_staff_since: order.wake_staff_since || order.wakeStaffSince || null
         }));
         if (validOrders.length > 0) {
             // 仅做分批 upsert，避免“本地视图不全导致误删云端数据”
@@ -63,6 +57,32 @@ async function saveOrders(orders) {
     }
 }
 
+/** 从 Supabase 按主键删除叫醒订单行（不涉及员工余额；余额回退仅在 order.js 的 deleteSelected 中单独处理） */
+async function deleteWakeOrdersFromSupabase(ids) {
+    const raw = (ids || [])
+        .map((id) => id)
+        .filter((id) => id !== undefined && id !== null && String(id).trim() !== "");
+    const unique = [...new Set(raw)];
+    if (unique.length === 0) {
+        return { ok: true };
+    }
+    try {
+        const chunkSize = 200;
+        for (let i = 0; i < unique.length; i += chunkSize) {
+            const chunk = unique.slice(i, i + chunkSize);
+            const { error } = await supabaseClient.from("wake_orders").delete().in("id", chunk);
+            if (error) {
+                console.error("Supabase 删除叫醒订单失败：", error);
+                return { ok: false, error };
+            }
+        }
+        return { ok: true };
+    } catch (e) {
+        console.error("Supabase 删除叫醒订单异常：", e);
+        return { ok: false, error: e };
+    }
+}
+
 // ==============================
 // 价格策略（管理员可配置）
 // - 优先读写 Supabase 表 price_strategy（单行：id='default'）
@@ -81,7 +101,9 @@ function getDefaultPriceStrategy() {
     return {
         version: 1,
         wake: {
-            rules: wakeRules
+            rules: wakeRules,
+            /** 管理员将叫醒单转派给其他人时，从原叫醒员扣除的固定处罚金额（元） */
+            reassignPenalty: 0.3
         },
         supervise: {
             unitPricePerDay: {
@@ -227,7 +249,6 @@ async function saveStaffList(staffList) {
         }
 
         savedToCloud = true;
-        console.log("Supabase 保存员工成功");
     } catch (e) {
         console.error("Supabase 保存员工失败，仅保存到本地：", e);
     }
@@ -369,8 +390,17 @@ async function insertSalaryDetail(detail) {
         };
 
         let { error } = await supabaseClient.from('salary_details').insert(payload);
-        // 兼容旧表结构：若无 settle_key / order_id 字段，自动降级重试
+        // 兼容旧表结构：若无 settle_key / order_id 字段，可对「非订单自动结算」降级插入。
+        // 叫醒/监督「订单收入 + 自动结算」必须带幂等键写入库，禁止降级成无 settle_key 的行（否则会加余额但库中无键）。
         if (error && /settle_key|order_id|column/i.test(String(error.message || ""))) {
+            const isOrderIncomeAuto =
+                payload.type === "订单收入" && /自动结算/.test(String(payload.description || ""));
+            if (isOrderIncomeAuto) {
+                console.error(
+                    "salary_details 表缺少 settle_key/order_id 列或写入被拒；订单自动结算不能降级插入。请在 Supabase 执行 database.sql 中 salary_details 相关迁移。"
+                );
+                return { inserted: false, reason: "missing_columns" };
+            }
             const fallbackPayload = {
                 id: payload.id,
                 staffid: payload.staffid,
@@ -434,6 +464,11 @@ async function addSalaryDetail(staffid, amount, type, description, completedTime
 
     // 如果是重复（已有 settle_key），直接视为“已存在”
     if (res.reason === 'duplicate') return { inserted: false, reason: 'duplicate' };
+
+    // 订单收入自动结算：禁止仅靠本地兜底冒充成功（否则会不调明细幂等但在 settleOrderIncomeOnce 里仍加余额）
+    if (normalizedType === "订单收入" && /自动结算/.test(normalizedDesc)) {
+        return { inserted: false, reason: res.reason || "cloud_insert_failed" };
+    }
 
     // 兜底：写本地（无唯一约束，极端并发仍可能重复）
     const cached = JSON.parse(localStorage.getItem("salaryDetails") || "[]");

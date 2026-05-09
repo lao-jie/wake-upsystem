@@ -346,6 +346,10 @@ async function hydratePriceStrategyInputs() {
     setInputNumber("psWake_0631_0700", wakeRules["06:31-07:00"]);
     setInputNumber("psWake_0701_0800", wakeRules["07:01-08:00"]);
     setInputNumber("psWake_0801_2400", wakeRules["08:01-24:00"]);
+    setInputNumber(
+        "psWake_reassign_penalty",
+        strategy?.wake?.reassignPenalty ?? strategy?.wake?.reassign_penalty ?? 0.3
+    );
 
     const unit = strategy?.supervise?.unitPricePerDay || {};
     setInputNumber("psSvUnit_sleep", unit["监督早睡"]);
@@ -365,7 +369,8 @@ async function savePriceStrategyPage() {
                 "06:31-07:00": readInputNumber("psWake_0631_0700", 0.7),
                 "07:01-08:00": readInputNumber("psWake_0701_0800", 0.6),
                 "08:01-24:00": readInputNumber("psWake_0801_2400", 0.5)
-            }
+            },
+            reassignPenalty: readInputNumber("psWake_reassign_penalty", 0.3)
         },
         supervise: {
             unitPricePerDay: {
@@ -990,15 +995,6 @@ async function loadPerformanceBoard() {
         bodyEl.innerHTML = `<tr><td colspan="6" style="text-align:center; color:#ef4444; padding:16px;">加载失败，请稍后重试</td></tr>`;
         renderPerformanceBarChart([]);
     }
-}
-
-function escapeHtml(s) {
-    return String(s || "")
-        .replace(/&/g, "&amp;")
-        .replace(/</g, "&lt;")
-        .replace(/>/g, "&gt;")
-        .replace(/"/g, "&quot;")
-        .replace(/'/g, "&#39;");
 }
 
 function safeText(v, fallback = "-") {
@@ -2128,6 +2124,10 @@ window.onload = async function () {
         if (performanceNav) {
             performanceNav.style.display = "flex";
         }
+        const priceStrategyNavOnload = document.getElementById("nav-price-strategy");
+        if (priceStrategyNavOnload) {
+            priceStrategyNavOnload.style.display = "flex";
+        }
     } else {
         document.getElementById("navTeamText").innerText = "个人中心";
     }
@@ -2226,7 +2226,11 @@ async function switchUser(userId) {
 function closeSubMenu() {
     const sub = document.getElementById("subMenu");
     const arr = document.getElementById("arrow");
-    if (sub) sub.style.display = "none";
+    if (sub) {
+        sub.style.display = "none";
+        sub.style.left = "";
+        sub.style.width = "";
+    }
     if (arr) arr.innerText = "▼";
 }
 
@@ -2234,8 +2238,9 @@ function toggleSubMenu() {
     const sub = document.getElementById("subMenu");
     const arr = document.getElementById("arrow");
     const navItem = document.getElementById("nav-taobao");
+    if (!sub || !arr || !navItem) return;
 
-    if (sub.style.display === "block") {
+    if (isSubMenuPanelOpen(sub)) {
         closeSubMenu();
         // 如果当前就在叫醒/监督页，保持“淘宝监督项目”高亮
         if (currentPage !== "wake" && currentPage !== "supervise") {
@@ -2243,6 +2248,8 @@ function toggleSubMenu() {
         }
     } else {
         sub.style.display = "block";
+        positionTaobaoSubmenuMobile();
+        requestAnimationFrame(() => positionTaobaoSubmenuMobile());
         arr.innerText = "▲";
         navItem.classList.add("active");
     }
@@ -2906,17 +2913,22 @@ function closeWidgetDetailModal() {
 // 渲染今日接单详情
 async function renderTodayOrdersDetail(container) {
     const orders = await getOrders();
-    const todayStart = new Date();
-    todayStart.setHours(0, 0, 0, 0);
-    const todayEnd = new Date();
-    todayEnd.setHours(23, 59, 59, 999);
+    const now = new Date();
+    const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const todayEnd = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
 
-    const todayOrders = orders.filter(item => {
-        const orderDate = new Date(item.submittime);
-        const isTodayOrder = orderDate >= todayStart && orderDate < todayEnd;
-        if (!isTodayOrder) return false;
-        if (item.status === "待接单") return true;
-        return item.staffid === user.id;
+    const todayOrders = orders.filter((item) => {
+        if (item.status === "待接单") {
+            const orderDate = new Date(item.submittime);
+            return orderDate >= todayStart && orderDate < todayEnd;
+        }
+        if (item.staffid !== user.id) return false;
+        return typeof isWakeOrderAssignedToStaffOnLocalCalendarDay === "function"
+            ? isWakeOrderAssignedToStaffOnLocalCalendarDay(item, user.id, todayStart, todayEnd)
+            : (() => {
+                const orderDate = new Date(item.submittime);
+                return orderDate >= todayStart && orderDate < todayEnd;
+            })();
     });
 
     if (todayOrders.length === 0) {
