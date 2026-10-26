@@ -962,7 +962,7 @@ function clearSuperviseSearch() {
 
 function applySuperviseFilters(orders, filters) {
     return (orders || []).filter((order) => {
-        if (filters.status !== "all" && order.status !== filters.status) {
+        if (filters.status !== "all" && getEffectiveSuperviseStatus(order) !== filters.status) {
             return false;
         }
 

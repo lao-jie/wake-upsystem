@@ -5069,8 +5069,20 @@ textarea {
 }
 
 /* ??????????????????????????? */
+.supervise-mobile-cards {
+    display: none;
+    flex-direction: column;
+    gap: 12px;
+    width: 100%;
+}
+
+.supervise-page .supervise-mobile-cards {
+    flex-direction: column;
+    gap: 12px;
+    width: 100%;
+}
+
 .supervise-page.supervise-staff .supervise-mobile-cards {
-    display: flex;
     flex-direction: column;
     gap: 12px;
 }
