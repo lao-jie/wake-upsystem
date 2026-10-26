@@ -361,7 +361,14 @@ async function saveSuperviseOrders(orders) {
             staffid: order.staffid || "",
             staffname: order.staffname || "",
             salarysettled: Boolean(order.salarysettled || false),
-            submittime: order.submittime || new Date().toISOString()
+            submittime: (() => {
+                const raw = order.submittime || new Date().toISOString();
+                const m = String(raw).match(/^(\d{4}-\d{2}-\d{2})[T\s](\d{2}:\d{2}:\d{2})/);
+                if (m) return `${m[1]} ${m[2]}`;
+                const d = new Date(raw);
+                if (!Number.isNaN(d.getTime())) return d.toISOString().slice(0, 19).replace("T", " ");
+                return raw;
+            })()
         }));
 
         if (!supabaseClient && typeof ensureSupabaseClient === "function") {

@@ -37,15 +37,19 @@ function toMysqlDateTime(value) {
   if (value == null || value === '') return null;
   if (value instanceof Date) {
     if (Number.isNaN(value.getTime())) return null;
-    return value.toISOString().slice(0, 23).replace('T', ' ');
+    // 只用到秒，兼容 DATETIME / DATETIME(3)
+    return value.toISOString().slice(0, 19).replace('T', ' ');
   }
   const s = String(value).trim();
   if (!s) return null;
-  // 已是 MySQL 风格
-  if (/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}/.test(s)) return s.length >= 23 ? s.slice(0, 23) : s;
+  // 2026-10-26T11:19:01.321Z / 2026-10-26 11:19:01 → 2026-10-26 11:19:01
+  const m = s.match(/^(\d{4}-\d{2}-\d{2})[T\s](\d{2}:\d{2}:\d{2})/);
+  if (m) return `${m[1]} ${m[2]}`;
+  const m2 = s.match(/^(\d{4}-\d{2}-\d{2})[T\s](\d{2}:\d{2})$/);
+  if (m2) return `${m2[1]} ${m2[2]}:00`;
   const d = new Date(s);
   if (Number.isNaN(d.getTime())) return s;
-  return d.toISOString().slice(0, 23).replace('T', ' ');
+  return d.toISOString().slice(0, 19).replace('T', ' ');
 }
 
 let pool = null;
@@ -99,6 +103,10 @@ function normalizeCell(table, key, value) {
   if (table === 'supervise_orders' && key === 'id') return String(value);
   const dtCols = DATETIME_COLUMNS[table];
   if (dtCols && dtCols.has(key)) return toMysqlDateTime(value);
+  // 任意 ISO 时间字符串都转成 MySQL 格式，避免漏配字段
+  if (typeof value === 'string' && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/.test(value)) {
+    return toMysqlDateTime(value);
+  }
   const jsonCols = JSON_COLUMNS[table];
   if (jsonCols && jsonCols.has(key)) {
     if (typeof value === 'string') return value;

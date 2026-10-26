@@ -142,4 +142,5 @@ app.get('/api/health', (req, res) => {
 app.listen(port, () => {
   console.log(`Server running on port ${port}`);
   console.log(dbConfigured() ? 'MySQL: configured' : 'MySQL: NOT configured (check .env DB_*)');
+  console.log('db-api: datetime-normalize v2');
 });
