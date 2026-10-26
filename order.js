@@ -1408,11 +1408,10 @@ async function parseBatchOrders() {
 
     try {
         // 直接调用AI API
-        const res = await fetch("https://open.bigmodel.cn/api/paas/v4/chat/completions", {
+        const res = await fetch("/api/ai-chat", {
             method: "POST",
             headers: {
-                "Content-Type": "application/json",
-                "Authorization": "Bearer bb956b2870b346a39c34b3344a61defb.IOTprsN1opphPYp8"
+                "Content-Type": "application/json"
             },
             body: JSON.stringify({
                 model: "glm-4-flash",

@@ -432,11 +432,10 @@ async function parseSuperviseBatchOrders() {
     parsedSuperviseOrders = [];
 
     try {
-        const res = await fetch("https://open.bigmodel.cn/api/paas/v4/chat/completions", {
+        const res = await fetch("/api/ai-chat", {
             method: "POST",
             headers: {
-                "Content-Type": "application/json",
-                "Authorization": "Bearer bb956b2870b346a39c34b3344a61defb.IOTprsN1opphPYp8"
+                "Content-Type": "application/json"
             },
             body: JSON.stringify({
                 model: "glm-4-flash",
@@ -1744,11 +1743,10 @@ function evaluateSuperviseScreenshotChecks(parsed) {
 async function runSuperviseScreenshotAi(row, targetDate, projectForAi, imageDataUrl) {
     if (!String(projectForAi || "").trim()) throw new Error("子项监督项目未知，无法校验截图");
     const aiUserText = buildSuperviseChatScreenshotUserPrompt(row, targetDate, projectForAi);
-    const resp = await fetch("https://open.bigmodel.cn/api/paas/v4/chat/completions", {
+    const resp = await fetch("/api/ai-chat", {
         method: "POST",
         headers: {
-            "Content-Type": "application/json",
-            "Authorization": "Bearer bb956b2870b346a39c34b3344a61defb.IOTprsN1opphPYp8"
+            "Content-Type": "application/json"
         },
         body: JSON.stringify({
             model: "glm-4v-flash",

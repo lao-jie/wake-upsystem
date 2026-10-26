@@ -2,9 +2,9 @@ require('dotenv').config();
 const express = require('express');
 const axios = require('axios');
 const app = express();
-const port = 3001;
+const port = process.env.PORT || 3001;
 
-app.use(express.json());
+app.use(express.json({ limit: '20mb' }));
 app.use(express.static('.'));
 
 // CORS中间件
@@ -18,18 +18,54 @@ app.use((req, res, next) => {
   next();
 });
 
-// AI批量识别接口
+async function callZhipuChat(payload) {
+  if (!process.env.AI_API_KEY) {
+    const err = new Error('AI_API_KEY 未配置，请在项目根目录创建 .env');
+    err.status = 500;
+    throw err;
+  }
+  const response = await axios.post(
+    'https://open.bigmodel.cn/api/paas/v4/chat/completions',
+    payload,
+    {
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${process.env.AI_API_KEY}`
+      },
+      timeout: 120000,
+      maxBodyLength: Infinity,
+      maxContentLength: Infinity
+    }
+  );
+  return response.data;
+}
+
+// 通用智谱转发（解决浏览器 CORS）
+app.post('/api/ai-chat', async (req, res) => {
+  try {
+    const data = await callZhipuChat(req.body || {});
+    res.json(data);
+  } catch (error) {
+    const status = error.response?.status || error.status || 500;
+    const data = error.response?.data;
+    console.error('AI API error:', data || error.message);
+    if (data && typeof data === 'object') {
+      return res.status(status).json(data);
+    }
+    res.status(status).json({ error: error.message || 'AI 请求失败' });
+  }
+});
+
+// AI批量识别接口（叫醒订单）
 app.post('/api/parse-orders', async (req, res) => {
   try {
     const { text } = req.body;
-    const response = await axios.post(
-      'https://open.bigmodel.cn/api/paas/v4/chat/completions',
-      {
-        model: 'glm-4-flash',
-        messages: [
-          {
-            role: 'system',
-            content: `你是叫醒订单识别助手。用户粘贴微信群/表格/备忘录里的多行文本，你要只提取「叫醒订单」，忽略无关闲聊、广告、空行。
+    const data = await callZhipuChat({
+      model: 'glm-4-flash',
+      messages: [
+        {
+          role: 'system',
+          content: `你是叫醒订单识别助手。用户粘贴微信群/表格/备忘录里的多行文本，你要只提取「叫醒订单」，忽略无关闲聊、广告、空行。
 
 【输出要求】
 - 仅输出一个 JSON 数组，不要 markdown、不要代码块、不要解释、不要注释。
@@ -64,29 +100,22 @@ app.post('/api/parse-orders', async (req, res) => {
 18900001111 7:00 第一条
 18900001111 8:30 第二条
 输出：[{"phone":"18900001111","wakeTime":"07:00","note":"第一条"},{"phone":"18900001111","wakeTime":"08:30","note":"第二条"}]`
-          },
-          {
-            role: 'user',
-            content:
-              '以下为待识别文本。只提取其中的叫醒订单，忽略闲聊与无关内容；输出必须是 JSON 数组。\n\n<<<ORDER_TEXT\n' +
-              (text || '') +
-              '\nORDER_TEXT>>>'
-          }
-        ],
-        temperature: 0.05,
-        top_p: 0.75,
-        max_tokens: 8192
-      },
-      {
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${process.env.AI_API_KEY}`
+        },
+        {
+          role: 'user',
+          content:
+            '以下为待识别文本。只提取其中的叫醒订单，忽略闲聊与无关内容；输出必须是 JSON 数组。\n\n<<<ORDER_TEXT\n' +
+            (text || '') +
+            '\nORDER_TEXT>>>'
         }
-      }
-    );
-    res.json(response.data);
+      ],
+      temperature: 0.05,
+      top_p: 0.75,
+      max_tokens: 8192
+    });
+    res.json(data);
   } catch (error) {
-    console.error('AI API error:', error);
+    console.error('AI API error:', error.response?.data || error.message);
     res.status(500).json({ error: error.message });
   }
 });
