@@ -205,11 +205,11 @@ update public.salary_details set createdat = now() where createdat is null;
 alter table public.salary_details alter column description set default '';
 alter table public.salary_details alter column createdat set default now();
 
--- settle_key 幂等键：用于防重复结算（非空必须唯一；空值允许重复）
--- 说明：Postgres 的 UNIQUE 对 NULL 天然不冲突，因此不需要 partial unique index，
--- 也更便于在客户端/服务端使用 on_conflict / upsert 语义。
-create unique index if not exists uq_salary_details_settle_key
-  on public.salary_details(settle_key);
+-- settle_key 幂等键：非空才唯一（空字符串/NULL 允许重复，避免历史脏数据建索引失败）
+drop index if exists public.uq_salary_details_settle_key;
+create unique index uq_salary_details_settle_key
+  on public.salary_details(settle_key)
+  where settle_key is not null and btrim(settle_key) <> '';
 create index if not exists idx_salary_details_staffid_createdat
   on public.salary_details(staffid, createdat desc);
 create index if not exists idx_salary_details_order_id
@@ -394,6 +394,60 @@ alter table public.page_notices alter column content set default '';
 alter table public.page_notices alter column updatedat set default now();
 
 create index if not exists idx_page_notices_updatedat on public.page_notices(updatedat desc);
+
+
+-- =====================================================
+-- H) 前端用 anon key 访问：开放 RLS（自定义登录，不用 Supabase Auth）
+-- =====================================================
+alter table public.staff_list enable row level security;
+alter table public.wake_orders enable row level security;
+alter table public.supervise_orders enable row level security;
+alter table public.salary_details enable row level security;
+alter table public.price_strategy enable row level security;
+alter table public.supervise_leave_requests enable row level security;
+alter table public.home_pending_items enable row level security;
+alter table public.page_notices enable row level security;
+
+do $$
+declare
+  t text;
+begin
+  foreach t in array array[
+    'staff_list',
+    'wake_orders',
+    'supervise_orders',
+    'salary_details',
+    'price_strategy',
+    'supervise_leave_requests',
+    'home_pending_items',
+    'page_notices'
+  ]
+  loop
+    execute format('drop policy if exists "public_all" on public.%I', t);
+    execute format(
+      'create policy "public_all" on public.%I for all to anon, authenticated using (true) with check (true)',
+      t
+    );
+    execute format('grant select, insert, update, delete on table public.%I to anon, authenticated', t);
+  end loop;
+end $$;
+
+-- 叫醒订单 identity 主键：允许 anon 写入时拿到序列
+grant usage, select on all sequences in schema public to anon, authenticated;
+
+
+-- =====================================================
+-- I) 初始数据（可重复执行）
+-- =====================================================
+insert into public.price_strategy (id, data, updated_at)
+values ('default', '{}'::jsonb, now())
+on conflict (id) do nothing;
+
+insert into public.page_notices (page, content, updatedby, updatedat)
+values
+  ('wake', '', 'system', now()),
+  ('supervise', '', 'system', now())
+on conflict (page) do nothing;
 
 commit;
 
