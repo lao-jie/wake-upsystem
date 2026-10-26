@@ -1473,18 +1473,10 @@ async function readHomePendingItems() {
             .select("*")
             .order("created_at", { ascending: false });
         if (error) throw error;
+        // 云端读成功则以数据库为准（换库后不再把浏览器旧缓存并进来）
         const rows = Array.isArray(data) ? data.map(mapPendingRowFromDb) : [];
-        // 云端可用时也合并本地待处理，避免员工端写本地回退后 admin 看不到
-        const map = new Map();
-        rows.forEach((r) => map.set(String(r.id || ""), r));
-        localRows.forEach((r) => {
-            const id = String(r?.id || "");
-            if (!id) return;
-            if (!map.has(id)) map.set(id, r);
-        });
-        const merged = Array.from(map.values());
-        saveHomePendingItemsToLocal(merged);
-        return merged;
+        saveHomePendingItemsToLocal(rows);
+        return rows;
     } catch (error) {
         console.warn("读取待处理事项表失败，回退本地存储：", error);
         return localRows;
