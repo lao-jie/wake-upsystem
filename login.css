@@ -1,4 +1,4 @@
-/* 对齐货源卡卷登录：极简白卡 */
+/* 货源卡卷登录同款结构 / 样式 */
 
 * {
     margin: 0;
@@ -6,137 +6,143 @@
     box-sizing: border-box;
 }
 
-:root {
-    --bg: #f3f4f6;
-    --surface: #ffffff;
-    --text: #1f2937;
-    --text-muted: #9ca3af;
-    --accent: #3b82f6;
-    --btn: #93c5fd;
-    --btn-hover: #60a5fa;
-    --input-bg: #f5f7fa;
-    --font: "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
-}
-
 html {
     -webkit-font-smoothing: antialiased;
 }
 
 body {
+    font-family: "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+    color: #1f2937;
+    background: #eef2f7;
+}
+
+.auth-page {
     min-height: 100vh;
     min-height: 100dvh;
     display: flex;
-    justify-content: center;
     align-items: center;
+    justify-content: center;
     padding: 24px;
-    font-family: var(--font);
-    font-size: 14px;
-    color: var(--text);
-    background: var(--bg);
+    background: #eef2f7;
 }
 
-.login-box {
+.auth-card {
     width: 100%;
     max-width: 380px;
-    padding: 36px 32px 28px;
-    background: var(--surface);
+    background: #ffffff;
     border-radius: 16px;
     box-shadow: 0 8px 30px rgba(0, 0, 0, 0.06);
+    padding: 36px 32px 28px;
 }
 
-.login-brand {
+.auth-header {
     text-align: center;
-    font-size: 22px;
-    font-weight: 700;
-    color: var(--accent);
-    letter-spacing: 0.05em;
     margin-bottom: 28px;
 }
 
-.input-item {
-    position: relative;
-    display: flex;
-    align-items: center;
-    margin-bottom: 14px;
+.auth-brand {
+    font-size: 1.375rem;
+    font-weight: 700;
+    color: #3b82f6;
+    margin: 0;
+    letter-spacing: 0.05em;
 }
 
-.input-icon {
+.auth-form {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+}
+
+.auth-input-wrap {
+    position: relative;
+    display: block;
+}
+
+.auth-input-icon {
     position: absolute;
     left: 14px;
-    color: var(--text-muted);
+    top: 50%;
+    transform: translateY(-50%);
+    color: #9ca3af;
     display: flex;
     align-items: center;
+    justify-content: center;
+    width: 18px;
+    height: 18px;
     pointer-events: none;
+    z-index: 1;
 }
 
-input[type="text"],
-input[type="password"] {
+.auth-input {
     width: 100%;
     padding: 12px 14px 12px 42px;
-    font-size: 15px;
+    font-size: 0.9375rem;
     font-family: inherit;
-    color: var(--text);
-    background: var(--input-bg);
+    color: #1f2937;
+    background: #f5f7fa;
     border: 1px solid transparent;
     border-radius: 10px;
     outline: none;
-    transition: border-color 0.2s ease, background 0.2s ease, box-shadow 0.2s ease;
+    transition: all 0.2s ease;
 }
 
-input::placeholder {
-    color: var(--text-muted);
-}
-
-input:focus {
-    background: #fff;
-    border-color: var(--accent);
+.auth-input:focus {
+    background: #ffffff;
+    border-color: #3b82f6;
     box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
 }
 
-.remember-row {
+.auth-input::placeholder {
+    color: #9ca3af;
+}
+
+.auth-terms {
     display: flex;
     align-items: center;
     gap: 8px;
-    margin: 4px 0 16px;
-}
-
-.remember-checkbox {
-    width: 16px;
-    height: 16px;
-    margin: 0;
-    accent-color: var(--accent);
-    cursor: pointer;
-}
-
-.remember-label {
-    font-size: 13px;
+    font-size: 0.8125rem;
     color: #6b7280;
     cursor: pointer;
     user-select: none;
+    margin: 2px 0;
 }
 
+.auth-checkbox {
+    width: 16px;
+    height: 16px;
+    accent-color: #3b82f6;
+    cursor: pointer;
+    flex-shrink: 0;
+}
+
+.auth-submit-btn,
 .login-btn {
     width: 100%;
     padding: 12px 20px;
-    border: none;
-    border-radius: 10px;
-    font-size: 15px;
+    font-size: 0.9375rem;
     font-weight: 600;
     font-family: inherit;
-    color: #fff;
-    background: var(--btn);
+    color: #ffffff;
+    background: #93c5fd;
+    border: none;
+    border-radius: 10px;
     cursor: pointer;
-    transition: background 0.2s ease, transform 0.15s ease;
+    transition: all 0.2s ease;
+    margin-top: 4px;
 }
 
+.auth-submit-btn:hover,
 .login-btn:hover {
-    background: var(--btn-hover);
+    background: #60a5fa;
 }
 
+.auth-submit-btn:active,
 .login-btn:active {
     transform: scale(0.98);
 }
 
+.auth-submit-btn:disabled,
 .login-btn:disabled {
     cursor: not-allowed;
     opacity: 0.75;
@@ -144,7 +150,7 @@ input:focus {
 }
 
 @media (max-width: 480px) {
-    .login-box {
+    .auth-card {
         padding: 32px 22px 24px;
     }
 }
