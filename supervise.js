@@ -317,6 +317,18 @@ function confirmCustomDuration() {
 
 async function getSuperviseOrders() {
     try {
+        if (!supabaseClient && typeof ensureSupabaseClient === "function") {
+            supabaseClient = await ensureSupabaseClient();
+        } else if (!supabaseClient && typeof initSupabaseClient === "function") {
+            supabaseClient = initSupabaseClient();
+        }
+        if (!supabaseClient) {
+            console.error("读取监督订单失败：Supabase 未加载");
+            if (typeof showToast === "function") {
+                showToast("云端未连接，手机可能看不到最新订单，请刷新页面", "warning");
+            }
+            return JSON.parse(localStorage.getItem("superviseOrders") || "[]");
+        }
         const { data, error } = await supabaseClient
             .from("supervise_orders")
             .select("*")
@@ -327,6 +339,9 @@ async function getSuperviseOrders() {
             return hydrated;
         }
         console.error("读取监督订单失败：", error);
+        if (typeof showToast === "function" && error) {
+            showToast("读取监督订单失败：" + (error.message || "未知错误"), "danger");
+        }
     } catch (e) {
         console.error("读取监督订单异常：", e);
     }
@@ -349,14 +364,30 @@ async function saveSuperviseOrders(orders) {
             submittime: order.submittime || new Date().toISOString()
         }));
 
+        if (!supabaseClient && typeof ensureSupabaseClient === "function") {
+            supabaseClient = await ensureSupabaseClient();
+        }
+        if (!supabaseClient) {
+            throw new Error("Supabase 未初始化，订单只保存在本机，其他设备看不到");
+        }
         const { error } = await supabaseClient
             .from("supervise_orders")
             .upsert(validOrders, { onConflict: "id" });
         if (error) {
             console.error("保存监督订单失败：", error);
+            if (typeof showToast === "function") {
+                showToast("监督订单云端保存失败：" + (error.message || "未知错误"), "danger");
+            } else {
+                alert("监督订单云端保存失败：" + (error.message || "未知错误"));
+            }
+            throw error;
         }
     } catch (e) {
         console.error("保存监督订单异常：", e);
+        if (typeof showToast === "function") {
+            showToast("监督订单保存异常：" + (e.message || e), "danger");
+        }
+        throw e;
     } finally {
         localStorage.setItem("superviseOrders", JSON.stringify(orders || []));
     }
@@ -1026,7 +1057,8 @@ function renderSuperviseTable(orders) {
 }
 
 function isSuperviseMobileCardMode() {
-    return superviseIsStaff && window.matchMedia("(max-width: 768px)").matches;
+    // 手机端统一用卡片列表（管理员/员工都显示），避免宽表格在小屏“像没数据”
+    return window.matchMedia("(max-width: 768px)").matches;
 }
 
 function getSuperviseActionHtml(item, statusText = getEffectiveSuperviseStatus(item)) {
@@ -2193,9 +2225,14 @@ async function loadSuperviseDashboard() {
             ordered = ordered.filter((item) => {
                 const statusText = getEffectiveSuperviseStatus(item);
                 const ownerId = String(item.staffid || "").trim();
-                const isMine = ownerId === myId;
-                const canTakeNow = statusText === "待接单" && isSuperviseTaskReady(item);
-                return canTakeNow || isMine;
+                const ownerName = String(item.staffname || item.supervisor || "").trim();
+                const isMine =
+                    ownerId === myId ||
+                    ownerName === String(currentSuperviseUser?.name || "").trim() ||
+                    ownerName === myId;
+                // 待接单（含预约未到开始日）也要展示，否则员工端会“完全看不到”
+                const isOpenPending = statusText === "待接单";
+                return isOpenPending || isMine;
             });
         }
 
