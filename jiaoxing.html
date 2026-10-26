@@ -318,8 +318,9 @@
         <!-- 团队管理/个人中心页面 -->
         <div id="page_team" class="page">
             <!-- 管理员：添加员工按钮 + 团队管理表格 -->
-            <div style="margin-bottom: 16px; display: none;" id="addStaffBtnContainer">
+            <div style="margin-bottom: 16px; display: none; gap: 10px; flex-wrap: wrap;" id="addStaffBtnContainer">
                 <button class="success" onclick="openAddStaffModal()">添加新员工</button>
+                <button type="button" onclick="openInviteCodeModal()">邀请码管理</button>
             </div>
 
             <!-- 管理员：团队管理表格 -->
@@ -893,6 +894,47 @@
             <div class="modal-footer">
                 <button type="button" class="ghost" onclick="closeAddStaffModal()">取消</button>
                 <button type="button" onclick="saveNewStaff()" class="success">确认添加</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 邀请码管理 -->
+    <div class="modal-overlay" id="inviteCodeModal">
+        <div class="modal-box" style="max-width: 560px;">
+            <h3>邀请码管理</h3>
+            <div class="modal-form-item" style="display:grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+                <div>
+                    <label for="newInviteCode">邀请码（可空自动生成）</label>
+                    <input type="text" id="newInviteCode" placeholder="留空则自动生成6位数字">
+                </div>
+                <div>
+                    <label for="newInviteMaxUses">可用次数（0=不限）</label>
+                    <input type="number" id="newInviteMaxUses" min="0" step="1" value="0">
+                </div>
+            </div>
+            <div class="modal-form-item">
+                <label for="newInviteNote">备注</label>
+                <input type="text" id="newInviteNote" placeholder="例如：10月招聘">
+            </div>
+            <div class="modal-footer" style="justify-content:flex-start;">
+                <button type="button" class="success" onclick="createInviteCode()">生成邀请码</button>
+                <button type="button" class="ghost" onclick="closeInviteCodeModal()">关闭</button>
+            </div>
+            <div class="table-wrapper" style="margin-top: 12px; max-height: 320px; overflow:auto;">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>邀请码</th>
+                            <th>备注</th>
+                            <th>使用</th>
+                            <th>状态</th>
+                            <th>操作</th>
+                        </tr>
+                    </thead>
+                    <tbody id="inviteCodeTableBody">
+                        <tr><td colspan="5" class="salary-empty-cell">加载中…</td></tr>
+                    </tbody>
+                </table>
             </div>
         </div>
     </div>

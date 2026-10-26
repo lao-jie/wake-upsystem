@@ -2068,7 +2068,7 @@ if (isAdmin) {
     document.getElementById("adminUploadArea").style.display = "flex";
     document.getElementById("batchUploadArea").style.display = "flex";
     document.getElementById("adminButtons").style.display = "flex";
-    document.getElementById("addStaffBtnContainer").style.display = "block";
+    document.getElementById("addStaffBtnContainer").style.display = "flex";
 } else if (isStaff) {
     document.getElementById("staffBatchTakeBtn").style.display = "flex";
 }

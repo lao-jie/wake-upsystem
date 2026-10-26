@@ -2,6 +2,8 @@ require('dotenv').config();
 const express = require('express');
 const axios = require('axios');
 const { runDbAction, dbConfigured } = require('./db-api');
+const { mountAuthRoutes } = require('./auth-api');
+const { mailConfigured } = require('./mail');
 const app = express();
 const port = process.env.PORT || 3001;
 
@@ -121,6 +123,8 @@ app.post('/api/parse-orders', async (req, res) => {
   }
 });
 
+mountAuthRoutes(app);
+
 // 宝塔 MySQL 统一数据接口（前端 db-client.js 调用）
 app.post('/api/db', async (req, res) => {
   try {
@@ -136,11 +140,12 @@ app.post('/api/db', async (req, res) => {
 
 // 健康检查
 app.get('/api/health', (req, res) => {
-  res.json({ status: 'ok', db: dbConfigured() });
+  res.json({ status: 'ok', db: dbConfigured(), mail: mailConfigured() });
 });
 
 app.listen(port, () => {
   console.log(`Server running on port ${port}`);
   console.log(dbConfigured() ? 'MySQL: configured' : 'MySQL: NOT configured (check .env DB_*)');
+  console.log(mailConfigured() ? 'Mail: configured' : 'Mail: NOT configured (SMTP_USER/SMTP_PASS)');
   console.log('db-api: datetime-normalize v2');
 });

@@ -765,3 +765,110 @@ function openAddStaffModal() {
 function closeAddStaffModal() {
     document.getElementById("addStaffModal").style.display = "none";
 }
+
+function getAdminOperatorPayload() {
+    let user = null;
+    try {
+        user = JSON.parse(localStorage.getItem("loginUser") || "null");
+    } catch (_) {
+        user = null;
+    }
+    return { operatorId: String(user?.id || ""), adminId: String(user?.id || "") };
+}
+
+async function openInviteCodeModal() {
+    const modal = document.getElementById("inviteCodeModal");
+    if (modal) modal.style.display = "flex";
+    await refreshInviteCodeTable();
+}
+
+function closeInviteCodeModal() {
+    const modal = document.getElementById("inviteCodeModal");
+    if (modal) modal.style.display = "none";
+}
+
+async function refreshInviteCodeTable() {
+    const tbody = document.getElementById("inviteCodeTableBody");
+    if (!tbody) return;
+    tbody.innerHTML = `<tr><td colspan="5" class="salary-empty-cell">加载中…</td></tr>`;
+    try {
+        const res = await fetch("/api/invite/list", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(getAdminOperatorPayload())
+        });
+        const json = await res.json().catch(() => ({}));
+        if (json.code !== 1) {
+            tbody.innerHTML = `<tr><td colspan="5" class="salary-empty-cell">${json.msg || "加载失败"}</td></tr>`;
+            return;
+        }
+        const rows = json.data || [];
+        if (!rows.length) {
+            tbody.innerHTML = `<tr><td colspan="5" class="salary-empty-cell">暂无邀请码，请先生成</td></tr>`;
+            return;
+        }
+        tbody.innerHTML = rows
+            .map((row) => {
+                const maxUses = Number(row.max_uses || 0);
+                const used = Number(row.used_count || 0);
+                const useText = maxUses > 0 ? `${used}/${maxUses}` : `${used}/不限`;
+                const enabled = Number(row.enabled) === 1;
+                const status = enabled ? "启用" : "停用";
+                const code = String(row.code || "").replace(/'/g, "\\'");
+                return `<tr>
+                    <td><code>${row.code || "-"}</code></td>
+                    <td>${row.note || "-"}</td>
+                    <td>${useText}</td>
+                    <td>${status}</td>
+                    <td>
+                        <button type="button" class="ghost" onclick="toggleInviteCode('${code}', ${enabled ? "false" : "true"})">${enabled ? "停用" : "启用"}</button>
+                    </td>
+                </tr>`;
+            })
+            .join("");
+    } catch (e) {
+        tbody.innerHTML = `<tr><td colspan="5" class="salary-empty-cell">加载失败：${e.message || e}</td></tr>`;
+    }
+}
+
+async function createInviteCode() {
+    const code = document.getElementById("newInviteCode")?.value.trim() || "";
+    const note = document.getElementById("newInviteNote")?.value.trim() || "";
+    const maxUses = parseInt(document.getElementById("newInviteMaxUses")?.value || "0", 10) || 0;
+    try {
+        const res = await fetch("/api/invite/create", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ ...getAdminOperatorPayload(), code, note, maxUses })
+        });
+        const json = await res.json().catch(() => ({}));
+        if (json.code !== 1) {
+            alert(json.msg || "创建失败");
+            return;
+        }
+        if (document.getElementById("newInviteCode")) document.getElementById("newInviteCode").value = "";
+        if (document.getElementById("newInviteNote")) document.getElementById("newInviteNote").value = "";
+        showToast(`邀请码已创建：${json.data?.code || code}`, "success");
+        await refreshInviteCodeTable();
+    } catch (e) {
+        alert("创建失败：" + (e.message || e));
+    }
+}
+
+async function toggleInviteCode(code, enabled) {
+    try {
+        const res = await fetch("/api/invite/toggle", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ ...getAdminOperatorPayload(), code, enabled })
+        });
+        const json = await res.json().catch(() => ({}));
+        if (json.code !== 1) {
+            alert(json.msg || "操作失败");
+            return;
+        }
+        await refreshInviteCodeTable();
+    } catch (e) {
+        alert("操作失败：" + (e.message || e));
+    }
+}
