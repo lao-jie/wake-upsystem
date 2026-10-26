@@ -71,10 +71,13 @@ function toggleSubMenu() {
         sub.style.display = "block";
         if (typeof positionTaobaoSubmenuMobile === "function") {
             positionTaobaoSubmenuMobile();
-            requestAnimationFrame(() => positionTaobaoSubmenuMobile());
         }
         arr.innerText = "▲";
     }
+}
+
+function closeMobileNavSafe() {
+    if (typeof closeMobileNav === "function") closeMobileNav();
 }
 
 let parsedSuperviseOrders = [];

@@ -255,7 +255,7 @@ function requireLoginOrRedirect(redirectTo = "index.html") {
     return null;
 }
 
-// ==================== 移动端底栏：淘宝子菜单对齐 ====================
+// ==================== 移动端左侧抽屉导航 ====================
 function isSubMenuPanelOpen(sub) {
     if (!sub) return false;
     if (sub.style.display === "none") return false;
@@ -264,27 +264,44 @@ function isSubMenuPanelOpen(sub) {
 }
 
 function positionTaobaoSubmenuMobile() {
+    // 手机端已改为左侧抽屉，子菜单在侧栏内展开，不再贴底栏定位
     const sub = document.getElementById("subMenu");
-    const tab = document.getElementById("nav-taobao");
-    if (!sub || !tab) return;
-    if (typeof window.matchMedia === "function" && window.matchMedia("(max-width: 768px)").matches) {
-        const r = tab.getBoundingClientRect();
-        const pad = 4;
-        const left = Math.max(8, r.left - pad);
-        const maxW = window.innerWidth - left - 8;
-        const w = Math.min(maxW, Math.max(r.width + pad * 2, 120));
-        sub.style.left = `${left}px`;
-        sub.style.width = `${w}px`;
-    } else {
-        sub.style.left = "";
-        sub.style.width = "";
-    }
+    if (!sub) return;
+    sub.style.left = "";
+    sub.style.width = "";
+}
+
+function isMobileNavViewport() {
+    return typeof window.matchMedia === "function" && window.matchMedia("(max-width: 768px)").matches;
+}
+
+function openMobileNav() {
+    if (!isMobileNavViewport()) return;
+    document.body.classList.add("side-open");
+    const mask = document.getElementById("sidebarMask");
+    if (mask) mask.setAttribute("aria-hidden", "false");
+}
+
+function closeMobileNav() {
+    document.body.classList.remove("side-open");
+    const mask = document.getElementById("sidebarMask");
+    if (mask) mask.setAttribute("aria-hidden", "true");
+    if (typeof closeSubMenu === "function") closeSubMenu();
+}
+
+function toggleMobileNav() {
+    if (document.body.classList.contains("side-open")) closeMobileNav();
+    else openMobileNav();
 }
 
 if (typeof window !== "undefined") {
+    window.openMobileNav = openMobileNav;
+    window.closeMobileNav = closeMobileNav;
+    window.toggleMobileNav = toggleMobileNav;
     window.addEventListener(
         "resize",
         () => {
+            if (!isMobileNavViewport()) closeMobileNav();
             const sub = document.getElementById("subMenu");
             if (sub && isSubMenuPanelOpen(sub)) positionTaobaoSubmenuMobile();
         },

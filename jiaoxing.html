@@ -22,8 +22,22 @@
 
 <body>
 
+    <div class="sidebar-mask" id="sidebarMask" onclick="closeMobileNav()" aria-hidden="true"></div>
+
+    <!-- 手机顶栏（汉堡 + 品牌） -->
+    <header class="mobile-topbar" id="mobileTopbar">
+        <button type="button" class="mobile-menu-btn" id="mobileMenuBtn" onclick="toggleMobileNav()" aria-label="打开菜单">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 6h16M4 12h16M4 18h16"/></svg>
+        </button>
+        <span class="mobile-topbar-brand">老街网创</span>
+        <div class="mobile-topbar-actions">
+            <button type="button" class="brightness-btn" id="brightnessBtnMobile" title="亮度调节">🌙</button>
+            <button type="button" class="logout-btn logout-btn-mobile" onclick="logout()" title="退出登录">退出</button>
+        </div>
+    </header>
+
     <!-- 左侧导航 -->
-    <div class="sidebar">
+    <div class="sidebar" id="appSidebar">
         <div class="sidebar-header">
             <span class="sidebar-brand">老街网创</span>
             <div style="display: flex; gap: 8px; align-items: center;">

@@ -18,9 +18,13 @@
 // 亮度调节功能 - 弹出面板版本
 (function initBrightness() {
     const brightnessBtn = document.getElementById('brightnessBtn');
+    const brightnessBtnMobile = document.getElementById('brightnessBtnMobile');
     const brightnessPopup = document.getElementById('brightnessPopup');
     const slider = document.getElementById('brightnessSliderPopup');
     const valueDisplay = document.getElementById('brightnessValuePopup');
+    if (!brightnessPopup || !slider || !valueDisplay) return;
+
+    const toggleBtns = [brightnessBtn, brightnessBtnMobile].filter(Boolean);
 
     // 读取保存的亮度设置
     const savedBrightness = localStorage.getItem('brightness');
@@ -32,16 +36,18 @@
     }
 
     // 点击按钮切换弹出面板
-    brightnessBtn.addEventListener('click', function (e) {
-        e.stopPropagation();
-        brightnessPopup.classList.toggle('show');
+    toggleBtns.forEach((btn) => {
+        btn.addEventListener('click', function (e) {
+            e.stopPropagation();
+            brightnessPopup.classList.toggle('show');
+        });
     });
 
     // 点击页面其他地方关闭弹出面板
     document.addEventListener('click', function (e) {
-        if (!brightnessPopup.contains(e.target) && e.target !== brightnessBtn) {
-            brightnessPopup.classList.remove('show');
-        }
+        if (brightnessPopup.contains(e.target)) return;
+        if (toggleBtns.some((btn) => btn === e.target || btn.contains(e.target))) return;
+        brightnessPopup.classList.remove('show');
     });
 
     // 监听滑块变化
@@ -200,8 +206,9 @@ function showPage(page) {
         stopStaffLeaderboardAutoRefresh();
     }
     currentPage = page;
-    // 切换页面时自动收起下拉，避免遮挡底部导航点击
+    // 切换页面时收起子菜单与手机侧栏
     closeSubMenu();
+    if (typeof closeMobileNav === "function") closeMobileNav();
 
     document.querySelectorAll(".page").forEach(p => p.classList.remove("active"));
     document.getElementById(`page_${page}`).classList.add("active");
