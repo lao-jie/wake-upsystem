@@ -7,16 +7,16 @@
 }
 
 :root {
-    --bg: #f3f4f6;
+    --bg: #f5f7fa;
     --surface: #ffffff;
-    --border: #e5e7eb;
-    --border-strong: #d1d5db;
-    --text: #111827;
-    --text-secondary: #6b7280;
-    --text-muted: #9ca3af;
-    --accent: #0f766e;
-    --accent-hover: #0d9488;
-    --accent-soft: #ecfdf5;
+    --border: #e2e8f0;
+    --border-strong: #cbd5e1;
+    --text: #0f172a;
+    --text-secondary: #64748b;
+    --text-muted: #94a3b8;
+    --accent: #3b82f6;
+    --accent-hover: #2563eb;
+    --accent-soft: #eff6ff;
     --radius: 6px;
     --radius-lg: 8px;
     --shadow: 0 1px 2px rgb(0 0 0 / 0.04);
@@ -154,7 +154,7 @@ input:focus {
 
 .login-btn:active {
     transform: none;
-    background: #0c6b63;
+    background: #1d4ed8;
 }
 
 .login-btn:disabled {
