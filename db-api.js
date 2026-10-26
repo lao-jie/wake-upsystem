@@ -74,7 +74,12 @@ function getPool() {
     connectionLimit: 10,
     charset: 'utf8mb4',
     dateStrings: false,
-    timezone: 'Z'
+    timezone: 'Z',
+    // 强制连接层 UTF-8，避免中文读写乱码
+    typeCast: undefined
+  });
+  pool.on('connection', (conn) => {
+    conn.query("SET NAMES utf8mb4 COLLATE utf8mb4_unicode_ci");
   });
   return pool;
 }
