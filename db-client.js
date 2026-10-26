@@ -101,15 +101,22 @@
           body: JSON.stringify(payload)
         });
         const json = await res.json().catch(() => ({}));
+        const rawErr = json.error != null ? json.error : json.message;
+        const errMsg =
+          rawErr == null
+            ? null
+            : typeof rawErr === 'string'
+              ? rawErr
+              : rawErr.message || rawErr.sqlMessage || JSON.stringify(rawErr);
         if (!res.ok) {
           return {
             data: null,
-            error: { message: json.error || json.message || ('HTTP ' + res.status) }
+            error: { message: errMsg || ('HTTP ' + res.status) }
           };
         }
         return {
           data: json.data !== undefined ? json.data : null,
-          error: json.error || null
+          error: errMsg ? { message: String(errMsg) } : null
         };
       } catch (e) {
         return { data: null, error: { message: e.message || String(e) } };

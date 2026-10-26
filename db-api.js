@@ -23,6 +23,31 @@ const BOOL_COLUMNS = {
   home_pending_items: new Set(['done'])
 };
 
+const DATETIME_COLUMNS = {
+  wake_orders: new Set(['submittime', 'wake_staff_since']),
+  supervise_orders: new Set(['submittime']),
+  salary_details: new Set(['createdat']),
+  price_strategy: new Set(['updated_at']),
+  supervise_leave_requests: new Set(['updated_at']),
+  home_pending_items: new Set(['created_at', 'processed_at']),
+  page_notices: new Set(['updatedat'])
+};
+
+function toMysqlDateTime(value) {
+  if (value == null || value === '') return null;
+  if (value instanceof Date) {
+    if (Number.isNaN(value.getTime())) return null;
+    return value.toISOString().slice(0, 23).replace('T', ' ');
+  }
+  const s = String(value).trim();
+  if (!s) return null;
+  // 已是 MySQL 风格
+  if (/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}/.test(s)) return s.length >= 23 ? s.slice(0, 23) : s;
+  const d = new Date(s);
+  if (Number.isNaN(d.getTime())) return s;
+  return d.toISOString().slice(0, 23).replace('T', ' ');
+}
+
 let pool = null;
 
 function getPool() {
@@ -66,12 +91,14 @@ function quoteId(name) {
 }
 
 function normalizeCell(table, key, value) {
-  if (value === undefined) return undefined;
+  if (value === undefined) return null;
   if (value === null) return null;
   // 空 settle_key 存 NULL，避免唯一索引冲突
   if (key === 'settle_key' && String(value).trim() === '') return null;
   // 监督订单 id 统一字符串
   if (table === 'supervise_orders' && key === 'id') return String(value);
+  const dtCols = DATETIME_COLUMNS[table];
+  if (dtCols && dtCols.has(key)) return toMysqlDateTime(value);
   const jsonCols = JSON_COLUMNS[table];
   if (jsonCols && jsonCols.has(key)) {
     if (typeof value === 'string') return value;
@@ -81,7 +108,7 @@ function normalizeCell(table, key, value) {
   if (boolCols && boolCols.has(key)) {
     return value === true || value === 1 || value === '1' || value === 'true' ? 1 : 0;
   }
-  if (value instanceof Date) return value;
+  if (value instanceof Date) return toMysqlDateTime(value);
   if (typeof value === 'object') return JSON.stringify(value);
   return value;
 }

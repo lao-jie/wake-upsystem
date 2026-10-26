@@ -375,17 +375,25 @@ async function saveSuperviseOrders(orders) {
             .upsert(validOrders, { onConflict: "id" });
         if (error) {
             console.error("保存监督订单失败：", error);
+            const msg =
+                typeof error?.message === "string"
+                    ? error.message
+                    : error?.message?.message || error?.sqlMessage || JSON.stringify(error);
             if (typeof showToast === "function") {
-                showToast("监督订单云端保存失败：" + (error.message || "未知错误"), "danger");
+                showToast("监督订单云端保存失败：" + (msg || "未知错误"), "danger");
             } else {
-                alert("监督订单云端保存失败：" + (error.message || "未知错误"));
+                alert("监督订单云端保存失败：" + (msg || "未知错误"));
             }
             throw error;
         }
     } catch (e) {
         console.error("保存监督订单异常：", e);
+        const msg =
+            typeof e?.message === "string"
+                ? e.message
+                : e?.message?.message || e?.sqlMessage || JSON.stringify(e);
         if (typeof showToast === "function") {
-            showToast("监督订单保存异常：" + (e.message || e), "danger");
+            showToast("监督订单保存异常：" + (msg || e), "danger");
         }
         throw e;
     } finally {

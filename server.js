@@ -128,8 +128,9 @@ app.post('/api/db', async (req, res) => {
     res.json(result);
   } catch (error) {
     const status = error.status || 500;
-    console.error('DB API error:', error.message);
-    res.status(status).json({ data: null, error: { message: error.message || '数据库请求失败' } });
+    const message = error.sqlMessage || error.message || '数据库请求失败';
+    console.error('DB API error:', message, error.code || '');
+    res.status(status).json({ data: null, error: { message: String(message) } });
   }
 });
 
