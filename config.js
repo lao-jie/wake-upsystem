@@ -1,16 +1,17 @@
-// ======================== Supabase 配置 ========================
-const supabaseUrl = "https://yhscpdalrsinigamhiht.supabase.co";
-const supabaseKey = "sb_publishable_tMuL4ECibUBQHkpuE4BWNg_PetrZaNV";
-
+// ======================== 数据库配置（宝塔 MySQL，经本机 /api/db） ========================
 let supabaseClient = null;
 
 function initSupabaseClient() {
     if (supabaseClient) return supabaseClient;
-    if (typeof supabase === "undefined" || !supabase?.createClient) {
-        return null;
+    if (typeof createBaotaDbClient === "function") {
+        supabaseClient = createBaotaDbClient();
+        return supabaseClient;
     }
-    supabaseClient = supabase.createClient(supabaseUrl, supabaseKey);
-    return supabaseClient;
+    if (typeof supabase !== "undefined" && supabase?.createClient) {
+        supabaseClient = supabase.createClient("local", "local");
+        return supabaseClient;
+    }
+    return null;
 }
 
 async function ensureSupabaseClient(timeoutMs = 4000) {
@@ -23,7 +24,7 @@ async function ensureSupabaseClient(timeoutMs = 4000) {
             if (client || Date.now() - start >= timeoutMs) {
                 clearInterval(timer);
                 if (!client) {
-                    console.error("Supabase SDK 未加载，请检查网络或 CDN");
+                    console.error("数据库客户端未加载，请检查 db-client.js");
                 }
                 resolve(client);
             }

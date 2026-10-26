@@ -1,6 +1,7 @@
 require('dotenv').config();
 const express = require('express');
 const axios = require('axios');
+const { runDbAction, dbConfigured } = require('./db-api');
 const app = express();
 const port = process.env.PORT || 3001;
 
@@ -120,11 +121,24 @@ app.post('/api/parse-orders', async (req, res) => {
   }
 });
 
+// 宝塔 MySQL 统一数据接口（前端 db-client.js 调用）
+app.post('/api/db', async (req, res) => {
+  try {
+    const result = await runDbAction(req.body || {});
+    res.json(result);
+  } catch (error) {
+    const status = error.status || 500;
+    console.error('DB API error:', error.message);
+    res.status(status).json({ data: null, error: { message: error.message || '数据库请求失败' } });
+  }
+});
+
 // 健康检查
 app.get('/api/health', (req, res) => {
-  res.json({ status: 'ok' });
+  res.json({ status: 'ok', db: dbConfigured() });
 });
 
 app.listen(port, () => {
   console.log(`Server running on port ${port}`);
+  console.log(dbConfigured() ? 'MySQL: configured' : 'MySQL: NOT configured (check .env DB_*)');
 });
