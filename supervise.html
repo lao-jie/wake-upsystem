@@ -118,6 +118,8 @@
                 <option value="监督早起">监督早起</option>
                 <option value="监督早睡早起">监督早睡早起</option>
             </select>
+            <input type="text" id="svStudentName" placeholder="学员名字（选填）">
+            <input type="time" id="svTaskClock" title="监督时间（选填）">
             <select id="svDuration">
                 <option value="1次">1次</option>
                 <option value="7次">7次</option>
@@ -125,7 +127,6 @@
                 <option value="30次">30次</option>
                 <option value="其他时间">其他次数</option>
             </select>
-            <input type="text" id="svStudentName" placeholder="学员名字">
             <input type="number" id="svPrice" placeholder="结算价格" step="0.01" min="0">
             <select id="svSupervisor">
                 <option value="">请选择监督员</option>
@@ -164,6 +165,7 @@
                         <th>订单号</th>
                         <th>项目</th>
                         <th>学员名字</th>
+                        <th>时间</th>
                         <th>次数</th>
                         <th>结算价格</th>
                         <th>监督员</th>
@@ -174,7 +176,7 @@
                 </thead>
                 <tbody id="superviseTableBody">
                     <tr>
-                        <td colspan="10" class="salary-empty-cell">暂无监督数据</td>
+                        <td colspan="11" class="salary-empty-cell">暂无监督数据</td>
                     </tr>
                 </tbody>
             </table>

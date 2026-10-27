@@ -1825,33 +1825,39 @@ input[type="checkbox"].supervise-checkbox:checked::after {
 
 .supervise-page .supervise-table thead th:nth-child(7),
 .supervise-page .supervise-table td:nth-child(7) {
-    width: 7%;
+    width: 6%;
+    white-space: nowrap;
 }
 
 .supervise-page .supervise-table thead th:nth-child(8),
 .supervise-page .supervise-table td:nth-child(8) {
-    width: 26%;
+    width: 7%;
+}
+
+.supervise-page .supervise-table thead th:nth-child(9),
+.supervise-page .supervise-table td:nth-child(9) {
+    width: 24%;
     text-align: left;
     vertical-align: middle;
 }
 
-.supervise-page .supervise-table td:nth-child(8) div {
+.supervise-page .supervise-table td:nth-child(9) div {
     font-size: 12px !important;
     line-height: 1.45 !important;
     margin-top: 4px !important;
     text-align: left;
 }
 
-.supervise-page .supervise-table thead th:nth-child(9),
-.supervise-page .supervise-table td:nth-child(9) {
+.supervise-page .supervise-table thead th:nth-child(10),
+.supervise-page .supervise-table td:nth-child(10) {
     width: 8%;
     white-space: nowrap;
     text-align: center;
 }
 
-.supervise-page .supervise-table thead th:nth-child(10),
-.supervise-page .supervise-table td:nth-child(10) {
-    width: 16%;
+.supervise-page .supervise-table thead th:nth-child(11),
+.supervise-page .supervise-table td:nth-child(11) {
+    width: 14%;
     text-align: center;
 }
 
@@ -1861,7 +1867,7 @@ input[type="checkbox"].supervise-checkbox:checked::after {
     letter-spacing: 0.03em;
 }
 
-.supervise-page .supervise-table td:nth-child(10) button {
+.supervise-page .supervise-table td:nth-child(11) button {
     margin: 3px auto;
     padding: 6px 12px;
     font-size: 13px;
@@ -2451,23 +2457,24 @@ body.is-staff.is-mobile #userInfo {
     .supervise-page.supervise-staff .supervise-table td:nth-child(2)::before { content: "订单号"; color: #64748b; }
     .supervise-page.supervise-staff .supervise-table td:nth-child(3)::before { content: "项目"; color: #64748b; }
     .supervise-page.supervise-staff .supervise-table td:nth-child(4)::before { content: "学员名字"; color: #64748b; }
-    .supervise-page.supervise-staff .supervise-table td:nth-child(5)::before { content: "次数"; color: #64748b; }
-    .supervise-page.supervise-staff .supervise-table td:nth-child(6)::before { content: "结算价格"; color: #64748b; }
-    .supervise-page.supervise-staff .supervise-table td:nth-child(7)::before { content: "监督员"; color: #64748b; }
-    .supervise-page.supervise-staff .supervise-table td:nth-child(8)::before { content: "备注"; color: #64748b; }
-    .supervise-page.supervise-staff .supervise-table td:nth-child(9)::before { content: "状态"; color: #64748b; }
-    .supervise-page.supervise-staff .supervise-table td:nth-child(10)::before { content: "操作"; color: #64748b; }
+    .supervise-page.supervise-staff .supervise-table td:nth-child(5)::before { content: "时间"; color: #64748b; }
+    .supervise-page.supervise-staff .supervise-table td:nth-child(6)::before { content: "次数"; color: #64748b; }
+    .supervise-page.supervise-staff .supervise-table td:nth-child(7)::before { content: "结算价格"; color: #64748b; }
+    .supervise-page.supervise-staff .supervise-table td:nth-child(8)::before { content: "监督员"; color: #64748b; }
+    .supervise-page.supervise-staff .supervise-table td:nth-child(9)::before { content: "备注"; color: #64748b; }
+    .supervise-page.supervise-staff .supervise-table td:nth-child(10)::before { content: "状态"; color: #64748b; }
+    .supervise-page.supervise-staff .supervise-table td:nth-child(11)::before { content: "操作"; color: #64748b; }
 
-    .supervise-page.supervise-staff .supervise-table td:nth-child(10) {
+    .supervise-page.supervise-staff .supervise-table td:nth-child(11) {
         margin-top: 8px;
     }
 
-    .supervise-page.supervise-staff .supervise-table td:nth-child(10) button {
+    .supervise-page.supervise-staff .supervise-table td:nth-child(11) button {
         width: 100%;
         margin: 0 0 8px 0;
     }
 
-    .supervise-page.supervise-staff .supervise-table td:nth-child(10) button:last-child {
+    .supervise-page.supervise-staff .supervise-table td:nth-child(11) button:last-child {
         margin-bottom: 0;
     }
 

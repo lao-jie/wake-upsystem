@@ -97,13 +97,14 @@ const SUPERVISE_SCREENSHOT_AI_SYSTEM = `你是监督「聊天截图」的严格�
 const SUPERVISE_AI_SYSTEM_PROMPT = `你是监督任务识别助手。用户会给出监督任务文本，你只提取监督任务信息。
 
 支持两种输入格式：
-1) 五行一组：
-   - 第一行：淘宝订单号
-   - 第二行：监督项目
-   - 第三行：学员名字
-   - 第四行：监督次数
-   - 第五行：备注
-2) 一行一个订单：字段之间用空格分隔（顺序同上：订单号 项目 学员名字 次数 备注）
+1) 多行一组：
+   - 淘宝订单号
+   - 监督项目
+   - 学员名字（可空）
+   - 监督时间（可选，如 22:30 / 7:30，没有就空）
+   - 监督次数
+   - 备注（可空）
+2) 一行一个订单：字段之间用空格分隔（订单号 项目 学员名字 时间(可选) 次数 备注）
 
 输出要求：
 - 仅输出 JSON 数组，不要任何解释
@@ -111,8 +112,10 @@ const SUPERVISE_AI_SYSTEM_PROMPT = `你是监督任务识别助手。用户会�
   - orderno: 订单号字符串
   - project: 监督项目（如 监督早睡 / 监督早起 / 监督早睡早起）
   - duration: 监督次数（如 1次 / 7次 / 15次 / 30次 / 3次）
-  - studentname: 学员名字
+  - studentname: 学员名字（可为空字符串）
+  - tasktime: 监督钟点时间，可选；有则输出 24 小时制 HH:mm（如 22:30、07:30），没有则 ""
   - note: 备注（可为空）
+- 不要把「22:30」「7:30」这类时间填进 studentname；时间一律放 tasktime
 - 忽略无法识别的无效项`;
 
 function getLocalDateTimeInputValue(date = new Date()) {
@@ -423,6 +426,25 @@ function normalizePhone(phone) {
     return /^1[3-9]\d{9}$/.test(digits) ? digits : "";
 }
 
+/** 监督钟点时间（选填），统一成 HH:mm；无效则返回空字符串 */
+function normalizeSuperviseTaskTime(value) {
+    const raw = String(value || "").trim();
+    if (!raw) return "";
+    let m = raw.match(/^(\d{1,2})[:：](\d{1,2})$/);
+    if (!m) {
+        m = raw.match(/^(\d{1,2})\s*[点时]\s*(\d{1,2})?\s*分?$/);
+    }
+    if (!m) {
+        m = raw.match(/^(\d{1,2})\s*[点时]\s*半$/);
+        if (m) return `${String(Number(m[1])).padStart(2, "0")}:30`;
+    }
+    if (!m) return "";
+    const hh = Number(m[1]);
+    const mm = Number(m[2] || 0);
+    if (!Number.isFinite(hh) || !Number.isFinite(mm) || hh < 0 || hh > 23 || mm < 0 || mm > 59) return "";
+    return `${String(hh).padStart(2, "0")}:${String(mm).padStart(2, "0")}`;
+}
+
 function buildSuperviseNote(order) {
     const textNote = String(order.note || "").replace(`${SUPERVISE_META_PREFIX}`, "");
     const meta = {
@@ -430,6 +452,7 @@ function buildSuperviseNote(order) {
         project: order.project || "",
         duration: order.duration || "",
         studentname: order.studentname || "",
+        tasktime: normalizeSuperviseTaskTime(order.tasktime || order.time || ""),
         price: Number(order.price || order.amount || 0),
         supervisor: order.supervisor || "",
         endtime: order.endtime || "",
@@ -452,13 +475,24 @@ function hydrateSuperviseOrder(order) {
             meta = {};
         }
     }
+    let studentname = meta.studentname || "";
+    let tasktime = normalizeSuperviseTaskTime(meta.tasktime || meta.time || "");
+    // 兼容旧数据：学员名字栏误填了 22:30 这类时间
+    if (!tasktime) {
+        const asTime = normalizeSuperviseTaskTime(studentname);
+        if (asTime) {
+            tasktime = asTime;
+            studentname = "";
+        }
+    }
     return {
         ...order,
         note: cleanNote || "-",
         orderno: meta.orderno || "",
         project: meta.project || "",
         duration: meta.duration || "",
-        studentname: meta.studentname || "",
+        studentname,
+        tasktime,
         price: Number(meta.price || order.amount || 0),
         supervisor: meta.supervisor || "",
         endtime: meta.endtime || "",
@@ -509,7 +543,15 @@ async function parseSuperviseBatchOrders() {
             const orderno = String(item.orderno || item.orderNo || item.order_no || "").trim();
             const project = String(item.project || "").trim();
             const durationRaw = String(item.duration || "").trim();
-            const studentname = String(item.studentname || item.studentName || "").trim();
+            let studentname = String(item.studentname || item.studentName || "").trim();
+            let tasktime = normalizeSuperviseTaskTime(item.tasktime || item.time || item.waketime || "");
+            if (!tasktime) {
+                const asTime = normalizeSuperviseTaskTime(studentname);
+                if (asTime) {
+                    tasktime = asTime;
+                    studentname = "";
+                }
+            }
             const note = String(item.note || "").trim() || "-";
             if (!orderno || !project || !durationRaw) return;
             const duration = normalizeDurationText(durationRaw);
@@ -521,6 +563,7 @@ async function parseSuperviseBatchOrders() {
                 project,
                 duration,
                 studentname: studentname || "",
+                tasktime: tasktime || "",
                 price,
                 supervisor: "",
                 endtime: "",
@@ -540,7 +583,7 @@ async function parseSuperviseBatchOrders() {
         parsedSuperviseOrders = built;
         if (uploadBtn) uploadBtn.disabled = false;
         if (preview) {
-            preview.innerHTML = built.map((o, i) => `第${i + 1}单：订单号 ${o.orderno}｜${o.project}｜${o.duration}｜${o.studentname || "未填学员"}｜${Number(o.price || 0).toFixed(2)} 元`).join("<br>");
+            preview.innerHTML = built.map((o, i) => `第${i + 1}单：订单号 ${o.orderno}｜${o.project}｜${o.studentname || "未填学员"}｜时间 ${o.tasktime || "未填"}｜${o.duration}｜${Number(o.price || 0).toFixed(2)} 元`).join("<br>");
         }
     } catch (e) {
         if (preview) preview.innerHTML = `❌ 识别失败：${e.message}`;
@@ -987,7 +1030,7 @@ function applySuperviseFilters(orders, filters) {
         }
 
         if (filters.keyword) {
-            const searchText = `${order.orderno || ""} ${order.project || ""} ${order.studentname || ""} ${order.supervisor || ""} ${order.note || ""}`.toLowerCase();
+            const searchText = `${order.orderno || ""} ${order.project || ""} ${order.studentname || ""} ${order.tasktime || ""} ${order.supervisor || ""} ${order.note || ""}`.toLowerCase();
             if (!searchText.includes(filters.keyword)) return false;
         }
 
@@ -1037,7 +1080,7 @@ function renderSuperviseTable(orders) {
     if (!tbody) return;
 
     if (!orders || orders.length === 0) {
-        tbody.innerHTML = `<tr><td colspan="10" class="salary-empty-cell">未找到符合条件的订单</td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="11" class="salary-empty-cell">未找到符合条件的订单</td></tr>`;
         return;
     }
 
@@ -1051,6 +1094,7 @@ function renderSuperviseTable(orders) {
         const progressText = `${completedDays}/${requiredDays}次`;
         const todayStateText = getTodayDailyStateText(item);
         const actionHtml = getSuperviseActionHtml(item, statusText);
+        const tasktime = normalizeSuperviseTaskTime(item.tasktime) || "-";
 
         html += `
             <tr>
@@ -1058,6 +1102,7 @@ function renderSuperviseTable(orders) {
                 <td>${item.orderno || "-"}</td>
                 <td>${item.project || "-"}</td>
                 <td>${item.studentname || "-"}</td>
+                <td>${tasktime}</td>
                 <td>${item.duration || "-"}</td>
                 <td>${amount}</td>
                 <td>${item.supervisor || "-"}</td>
@@ -1132,6 +1177,7 @@ function renderSuperviseCards(orders) {
                 </div>
                 <div class="order-card-body svm-card-body">
                     <div class="order-kv"><div class="k">学员</div><div class="v">${item.studentname || "-"}</div></div>
+                    <div class="order-kv"><div class="k">时间</div><div class="v">${normalizeSuperviseTaskTime(item.tasktime) || "-"}</div></div>
                     <div class="order-kv"><div class="k">次数</div><div class="v">${item.duration || "-"}</div></div>
                     <div class="order-kv"><div class="k">今日</div><div class="v">${todayStateText}</div></div>
                     <div class="order-kv svm-note-kv"><div class="k">备注</div><div class="v">${item.note || "-"}</div></div>
@@ -1169,6 +1215,7 @@ function ensureSuperviseTableShell(tableWrapper) {
                     <th>订单号</th>
                     <th>项目</th>
                     <th>学员名字</th>
+                    <th>时间</th>
                     <th>次数</th>
                     <th>结算价格</th>
                     <th>监督员</th>
@@ -1179,7 +1226,7 @@ function ensureSuperviseTableShell(tableWrapper) {
             </thead>
             <tbody id="superviseTableBody">
                 <tr>
-                    <td colspan="10" class="salary-empty-cell">暂无监督数据</td>
+                    <td colspan="11" class="salary-empty-cell">暂无监督数据</td>
                 </tr>
             </tbody>
         </table>
@@ -1196,10 +1243,11 @@ async function addSingleSuperviseTask() {
     const project = document.getElementById("svProjectName")?.value.trim();
     const duration = document.getElementById("svDuration")?.value;
     const studentname = document.getElementById("svStudentName")?.value.trim();
+    const tasktime = normalizeSuperviseTaskTime(document.getElementById("svTaskClock")?.value || "");
     const inputPrice = parseFloat(document.getElementById("svPrice")?.value || "0");
     const supervisor = document.getElementById("svSupervisor")?.value;
     if (!waketime || !orderno || !project) {
-        alert("请至少填写时间、订单号、项目");
+        alert("请至少填写开始时间、订单号、项目");
         return;
     }
     const autoPrice = getAutoPriceByProjectAndDuration(project, duration || "1次");
@@ -1217,6 +1265,7 @@ async function addSingleSuperviseTask() {
         project,
         duration: getDurationTextForSave(duration || "1次"),
         studentname: studentname || "",
+        tasktime: tasktime || "",
         price: Number.isFinite(finalPrice) ? finalPrice : 0,
         supervisor: supervisor || "",
         endtime: "",
@@ -2260,7 +2309,7 @@ async function loadSuperviseDashboard() {
         console.error("加载监督页面失败：", error);
         const tbody = document.getElementById("superviseTableBody");
         if (tbody) {
-            tbody.innerHTML = `<tr><td colspan="10" class="salary-empty-cell">监督页面加载失败，请稍后重试</td></tr>`;
+            tbody.innerHTML = `<tr><td colspan="11" class="salary-empty-cell">监督页面加载失败，请稍后重试</td></tr>`;
         }
     } finally {
         if (loadingEl) loadingEl.style.display = "none";
