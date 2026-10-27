@@ -461,9 +461,14 @@ async function applyPriceStrategyToUnsettledOrders() {
             const unitFallback = project === "监督早睡早起" ? 2.7 : (project === "视频监督" ? 2 : 1.35);
             const unit = getStrategyUnitPrice(project, unitFallback);
             const dailyHours = Number(row.dailyhours || 0);
-            const nextPrice = project === "视频监督"
-                ? Number(unit) * (Number.isFinite(dailyHours) && dailyHours > 0 ? dailyHours : 0) * Number(days)
-                : Number(unit) * Number(days);
+            let nextPrice;
+            if (project === "视频监督") {
+                // 缺少每天时长时跳过，避免把金额改成 0
+                if (!(Number.isFinite(dailyHours) && dailyHours > 0)) return;
+                nextPrice = Number(unit) * dailyHours * Number(days);
+            } else {
+                nextPrice = Number(unit) * Number(days);
+            }
             if (!Number.isFinite(nextPrice) || nextPrice < 0) return;
             const oldPrice = Number(row.price || row.amount || 0);
             if (Math.abs(nextPrice - oldPrice) <= 0.0001) return;

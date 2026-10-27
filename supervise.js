@@ -243,10 +243,14 @@ function getDefaultSuperviseUnitPriceMap() {
 }
 
 function parseDailyHoursValue(value, fallback = 0) {
+    if (value == null || value === "") return fallback;
     const n = Number(value);
     if (Number.isFinite(n) && n > 0) return n;
     const s = String(value || "").trim();
-    const m = s.match(/(\d+(?:\.\d+)?)\s*(?:小时|时|h|H)?/);
+    // 必须带小时单位或「每天X」，避免把备注里的「7天」误当成时长
+    const m = s.match(/(?:每天|每日)\s*(\d+(?:\.\d+)?)\s*(?:小时|时|h|H)?/i)
+        || s.match(/(\d+(?:\.\d+)?)\s*(?:小时|时|h|H)\b/i)
+        || s.match(/(\d+(?:\.\d+)?)\s*(?:小时|时|h|H)\s*[\/每]\s*天/i);
     if (m) {
         const parsed = Number(m[1]);
         if (Number.isFinite(parsed) && parsed > 0) return parsed;
@@ -254,14 +258,30 @@ function parseDailyHoursValue(value, fallback = 0) {
     return fallback;
 }
 
+function resolveVideoDailyHoursFromAiItem(item, note) {
+    const candidates = [item?.dailyhours, item?.dailyHours, item?.hours];
+    for (let i = 0; i < candidates.length; i += 1) {
+        const raw = candidates[i];
+        if (raw == null || raw === "") continue;
+        const hours = parseDailyHoursValue(raw, 0);
+        if (hours > 0) return hours;
+    }
+    const fromNote = parseDailyHoursValue(note, 0);
+    if (fromNote > 0) return fromNote;
+    return 1;
+}
+
 /** 视频监督：单价/小时 × 每天时长 × 次数；其余项目：单价/天 × 次数 */
 function getAutoPriceByProjectAndDuration(project, duration, dailyHours = 0) {
     const days = getDurationDays(duration);
     if (!project) return "";
     const strategy = (typeof getPriceStrategyCache === "function" ? getPriceStrategyCache() : null) || {};
-    const unitPriceMap = strategy?.supervise?.unitPricePerDay && typeof strategy.supervise.unitPricePerDay === "object"
-        ? strategy.supervise.unitPricePerDay
-        : getDefaultSuperviseUnitPriceMap();
+    const unitPriceMap = {
+        ...getDefaultSuperviseUnitPriceMap(),
+        ...(strategy?.supervise?.unitPricePerDay && typeof strategy.supervise.unitPricePerDay === "object"
+            ? strategy.supervise.unitPricePerDay
+            : {})
+    };
     const unitPrice = Number(unitPriceMap[project]);
     if (!Number.isFinite(unitPrice) || unitPrice <= 0) return "";
     if (project === "视频监督") {
@@ -600,7 +620,7 @@ async function parseSuperviseBatchOrders() {
             if (!orderno || !project || !durationRaw) return;
             const duration = normalizeDurationText(durationRaw);
             const dailyhours = project === "视频监督"
-                ? parseDailyHoursValue(item.dailyhours || item.dailyHours || item.hours || note, 1)
+                ? resolveVideoDailyHoursFromAiItem(item, note)
                 : 0;
             const price = Number(getAutoPriceByProjectAndDuration(project, duration, dailyhours) || 0);
             built.push({
@@ -649,7 +669,10 @@ function updateAddSuperviseAutoPrice() {
     const priceInput = document.getElementById("addSvPrice");
     if (!priceInput) return;
     const autoPrice = getAutoPriceByProjectAndDuration(project, duration, dailyHours);
-    if (autoPrice === "") return;
+    if (autoPrice === "") {
+        priceInput.value = "";
+        return;
+    }
     priceInput.value = Number(autoPrice).toFixed(2);
 }
 
@@ -660,7 +683,10 @@ function updateEditSuperviseAutoPrice() {
     const priceInput = document.getElementById("editSvPrice");
     if (!priceInput) return;
     const autoPrice = getAutoPriceByProjectAndDuration(project, duration, dailyHours);
-    if (autoPrice === "") return;
+    if (autoPrice === "") {
+        priceInput.value = "";
+        return;
+    }
     priceInput.value = Number(autoPrice).toFixed(2);
 }
 
@@ -709,10 +735,11 @@ async function saveAddSuperviseOrder() {
     const dailyhours = project === "视频监督"
         ? parseDailyHoursValue(document.getElementById("addSvDailyHours")?.value, 0)
         : 0;
-    const inputPrice = parseFloat(document.getElementById("addSvPrice")?.value || "0");
+    const priceRaw = String(document.getElementById("addSvPrice")?.value || "").trim();
+    const inputPrice = parseFloat(priceRaw || "0");
     const supervisor = document.getElementById("addSvSupervisor")?.value || "";
     const startDate = document.getElementById("addSvStartDate")?.value.trim() || getLocalDateString();
-    const note = document.getElementById("addSvNote")?.value.trim() || "文字监督";
+    const note = document.getElementById("addSvNote")?.value.trim() || "-";
     if (!orderno || !project) {
         alert("请至少填写订单号、项目");
         return;
@@ -722,7 +749,12 @@ async function saveAddSuperviseOrder() {
         return;
     }
     const autoPrice = getAutoPriceByProjectAndDuration(project, duration, dailyhours);
-    const finalPrice = autoPrice === "" ? (Number.isFinite(inputPrice) ? inputPrice : 0) : Number(autoPrice);
+    let finalPrice = 0;
+    if (priceRaw !== "" && Number.isFinite(inputPrice)) {
+        finalPrice = inputPrice;
+    } else if (autoPrice !== "") {
+        finalPrice = Number(autoPrice);
+    }
     const waketime = `${startDate}T09:00`;
     const newItem = {
         id: `${Date.now()}-${Math.floor(Math.random() * 1000000)}`,
@@ -738,7 +770,7 @@ async function saveAddSuperviseOrder() {
         supervisor: supervisor || "",
         endtime: "",
         startdate: startDate,
-        note: note || "文字监督",
+        note: note || "-",
         amount: Number.isFinite(finalPrice) ? finalPrice : 0,
         status: "待接单",
         serialnumber: null,
@@ -2616,7 +2648,16 @@ function resetSuperviseFilters() {
     loadSuperviseDashboard();
 }
 
-window.addEventListener("DOMContentLoaded", () => {
+window.addEventListener("DOMContentLoaded", async () => {
+    // 加载价格策略，保证监督页新增/编辑/AI 批量使用管理员配置的单价
+    try {
+        if (typeof getPriceStrategy === "function") {
+            const strategy = await getPriceStrategy();
+            if (typeof setPriceStrategyCache === "function") {
+                setPriceStrategyCache(strategy);
+            }
+        }
+    } catch (_) { }
     const urlParams = new URLSearchParams(window.location.search);
     const keywordFromUrl = String(urlParams.get("keyword") || "").trim();
     const searchInput = document.getElementById("superviseSearchInput");
@@ -2805,7 +2846,7 @@ function showProgressModal(taskId) {
             <div style="margin-bottom: 16px;">
                 <h5 style="margin: 0 0 8px 0; font-size: 14px; font-weight: 500;">详细记录</h5>
                 <div style="background: #f8fafc; padding: 12px; border-radius: 8px; font-size: 13px;">
-                    <div style="margin-bottom: 4px;"><strong>总次数：</strong>${task.duration || "-"}</div>
+                    <div style="margin-bottom: 4px;"><strong>总次数：</strong>${formatSuperviseDurationDisplay(task)}</div>
                     <div style="margin-bottom: 4px;"><strong>已完成：</strong>${completedDays}次</div>
                     <div style="margin-bottom: 4px;"><strong>剩余：</strong>${Math.max(0, N - completedDays)}次</div>
                     ${countLine}
