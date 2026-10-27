@@ -1057,8 +1057,8 @@ function renderSuperviseTable(orders) {
                 <td><input type="checkbox" class="supervise-checkbox" value="${item.id}"></td>
                 <td>${item.orderno || "-"}</td>
                 <td>${item.project || "-"}</td>
-                <td>${item.duration || "-"}</td>
                 <td>${item.studentname || "-"}</td>
+                <td>${item.duration || "-"}</td>
                 <td>${amount}</td>
                 <td>${item.supervisor || "-"}</td>
                 <td>${item.note || "-"}<div style="font-size:12px;color:#64748b;margin-top:4px;">进度：${progressText}</div><div style="font-size:12px;color:#64748b;margin-top:2px;">今日：${todayStateText}</div></td>
@@ -1131,8 +1131,8 @@ function renderSuperviseCards(orders) {
                     </div>
                 </div>
                 <div class="order-card-body svm-card-body">
-                    <div class="order-kv"><div class="k">次数</div><div class="v">${item.duration || "-"}</div></div>
                     <div class="order-kv"><div class="k">学员</div><div class="v">${item.studentname || "-"}</div></div>
+                    <div class="order-kv"><div class="k">次数</div><div class="v">${item.duration || "-"}</div></div>
                     <div class="order-kv"><div class="k">今日</div><div class="v">${todayStateText}</div></div>
                     <div class="order-kv svm-note-kv"><div class="k">备注</div><div class="v">${item.note || "-"}</div></div>
                 </div>
@@ -1168,8 +1168,8 @@ function ensureSuperviseTableShell(tableWrapper) {
                     <th>选择</th>
                     <th>订单号</th>
                     <th>项目</th>
-                    <th>次数</th>
                     <th>学员名字</th>
+                    <th>次数</th>
                     <th>结算价格</th>
                     <th>监督员</th>
                     <th>备注</th>

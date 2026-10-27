@@ -1808,13 +1808,13 @@ input[type="checkbox"].supervise-checkbox:checked::after {
 
 .supervise-page .supervise-table thead th:nth-child(4),
 .supervise-page .supervise-table td:nth-child(4) {
-    width: 6%;
-    white-space: nowrap;
+    width: 8%;
 }
 
 .supervise-page .supervise-table thead th:nth-child(5),
 .supervise-page .supervise-table td:nth-child(5) {
-    width: 8%;
+    width: 6%;
+    white-space: nowrap;
 }
 
 .supervise-page .supervise-table thead th:nth-child(6),
@@ -2448,15 +2448,15 @@ body.is-staff.is-mobile #userInfo {
         display: none;
     }
 
-    .supervise-page.supervise-staff .supervise-table td:nth-child(2)::before { content: "????"; color: #64748b; }
-    .supervise-page.supervise-staff .supervise-table td:nth-child(3)::before { content: "???"; color: #64748b; }
-    .supervise-page.supervise-staff .supervise-table td:nth-child(4)::before { content: "???"; color: #64748b; }
-    .supervise-page.supervise-staff .supervise-table td:nth-child(5)::before { content: "???"; color: #64748b; }
-    .supervise-page.supervise-staff .supervise-table td:nth-child(6)::before { content: "???"; color: #64748b; }
-    .supervise-page.supervise-staff .supervise-table td:nth-child(7)::before { content: "????"; color: #64748b; }
-    .supervise-page.supervise-staff .supervise-table td:nth-child(8)::before { content: "???"; color: #64748b; }
-    .supervise-page.supervise-staff .supervise-table td:nth-child(9)::before { content: "???"; color: #64748b; }
-    .supervise-page.supervise-staff .supervise-table td:nth-child(10)::before { content: "???"; color: #64748b; }
+    .supervise-page.supervise-staff .supervise-table td:nth-child(2)::before { content: "订单号"; color: #64748b; }
+    .supervise-page.supervise-staff .supervise-table td:nth-child(3)::before { content: "项目"; color: #64748b; }
+    .supervise-page.supervise-staff .supervise-table td:nth-child(4)::before { content: "学员名字"; color: #64748b; }
+    .supervise-page.supervise-staff .supervise-table td:nth-child(5)::before { content: "次数"; color: #64748b; }
+    .supervise-page.supervise-staff .supervise-table td:nth-child(6)::before { content: "结算价格"; color: #64748b; }
+    .supervise-page.supervise-staff .supervise-table td:nth-child(7)::before { content: "监督员"; color: #64748b; }
+    .supervise-page.supervise-staff .supervise-table td:nth-child(8)::before { content: "备注"; color: #64748b; }
+    .supervise-page.supervise-staff .supervise-table td:nth-child(9)::before { content: "状态"; color: #64748b; }
+    .supervise-page.supervise-staff .supervise-table td:nth-child(10)::before { content: "操作"; color: #64748b; }
 
     .supervise-page.supervise-staff .supervise-table td:nth-child(10) {
         margin-top: 8px;
