@@ -2761,34 +2761,39 @@ body.is-staff #page_wake .order-list-table {
     table-layout: fixed;
 }
 
-/* ??? 8 ????6?10 ??????????????? */
+/* 员工桌面：8 列紧凑表 */
 body.is-staff #page_wake .order-list-table th:nth-child(1),
 body.is-staff #page_wake .order-list-table td:nth-child(1) {
-    width: 7%;
+    width: 5%;
 }
 
 body.is-staff #page_wake .order-list-table th:nth-child(2),
 body.is-staff #page_wake .order-list-table td:nth-child(2) {
-    width: 7%;
+    width: 10%;
 }
 
 body.is-staff #page_wake .order-list-table th:nth-child(3),
 body.is-staff #page_wake .order-list-table td:nth-child(3) {
-    width: 9%;
+    width: 26%;
+    white-space: normal;
+    word-break: break-word;
+    line-height: 1.35;
+    text-align: left;
 }
 
 body.is-staff #page_wake .order-list-table th:nth-child(4),
 body.is-staff #page_wake .order-list-table td:nth-child(4) {
-    width: 13%;
+    width: 12%;
 }
 
 body.is-staff #page_wake .order-list-table th:nth-child(5),
 body.is-staff #page_wake .order-list-table td:nth-child(5) {
-    width: 22%;
-    white-space: normal;
-    word-break: break-word;
-    line-height: 1.45;
-    overflow: visible;
+    width: 12%;
+}
+
+body.is-staff #page_wake .order-list-table th:nth-child(6),
+body.is-staff #page_wake .order-list-table td:nth-child(6) {
+    width: 9%;
 }
 
 body.is-staff #page_wake .order-list-table th:nth-child(7),
@@ -2798,17 +2803,7 @@ body.is-staff #page_wake .order-list-table td:nth-child(7) {
 
 body.is-staff #page_wake .order-list-table th:nth-child(8),
 body.is-staff #page_wake .order-list-table td:nth-child(8) {
-    width: 10%;
-}
-
-body.is-staff #page_wake .order-list-table th:nth-child(9),
-body.is-staff #page_wake .order-list-table td:nth-child(9) {
-    width: 12%;
-}
-
-body.is-staff #page_wake .order-list-table th:nth-child(10),
-body.is-staff #page_wake .order-list-table td:nth-child(10) {
-    width: 15%;
+    width: 14%;
 }
 
 .order-detail-wrap {
@@ -2827,45 +2822,51 @@ body.is-staff #page_wake .order-list-table td:nth-child(10) {
     border-collapse: collapse;
 }
 
-/* ???????? 100%??????????????????? */
+/* 叫醒紧凑表：选 / 时间 / 电话类型 / 员 / 状态 / 金额 / 操作 / 提交 */
+.order-detail-table.wake-order-compact col:nth-child(1),
 .order-detail-table col:nth-child(1) {
-    width: 4%;
-}
-
-.order-detail-table col:nth-child(2) {
     width: 5%;
 }
 
+.order-detail-table.wake-order-compact col:nth-child(2),
+.order-detail-table col:nth-child(2) {
+    width: 10%;
+}
+
+.order-detail-table.wake-order-compact col:nth-child(3),
 .order-detail-table col:nth-child(3) {
-    width: 6%;
+    width: 26%;
 }
 
+.order-detail-table.wake-order-compact col:nth-child(4),
 .order-detail-table col:nth-child(4) {
-    width: 11%;
+    width: 12%;
 }
 
+.order-detail-table.wake-order-compact col:nth-child(5),
 .order-detail-table col:nth-child(5) {
-    width: 16%;
+    width: 12%;
 }
 
+.order-detail-table.wake-order-compact col:nth-child(6),
 .order-detail-table col:nth-child(6) {
     width: 9%;
 }
 
+.order-detail-table.wake-order-compact col:nth-child(7),
 .order-detail-table col:nth-child(7) {
-    width: 9%;
+    width: 12%;
 }
 
+.order-detail-table.wake-order-compact col:nth-child(8),
 .order-detail-table col:nth-child(8) {
-    width: 7%;
+    width: 14%;
 }
 
-.order-detail-table col:nth-child(9) {
-    width: 11%;
-}
-
-.order-detail-table col:nth-child(10) {
-    width: 22%;
+.order-detail-table col:nth-child(9),
+.order-detail-table col:nth-child(10),
+.order-detail-table col:nth-child(11) {
+    width: 0;
 }
 
 .order-detail-table thead th {
@@ -2895,19 +2896,62 @@ body.is-staff #page_wake .order-list-table td:nth-child(10) {
     overflow: visible;
 }
 
-/* ?????????? */
-.order-detail-table thead th:nth-child(5),
-.order-detail-table tbody td:nth-child(5) {
+.order-detail-table.wake-order-compact thead th:nth-child(3),
+.order-detail-table.wake-order-compact tbody td:nth-child(3),
+.order-detail-table tbody td.wake-phone-cell {
     white-space: normal;
     word-break: break-word;
-    line-height: 1.45;
+    line-height: 1.35;
+    text-align: left;
 }
 
-/* ???????????????????? */
-.order-detail-table thead th:nth-child(10),
-.order-detail-table tbody td:nth-child(10) {
+.wake-cell-main {
+    font-weight: 600;
+    color: inherit;
+}
+
+.wake-cell-sub {
+    margin-top: 3px;
+    font-size: 12px;
+    color: #64748b;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px 8px;
+    align-items: center;
+    justify-content: center;
+}
+
+.wake-phone-cell .wake-cell-sub {
+    justify-content: flex-start;
+}
+
+.wake-type-tag {
+    display: inline-block;
+    padding: 1px 7px;
+    border-radius: 999px;
+    font-size: 11px;
+    font-weight: 600;
+    line-height: 1.4;
+    color: #0369a1;
+    background: #e0f2fe;
     white-space: nowrap;
-    overflow: visible;
+}
+
+.wake-note-inline {
+    color: #64748b;
+}
+
+.order-detail-table.wake-order-compact thead th,
+.order-detail-table.wake-order-compact tbody td {
+    padding: 8px 6px;
+    font-size: 13px;
+}
+
+.order-detail-table.wake-order-compact tbody td .success,
+.order-detail-table.wake-order-compact tbody td .warning {
+    padding: 4px 10px;
+    font-size: 12px;
+    white-space: nowrap;
 }
 
 .order-detail-table tbody td.serial-number {
@@ -3341,20 +3385,26 @@ body.is-staff #page_wake td:nth-child(10) {
     grid-template-columns: 1fr;
 }
 
-body.is-staff.is-mobile #page_wake .table-wrapper {
+body.is-mobile #page_wake .table-wrapper {
     display: none !important;
 }
 
-body.is-staff.is-mobile #page_wake .order-cards {
+body.is-mobile #page_wake .order-cards,
+body.is-mobile #page_wake #orderCards {
     display: grid !important;
     gap: 12px;
     margin-bottom: 16px;
 }
 
-/* ?????????????? */
+body.is-staff.is-mobile #page_wake .table-wrapper {
+    display: none !important;
+}
+
+body.is-staff.is-mobile #page_wake .order-cards,
 body.is-staff.is-mobile #page_wake #orderCards {
     display: grid !important;
     gap: 12px;
+    margin-bottom: 16px;
 }
 
 /* ????????? */

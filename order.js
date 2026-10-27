@@ -202,6 +202,54 @@ async function loadOrders() {
     }
 }
 
+function formatSubmitTimeCompact(timeStr) {
+    if (timeStr == null || timeStr === "") return "-";
+    const d = new Date(String(timeStr).trim());
+    if (Number.isNaN(d.getTime())) return String(timeStr);
+    return d.toLocaleString("zh-CN", {
+        timeZone: "Asia/Shanghai",
+        month: "2-digit",
+        day: "2-digit",
+        hour: "2-digit",
+        minute: "2-digit",
+        hour12: false
+    });
+}
+
+function wakeTimeCellHtml(item) {
+    const showTime = formatWakeTimeDisplay(item.waketime);
+    const serial = item.serialnumber != null ? `#${item.serialnumber}` : "";
+    return `<div class="wake-cell-main">${showTime}</div>${serial ? `<div class="wake-cell-sub">${serial}</div>` : ""}`;
+}
+
+function wakePhoneCellHtml(item) {
+    const phone = item.phone || "-";
+    const type = formatWakeTypeDisplay(item);
+    const noteRaw = String(item.note || "").trim();
+    const note = noteRaw && noteRaw !== "-" ? noteRaw : "";
+    const typeHtml = `<span class="wake-type-tag">${type}</span>`;
+    const noteHtml = note ? `<span class="wake-note-inline">${typeof escapeHtml === "function" ? escapeHtml(note) : note}</span>` : "";
+    return `<div class="wake-cell-main">${phone}</div><div class="wake-cell-sub">${typeHtml}${noteHtml}</div>`;
+}
+
+function getWakeRowActionHtml(item) {
+    if (isAdmin) {
+        if (item.status === "进行中") {
+            const identity = escapeJsSingleQuote(getOrderIdentity(item));
+            return `<button class="success" onclick="finishOrderByIdentity('${identity}')">完成</button>`;
+        }
+        if (item.status === "待接单") return "待接单";
+        return "已完成";
+    }
+    if (isStaff && item.status === "待接单") {
+        const identity = escapeJsSingleQuote(getOrderIdentity(item));
+        return `<button class="warning" onclick="takeOrderByIdentity('${identity}')">接单</button>`;
+    }
+    if (item.status === "进行中") return "进行中";
+    if (item.status === "已完成") return "已完成";
+    return "无操作权限";
+}
+
 // 渲染订单
 function renderOrders(orders) {
     // 合并同一帧内的多次渲染请求，减少抖动和重排
@@ -210,9 +258,9 @@ function renderOrders(orders) {
     }
     renderFrameId = requestAnimationFrame(() => {
         renderFrameId = null;
-        // 确保无论是否为移动端，都能正确渲染订单
+        // 手机端统一卡片；桌面端表格
         try {
-            if (isStaff && mobileMQ.matches) {
+            if (mobileMQ.matches) {
                 renderCards(orders);
             } else {
                 renderTable(orders);
@@ -361,16 +409,11 @@ function renderCards(orders) {
                     case "进行中": statusClass = "status-processing"; break;
                     case "已完成": statusClass = "status-done"; break;
                 }
-
-                let actionHtml = "";
-                if (isStaff && item.status === "待接单") {
-                    const identity = escapeJsSingleQuote(getOrderIdentity(item));
-                    actionHtml = `<button class="warning" onclick="takeOrderByIdentity('${identity}')">接单</button>`;
-                } else {
-                    actionHtml = `<span class="status-badge ${statusClass}">${item.status}</span>`;
-                }
-
+                const actionHtml = getWakeRowActionHtml(item);
                 const showTime = formatWakeTimeDisplay(item.waketime);
+                const noteRaw = String(item.note || "").trim();
+                const note = noteRaw && noteRaw !== "-" ? noteRaw : "-";
+                const footerHint = isStaff ? "勾选后可一键接单" : "勾选后可批量删改";
 
                 html += `
                 <div class="order-card">
@@ -379,8 +422,9 @@ function renderCards(orders) {
                             <input type="checkbox" class="order-checkbox" value="${escapeJsSingleQuote(getOrderIdentity(item))}" ${item.status !== "待接单" ? "data-status='processed'" : ""}>
                             <span class="serial-number">${item.serialnumber}</span>
                             <span class="time">${showTime}</span>
+                            <span class="wake-type-tag">${formatWakeTypeDisplay(item)}</span>
                         </div>
-                        <div style="display:flex;align-items:center;gap:8px;">
+                        <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;justify-content:flex-end;">
                             <span class="status-badge ${statusClass}">${item.status}</span>
                             <span class="order-money">${formatMoneyDisplay(item.amount ?? item.money)} 元</span>
                         </div>
@@ -388,19 +432,23 @@ function renderCards(orders) {
                     <div class="order-card-body">
                         <div class="order-kv">
                             <div class="k">电话</div>
-                            <div class="v">${item.phone}</div>
+                            <div class="v">${item.phone || "-"}</div>
                         </div>
                         <div class="order-kv">
-                            <div class="k">类型</div>
-                            <div class="v">${formatWakeTypeDisplay(item)}</div>
+                            <div class="k">叫醒员</div>
+                            <div class="v">${wakeStaffNameCellHtml(item)}</div>
                         </div>
                         <div class="order-kv">
                             <div class="k">备注</div>
-                            <div class="v">${item.note || '-'}</div>
+                            <div class="v">${typeof escapeHtml === "function" ? escapeHtml(note) : note}</div>
+                        </div>
+                        <div class="order-kv">
+                            <div class="k">提交</div>
+                            <div class="v">${formatSubmitTimeCompact(item.submittime)}</div>
                         </div>
                     </div>
                     <div class="order-card-footer">
-                        <div style="color:#64748b;font-size:12px;">勾选后可一键接单</div>
+                        <div style="color:#64748b;font-size:12px;">${footerHint}</div>
                         <div>${actionHtml}</div>
                     </div>
                 </div>`;
@@ -410,34 +458,69 @@ function renderCards(orders) {
         }
 
         container.innerHTML = html;
+        const tableWrap = document.querySelector("#page_wake .table-wrapper");
+        if (tableWrap) tableWrap.style.display = "none";
+        container.style.display = "grid";
     } catch (error) {
         console.error("渲染订单卡片失败：", error);
     }
 }
 
-// 渲染表格（桌面端）
+// 渲染表格（桌面端）— 紧凑：类型/备注并入电话列，序号并入时间列
 function renderTable(orders) {
+    const cards = document.getElementById("orderCards");
+    if (cards) {
+        cards.innerHTML = "";
+        cards.style.display = "none";
+    }
+    const tableWrap = document.querySelector("#page_wake .table-wrapper");
+    if (tableWrap) tableWrap.style.display = "";
+
     let html = "";
+    const theadCols = `
+        <th>选</th>
+        <th>时间</th>
+        <th>电话 / 类型</th>
+        <th>叫醒员</th>
+        <th>状态</th>
+        <th>金额</th>
+        <th>操作</th>
+        <th>提交</th>`;
+
+    const buildRow = (item) => {
+        let statusClass = "";
+        switch (item.status) {
+            case "待接单": statusClass = "status-pending"; break;
+            case "进行中": statusClass = "status-processing"; break;
+            case "已完成": statusClass = "status-done"; break;
+        }
+        return `
+                <tr>
+                    <td><input type="checkbox" class="order-checkbox" value="${escapeJsSingleQuote(getOrderIdentity(item))}" ${item.status !== "待接单" ? "data-status='processed'" : ""}></td>
+                    <td>${wakeTimeCellHtml(item)}</td>
+                    <td class="wake-phone-cell">${wakePhoneCellHtml(item)}</td>
+                    <td>${wakeStaffNameCellHtml(item)}</td>
+                    <td><span class="status-badge ${statusClass}">${item.status}</span></td>
+                    <td>${formatMoneyDisplay(item.amount ?? item.money)}</td>
+                    <td>${getWakeRowActionHtml(item)}</td>
+                    <td title="${formatTime(item.submittime)}">${formatSubmitTimeCompact(item.submittime)}</td>
+                </tr>`;
+    };
 
     if (isAdmin) {
-        // 按日期分组订单
         const ordersByDate = {};
         orders.forEach(order => {
             const orderDate = new Date(order.submittime).toLocaleDateString();
-            if (!ordersByDate[orderDate]) {
-                ordersByDate[orderDate] = [];
-            }
+            if (!ordersByDate[orderDate]) ordersByDate[orderDate] = [];
             ordersByDate[orderDate].push(order);
         });
-
-        // 按日期倒序排列
         const dates = Object.keys(ordersByDate).sort((a, b) => new Date(b) - new Date(a));
 
         dates.forEach(date => {
             const dateOrders = ordersByDate[date];
             html += `
             <tr class="date-collapse-header">
-                <td colspan="11" style="padding: 0;">
+                <td colspan="8" style="padding: 0;">
                     <div class="date-header" onclick="toggleDateCollapse('admin-${date}')">
                         <span class="date-title">${date}（${dateOrders.length}单）</span>
                         <span class="date-arrow">▶</span>
@@ -445,148 +528,37 @@ function renderTable(orders) {
                 </td>
             </tr>
             <tr class="date-collapse-content" id="collapse-admin-${date}" style="display: none;">
-                <td colspan="11" style="padding: 0;">
+                <td colspan="8" style="padding: 0;">
                     <div class="order-detail-wrap">
-                        <table class="order-detail-table">
+                        <table class="order-detail-table wake-order-compact">
                             <colgroup>
-                                <col><col><col><col><col><col><col><col><col><col><col>
+                                <col><col><col><col><col><col><col><col>
                             </colgroup>
                             <thead>
-                                <tr>
-                                    <th>选择</th>
-                                    <th>序号</th>
-                                    <th>叫醒时间</th>
-                                    <th>电话</th>
-                                    <th>类型</th>
-                                    <th>备注</th>
-                                    <th>叫醒员</th>
-                                    <th>状态</th>
-                                    <th>金额</th>
-                                    <th>操作</th>
-                                    <th>提交时间</th>
-                                </tr>
+                                <tr>${theadCols}</tr>
                             </thead>
                     `;
-
             dateOrders.forEach(item => {
-                let statusClass = "";
-                switch (item.status) {
-                    case "待接单": statusClass = "status-pending"; break;
-                    case "进行中": statusClass = "status-processing"; break;
-                    case "已完成": statusClass = "status-done"; break;
-                }
-
-                let actionBtn = "无操作权限";
-                if (isAdmin) {
-                    if (item.status === "进行中") {
-                        const identity = escapeJsSingleQuote(getOrderIdentity(item));
-                        actionBtn = `<button class="success" onclick="finishOrderByIdentity('${identity}')">手动完成</button>`;
-                    } else if (item.status === "待接单") {
-                        actionBtn = "待接单";
-                    } else {
-                        actionBtn = "已完成";
-                    }
-                } else if (isStaff && item.status === "待接单") {
-                    const identity = escapeJsSingleQuote(getOrderIdentity(item));
-                    actionBtn = `<button class="warning" onclick="takeOrderByIdentity('${identity}')">接单</button>`;
-                } else if (item.status === "进行中") {
-                    actionBtn = "进行中";
-                } else if (item.status === "已完成") {
-                    actionBtn = "已完成";
-                }
-
-                const showTime = formatWakeTimeDisplay(item.waketime);
-
-                html += `
-                <tr>
-                    <td><input type="checkbox" class="order-checkbox" value="${escapeJsSingleQuote(getOrderIdentity(item))}" ${item.status !== "待接单" ? "data-status='processed'" : ""}></td>
-                    <td class="serial-number">${item.serialnumber}</td>
-                    <td>${showTime}</td>
-                    <td>${item.phone}</td>
-                    <td>${formatWakeTypeDisplay(item)}</td>
-                    <td>${item.note || '-'}</td>
-                    <td>${wakeStaffNameCellHtml(item)}</td>
-                    <td><span class="status-badge ${statusClass}">${item.status}</span></td>
-                    <td>${formatMoneyDisplay(item.amount ?? item.money)} 元</td>
-                    <td>${actionBtn}</td>
-                    <td>${formatTime(item.submittime)}</td>
-                </tr>
-                `;
+                html += buildRow(item);
             });
-
             html += `
                         </table>
                     </div>
                 </td>
-            </tr>
-            `;
+            </tr>`;
         });
     } else {
-        // 非管理员显示普通表格
         html += `
             <thead>
-                <tr>
-                    <th>选择</th>
-                    <th>序号</th>
-                    <th>叫醒时间</th>
-                    <th>电话</th>
-                    <th>类型</th>
-                    <th>备注</th>
-                    <th>叫醒员</th>
-                    <th>状态</th>
-                    <th>金额</th>
-                    <th>操作</th>
-                    <th>提交时间</th>
-                </tr>
+                <tr>${theadCols}</tr>
             </thead>
         `;
         orders.forEach(item => {
-            let statusClass = "";
-            switch (item.status) {
-                case "待接单": statusClass = "status-pending"; break;
-                case "进行中": statusClass = "status-processing"; break;
-                case "已完成": statusClass = "status-done"; break;
-            }
-
-            let actionBtn = "无操作权限";
-            if (isAdmin) {
-                if (item.status === "进行中") {
-                    const identity = escapeJsSingleQuote(getOrderIdentity(item));
-                    actionBtn = `<button class="success" onclick="finishOrderByIdentity('${identity}')">手动完成</button>`;
-                } else if (item.status === "待接单") {
-                    actionBtn = "待接单";
-                } else {
-                    actionBtn = "已完成";
-                }
-            } else if (isStaff && item.status === "待接单") {
-                const identity = escapeJsSingleQuote(getOrderIdentity(item));
-                actionBtn = `<button class="warning" onclick="takeOrderByIdentity('${identity}')">接单</button>`;
-            } else if (item.status === "进行中") {
-                actionBtn = "进行中";
-            } else if (item.status === "已完成") {
-                actionBtn = "已完成";
-            }
-
-            const showTime = formatWakeTimeDisplay(item.waketime);
-
-            html += `
-    <tr>
-      <td><input type="checkbox" class="order-checkbox" value="${escapeJsSingleQuote(getOrderIdentity(item))}" ${item.status !== "待接单" ? "data-status='processed'" : ""}></td>
-      <td class="serial-number">${item.serialnumber}</td>
-      <td>${showTime}</td>
-      <td>${item.phone}</td>
-      <td>${formatWakeTypeDisplay(item)}</td>
-      <td>${item.note || '-'}</td>
-      <td>${wakeStaffNameCellHtml(item)}</td>
-      <td><span class="status-badge ${statusClass}">${item.status}</span></td>
-      <td>${formatMoneyDisplay(item.amount ?? item.money)} 元</td>
-      <td>${actionBtn}</td>
-      <td>${formatTime(item.submittime)}</td>
-    </tr>`;
+            html += buildRow(item);
         });
     }
 
-    document.getElementById("orderTable").innerHTML = html || `<tr><td colspan="11" style="text-align: center; padding: 20px; color: #64748b;">暂无订单</td></tr>`;
+    document.getElementById("orderTable").innerHTML = html || `<tr><td colspan="8" style="text-align: center; padding: 20px; color: #64748b;">暂无订单</td></tr>`;
 }
 
 function wakeStaffNameCellHtml(item) {
