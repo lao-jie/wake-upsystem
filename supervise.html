@@ -109,46 +109,14 @@
             <button type="button" class="ghost" onclick="clearSuperviseSearch()">清空</button>
         </div>
 
-        <div class="admin-form supervise-task-form" id="superviseTaskFormSection">
-            <input type="datetime-local" id="svTaskTime">
-            <input type="text" id="svOrderNo" placeholder="订单号">
-            <select id="svProjectName">
-                <option value="">请选择项目</option>
-                <option value="监督早睡">监督早睡</option>
-                <option value="监督早起">监督早起</option>
-                <option value="监督早睡早起">监督早睡早起</option>
-            </select>
-            <input type="text" id="svStudentName" placeholder="学员名字（选填）">
-            <input type="time" id="svTaskClock" title="监督时间（选填）">
-            <select id="svDuration">
-                <option value="1次">1次</option>
-                <option value="7次">7次</option>
-                <option value="15次">15次</option>
-                <option value="30次">30次</option>
-                <option value="其他时间">其他次数</option>
-            </select>
-            <input type="number" id="svPrice" placeholder="结算价格" step="0.01" min="0">
-            <select id="svSupervisor">
-                <option value="">请选择监督员</option>
-            </select>
-            <button type="button" onclick="addSingleSuperviseTask()">添加监督任务</button>
-        </div>
-
-        <div class="admin-form" id="superviseBatchSection" style="flex-direction: column;">
-            <h3 class="batch-upload-title">批量添加监督任务</h3>
-            <textarea id="superviseBatchText"
-                placeholder="粘贴监督任务文本（示例：&#10;TB20260414001&#10;监督早睡&#10;张三&#10;7次&#10;首单测试&#10;&#10;或单行：TB20260414002 监督早起 李四 3次 复训）"></textarea>
-            <div style="display: flex; flex-wrap: wrap; gap: 12px;">
-                <button type="button" onclick="parseSuperviseBatchOrders()">识别任务</button>
-                <button type="button" id="superviseUploadBtn" disabled onclick="uploadSuperviseOrders()">批量上传</button>
-            </div>
-            <div id="superviseParsePreview" class="preview-box"></div>
-        </div>
-
-        <div class="admin-buttons" id="superviseBatchActions" style="display:flex;">
+        <div class="admin-buttons" id="superviseBatchActions" style="display:flex; gap:10px; flex-wrap:wrap; margin: 12px 0;">
+            <button type="button" class="success" id="openAddSuperviseOrderBtn" onclick="openAddSuperviseOrderModal()">新增订单</button>
             <button type="button" class="danger" onclick="deleteSelectedSupervise()">删除选中</button>
             <button type="button" onclick="editSelectedSupervise()">修改选中</button>
         </div>
+        <!-- 兼容旧脚本隐藏逻辑 -->
+        <div id="superviseTaskFormSection" style="display:none;"></div>
+        <div id="superviseBatchSection" style="display:none;"></div>
 
         <div id="superviseLoadingIndicator" class="loading-indicator" style="display: none;">
             <div class="loading-indicator__spinner" aria-hidden="true"></div>
@@ -316,6 +284,29 @@
             <div class="modal-footer">
                 <button type="button" class="ghost" onclick="closeProgressModal()">关闭</button>
             </div>
+        </div>
+    </div>
+
+    <!-- 管理员：新增订单（粘贴文本 + AI 识别） -->
+    <div class="modal-overlay" id="addSuperviseOrderModal">
+        <div class="modal-box" style="max-width: 640px;">
+            <div class="modal-header"
+                style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+                <h3>新增监督订单</h3>
+                <button type="button" class="modal-close" onclick="closeAddSuperviseOrderModal()"
+                    style="background: none; border: none; font-size: 20px; cursor: pointer; color: #64748b;">✕</button>
+            </div>
+            <p style="margin:0 0 10px;font-size:13px;color:#64748b;line-height:1.5;">
+                直接粘贴订单文本，点「识别任务」即可，支持一单或多单，不用逐个填框。
+            </p>
+            <textarea id="superviseBatchText" class="add-supervise-textarea"
+                placeholder="粘贴监督任务文本，例如：&#10;&#10;3317158596121047590&#10;监督早睡&#10;张三&#10;22:30&#10;7次&#10;首单测试&#10;&#10;或单行：TB20260414002 监督早起 李四 07:30 3次 复训"></textarea>
+            <div style="display:flex; flex-wrap:wrap; gap:10px; margin-top:12px;">
+                <button type="button" onclick="parseSuperviseBatchOrders()">识别任务</button>
+                <button type="button" class="success" id="superviseUploadBtn" disabled onclick="uploadSuperviseOrders()">确认上传</button>
+                <button type="button" class="ghost" onclick="closeAddSuperviseOrderModal()">取消</button>
+            </div>
+            <div id="superviseParsePreview" class="preview-box" style="margin-top:12px;"></div>
         </div>
     </div>
 

@@ -591,6 +591,28 @@ async function parseSuperviseBatchOrders() {
     }
 }
 
+function openAddSuperviseOrderModal() {
+    if (!superviseIsAdmin) {
+        alert("只有管理员可以新增监督订单");
+        return;
+    }
+    const modal = document.getElementById("addSuperviseOrderModal");
+    const textarea = document.getElementById("superviseBatchText");
+    const preview = document.getElementById("superviseParsePreview");
+    const uploadBtn = document.getElementById("superviseUploadBtn");
+    parsedSuperviseOrders = [];
+    if (textarea) textarea.value = "";
+    if (preview) preview.innerHTML = "";
+    if (uploadBtn) uploadBtn.disabled = true;
+    if (modal) modal.style.display = "flex";
+    if (textarea) setTimeout(() => textarea.focus(), 50);
+}
+
+function closeAddSuperviseOrderModal() {
+    const modal = document.getElementById("addSuperviseOrderModal");
+    if (modal) modal.style.display = "none";
+}
+
 async function uploadSuperviseOrders() {
     if (parsedSuperviseOrders.length === 0) return;
     const existing = await getSuperviseOrders();
@@ -604,6 +626,8 @@ async function uploadSuperviseOrders() {
     if (preview) preview.innerHTML = "";
     if (uploadBtn) uploadBtn.disabled = true;
     parsedSuperviseOrders = [];
+    closeAddSuperviseOrderModal();
+    if (typeof showToast === "function") showToast("监督订单已上传", "success");
     loadSuperviseDashboard();
 }
 
@@ -2511,10 +2535,16 @@ window.addEventListener("DOMContentLoaded", () => {
         const taskSection = document.getElementById("superviseTaskFormSection");
         const batchSection = document.getElementById("superviseBatchSection");
         const batchActions = document.getElementById("superviseBatchActions");
+        const addBtn = document.getElementById("openAddSuperviseOrderBtn");
         if (summarySection) summarySection.style.display = "none";
         if (taskSection) taskSection.style.display = "none";
         if (batchSection) batchSection.style.display = "none";
         if (batchActions) batchActions.style.display = "none";
+        if (addBtn) addBtn.style.display = "none";
+    }
+    if (superviseIsAdmin) {
+        const addBtn = document.getElementById("openAddSuperviseOrderBtn");
+        if (addBtn) addBtn.style.display = "";
     }
     updateAutoSupervisePrice();
     loadSuperviseDashboard();
