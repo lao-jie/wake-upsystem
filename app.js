@@ -362,6 +362,8 @@ async function hydratePriceStrategyInputs() {
     setInputNumber("psSvUnit_sleep", unit["监督早睡"]);
     setInputNumber("psSvUnit_wake", unit["监督早起"]);
     setInputNumber("psSvUnit_combo", unit["监督早睡早起"]);
+    setInputNumber("psSvUnit_text", unit["文字监督"]);
+    setInputNumber("psSvUnit_video", unit["视频监督"]);
 }
 
 async function savePriceStrategyPage() {
@@ -383,7 +385,9 @@ async function savePriceStrategyPage() {
             unitPricePerDay: {
                 "监督早睡": readInputNumber("psSvUnit_sleep", 1.35),
                 "监督早起": readInputNumber("psSvUnit_wake", 1.35),
-                "监督早睡早起": readInputNumber("psSvUnit_combo", 2.7)
+                "监督早睡早起": readInputNumber("psSvUnit_combo", 2.7),
+                "文字监督": readInputNumber("psSvUnit_text", 1.35),
+                "视频监督": readInputNumber("psSvUnit_video", 2)
             }
         }
     };
@@ -454,9 +458,12 @@ async function applyPriceStrategyToUnsettledOrders() {
             const project = String(row.project || "").trim();
             if (!project) return;
             const days = parseDurationDaysSimple(row.duration || "1次");
-            const unitFallback = project === "监督早睡早起" ? 2.7 : 1.35;
+            const unitFallback = project === "监督早睡早起" ? 2.7 : (project === "视频监督" ? 2 : 1.35);
             const unit = getStrategyUnitPrice(project, unitFallback);
-            const nextPrice = Number(unit) * Number(days);
+            const dailyHours = Number(row.dailyhours || 0);
+            const nextPrice = project === "视频监督"
+                ? Number(unit) * (Number.isFinite(dailyHours) && dailyHours > 0 ? dailyHours : 0) * Number(days)
+                : Number(unit) * Number(days);
             if (!Number.isFinite(nextPrice) || nextPrice < 0) return;
             const oldPrice = Number(row.price || row.amount || 0);
             if (Math.abs(nextPrice - oldPrice) <= 0.0001) return;
@@ -1659,6 +1666,8 @@ function parseSuperviseOrderMeta(row) {
         project: meta.project || row?.project || "",
         duration: meta.duration || row?.duration || "",
         studentname: meta.studentname || row?.studentname || "",
+        tasktime: meta.tasktime || row?.tasktime || "",
+        dailyhours: Number(meta.dailyhours || row?.dailyhours || 0) || 0,
         price: Number(meta.price || row.amount || 0),
         supervisor: meta.supervisor || row.supervisor || "",
         endtime: meta.endtime || "",
@@ -1674,6 +1683,8 @@ function buildSuperviseOrderNote(row) {
         project: row.project || "",
         duration: row.duration || "",
         studentname: row.studentname || "",
+        tasktime: row.tasktime || "",
+        dailyhours: Number(row.dailyhours || 0) || 0,
         price: Number(row.price || row.amount || 0),
         supervisor: row.supervisor || "",
         endtime: row.endtime || "",

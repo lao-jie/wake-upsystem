@@ -224,6 +224,8 @@
                                 <option value="supervise:监督早睡">监督早睡</option>
                                 <option value="supervise:监督早起">监督早起</option>
                                 <option value="supervise:监督早睡早起">监督早睡早起</option>
+                                <option value="supervise:视频监督">视频监督</option>
+                                <option value="supervise:文字监督">文字监督</option>
                             </select>
                             <button type="button" class="ghost" id="staffLeaderboardRefreshBtn">刷新</button>
                             <button type="button" class="ghost" onclick="closeStaffLeaderboardModal()">关闭</button>
@@ -690,9 +692,17 @@
                                 <div class="k">监督早睡早起</div>
                                 <input id="psSvUnit_combo" type="number" step="0.01" min="0" placeholder="0.00">
                             </div>
+                            <div class="price-strategy-row">
+                                <div class="k">文字监督</div>
+                                <input id="psSvUnit_text" type="number" step="0.01" min="0" placeholder="0.00">
+                            </div>
+                            <div class="price-strategy-row">
+                                <div class="k">视频监督（元/小时）</div>
+                                <input id="psSvUnit_video" type="number" step="0.01" min="0" placeholder="0.00">
+                            </div>
                         </div>
                         <div class="price-strategy-tip">
-                            说明：总价 = 单价/天 × 次数（如 7次）。对自定义时长会按“次数”计算。
+                            说明：早睡/早起/组合/文字 = 单价/天 × 次数；视频监督 = 单价/小时 × 每天时长 × 次数。
                         </div>
                     </div>
                 </div>

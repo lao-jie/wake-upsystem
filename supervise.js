@@ -110,12 +110,14 @@ const SUPERVISE_AI_SYSTEM_PROMPT = `你是监督任务识别助手。用户会�
 - 仅输出 JSON 数组，不要任何解释
 - 每项字段：
   - orderno: 订单号字符串
-  - project: 监督项目（如 监督早睡 / 监督早起 / 监督早睡早起）
+  - project: 监督项目（如 监督早睡 / 监督早起 / 监督早睡早起 / 视频监督 / 文字监督）
   - duration: 监督次数（如 1次 / 7次 / 15次 / 30次 / 3次）
+  - dailyhours: 仅视频监督需要；每天时长小时数（如 1 / 1.5 / 2），非视频填 0
   - studentname: 学员名字（可为空字符串）
   - tasktime: 监督钟点时间，可选；有则输出 24 小时制 HH:mm（如 22:30、07:30），没有则 ""
   - note: 备注（可为空）
 - 不要把「22:30」「7:30」这类时间填进 studentname；时间一律放 tasktime
+- 「每天2小时」「2小时/天」等填入 dailyhours，项目为视频监督
 - 忽略无法识别的无效项`;
 
 function getLocalDateTimeInputValue(date = new Date()) {
@@ -230,20 +232,58 @@ function normalizeDurationText(rawDuration) {
     return s;
 }
 
-function getAutoPriceByProjectAndDuration(project, duration) {
+function getDefaultSuperviseUnitPriceMap() {
+    return {
+        "监督早睡": 1.35,
+        "监督早起": 1.35,
+        "监督早睡早起": 2.7,
+        "文字监督": 1.35,
+        "视频监督": 2
+    };
+}
+
+function parseDailyHoursValue(value, fallback = 0) {
+    const n = Number(value);
+    if (Number.isFinite(n) && n > 0) return n;
+    const s = String(value || "").trim();
+    const m = s.match(/(\d+(?:\.\d+)?)\s*(?:小时|时|h|H)?/);
+    if (m) {
+        const parsed = Number(m[1]);
+        if (Number.isFinite(parsed) && parsed > 0) return parsed;
+    }
+    return fallback;
+}
+
+/** 视频监督：单价/小时 × 每天时长 × 次数；其余项目：单价/天 × 次数 */
+function getAutoPriceByProjectAndDuration(project, duration, dailyHours = 0) {
     const days = getDurationDays(duration);
     if (!project) return "";
     const strategy = (typeof getPriceStrategyCache === "function" ? getPriceStrategyCache() : null) || {};
     const unitPriceMap = strategy?.supervise?.unitPricePerDay && typeof strategy.supervise.unitPricePerDay === "object"
         ? strategy.supervise.unitPricePerDay
-        : {
-            "监督早睡": 1.35,
-            "监督早起": 1.35,
-            "监督早睡早起": 2.7
-        };
+        : getDefaultSuperviseUnitPriceMap();
     const unitPrice = Number(unitPriceMap[project]);
-    if (!unitPrice) return "";
+    if (!Number.isFinite(unitPrice) || unitPrice <= 0) return "";
+    if (project === "视频监督") {
+        const hours = parseDailyHoursValue(dailyHours, 0);
+        if (!(hours > 0)) return "";
+        return unitPrice * hours * days;
+    }
     return unitPrice * days;
+}
+
+function syncSuperviseVideoHoursUi(prefix) {
+    const project = (document.getElementById(`${prefix}SvProject`)?.value || "").trim();
+    const wrap = document.getElementById(`${prefix}SvDailyHoursWrap`);
+    if (wrap) wrap.style.display = project === "视频监督" ? "" : "none";
+}
+
+function formatSuperviseDurationDisplay(item) {
+    const duration = String(item?.duration || "-");
+    if (String(item?.project || "").trim() !== "视频监督") return duration;
+    const hours = parseDailyHoursValue(item?.dailyhours, 0);
+    if (!(hours > 0)) return duration;
+    return `${duration}（每天${hours}小时）`;
 }
 
 function getDurationTextForSave(duration) {
@@ -453,6 +493,9 @@ function buildSuperviseNote(order) {
         duration: order.duration || "",
         studentname: order.studentname || "",
         tasktime: normalizeSuperviseTaskTime(order.tasktime || order.time || ""),
+        dailyhours: String(order.project || "").trim() === "视频监督"
+            ? parseDailyHoursValue(order.dailyhours, 0)
+            : 0,
         price: Number(order.price || order.amount || 0),
         supervisor: order.supervisor || "",
         endtime: order.endtime || "",
@@ -493,6 +536,7 @@ function hydrateSuperviseOrder(order) {
         duration: meta.duration || "",
         studentname,
         tasktime,
+        dailyhours: parseDailyHoursValue(meta.dailyhours, 0),
         price: Number(meta.price || order.amount || 0),
         supervisor: meta.supervisor || "",
         endtime: meta.endtime || "",
@@ -555,7 +599,10 @@ async function parseSuperviseBatchOrders() {
             const note = String(item.note || "").trim() || "-";
             if (!orderno || !project || !durationRaw) return;
             const duration = normalizeDurationText(durationRaw);
-            const price = Number(getAutoPriceByProjectAndDuration(project, duration) || 0);
+            const dailyhours = project === "视频监督"
+                ? parseDailyHoursValue(item.dailyhours || item.dailyHours || item.hours || note, 1)
+                : 0;
+            const price = Number(getAutoPriceByProjectAndDuration(project, duration, dailyhours) || 0);
             built.push({
                 waketime: nowInput,
                 phone: "",
@@ -564,6 +611,7 @@ async function parseSuperviseBatchOrders() {
                 duration,
                 studentname: studentname || "",
                 tasktime: tasktime || "",
+                dailyhours,
                 price,
                 supervisor: "",
                 endtime: "",
@@ -583,7 +631,10 @@ async function parseSuperviseBatchOrders() {
         parsedSuperviseOrders = built;
         if (uploadBtn) uploadBtn.disabled = false;
         if (preview) {
-            preview.innerHTML = built.map((o, i) => `第${i + 1}单：订单号 ${o.orderno}｜${o.project}｜${o.studentname || "未填学员"}｜时间 ${o.tasktime || "未填"}｜${o.duration}｜${Number(o.price || 0).toFixed(2)} 元`).join("<br>");
+            preview.innerHTML = built.map((o, i) => {
+                const hoursPart = o.project === "视频监督" && o.dailyhours > 0 ? `｜每天${o.dailyhours}小时` : "";
+                return `第${i + 1}单：订单号 ${o.orderno}｜${o.project}｜${o.studentname || "未填学员"}｜时间 ${o.tasktime || "未填"}｜${o.duration}${hoursPart}｜${Number(o.price || 0).toFixed(2)} 元`;
+            }).join("<br>");
         }
     } catch (e) {
         if (preview) preview.innerHTML = `❌ 识别失败：${e.message}`;
@@ -594,9 +645,21 @@ async function parseSuperviseBatchOrders() {
 function updateAddSuperviseAutoPrice() {
     const project = (document.getElementById("addSvProject")?.value || "").trim();
     const duration = document.getElementById("addSvDuration")?.value || "1次";
+    const dailyHours = document.getElementById("addSvDailyHours")?.value || 0;
     const priceInput = document.getElementById("addSvPrice");
     if (!priceInput) return;
-    const autoPrice = getAutoPriceByProjectAndDuration(project, duration);
+    const autoPrice = getAutoPriceByProjectAndDuration(project, duration, dailyHours);
+    if (autoPrice === "") return;
+    priceInput.value = Number(autoPrice).toFixed(2);
+}
+
+function updateEditSuperviseAutoPrice() {
+    const project = (document.getElementById("editSvProject")?.value || "").trim();
+    const duration = document.getElementById("editSvDuration")?.value || "1次";
+    const dailyHours = document.getElementById("editSvDailyHours")?.value || 0;
+    const priceInput = document.getElementById("editSvPrice");
+    if (!priceInput) return;
+    const autoPrice = getAutoPriceByProjectAndDuration(project, duration, dailyHours);
     if (autoPrice === "") return;
     priceInput.value = Number(autoPrice).toFixed(2);
 }
@@ -614,11 +677,13 @@ function openAddSuperviseOrderModal() {
     setVal("addSvProject", "");
     setVal("addSvStudentName", "");
     setVal("addSvTaskClock", "");
+    setVal("addSvDailyHours", "1");
     setVal("addSvDuration", "1次");
     setVal("addSvPrice", "");
     setVal("addSvSupervisor", "");
     setVal("addSvStartDate", getLocalDateString());
     setVal("addSvNote", "");
+    syncSuperviseVideoHoursUi("add");
     updateAddSuperviseAutoPrice();
     const modal = document.getElementById("addSuperviseOrderModal");
     if (modal) modal.style.display = "flex";
@@ -641,6 +706,9 @@ async function saveAddSuperviseOrder() {
     const duration = document.getElementById("addSvDuration")?.value || "1次";
     const studentname = document.getElementById("addSvStudentName")?.value.trim() || "";
     const tasktime = normalizeSuperviseTaskTime(document.getElementById("addSvTaskClock")?.value || "");
+    const dailyhours = project === "视频监督"
+        ? parseDailyHoursValue(document.getElementById("addSvDailyHours")?.value, 0)
+        : 0;
     const inputPrice = parseFloat(document.getElementById("addSvPrice")?.value || "0");
     const supervisor = document.getElementById("addSvSupervisor")?.value || "";
     const startDate = document.getElementById("addSvStartDate")?.value.trim() || getLocalDateString();
@@ -649,7 +717,11 @@ async function saveAddSuperviseOrder() {
         alert("请至少填写订单号、项目");
         return;
     }
-    const autoPrice = getAutoPriceByProjectAndDuration(project, duration);
+    if (project === "视频监督" && !(dailyhours > 0)) {
+        alert("视频监督请填写每天时长（小时）");
+        return;
+    }
+    const autoPrice = getAutoPriceByProjectAndDuration(project, duration, dailyhours);
     const finalPrice = autoPrice === "" ? (Number.isFinite(inputPrice) ? inputPrice : 0) : Number(autoPrice);
     const waketime = `${startDate}T09:00`;
     const newItem = {
@@ -661,6 +733,7 @@ async function saveAddSuperviseOrder() {
         duration: getDurationTextForSave(duration),
         studentname,
         tasktime,
+        dailyhours,
         price: Number.isFinite(finalPrice) ? finalPrice : 0,
         supervisor: supervisor || "",
         endtime: "",
@@ -1195,7 +1268,7 @@ function renderSuperviseTable(orders) {
                 <td>${item.project || "-"}</td>
                 <td>${item.studentname || "-"}</td>
                 <td>${tasktime}</td>
-                <td>${item.duration || "-"}</td>
+                <td>${formatSuperviseDurationDisplay(item)}</td>
                 <td>${amount}</td>
                 <td>${item.supervisor || "-"}</td>
                 <td>${item.note || "-"}<div style="font-size:12px;color:#64748b;margin-top:4px;">进度：${progressText}</div><div style="font-size:12px;color:#64748b;margin-top:2px;">今日：${todayStateText}</div></td>
@@ -1259,6 +1332,7 @@ async function openEditSuperviseOrderModal(taskId) {
     setVal("editSvProject", row.project || "");
     setVal("editSvStudentName", row.studentname || "");
     setVal("editSvTaskClock", normalizeSuperviseTaskTime(row.tasktime) || "");
+    setVal("editSvDailyHours", parseDailyHoursValue(row.dailyhours, 1) || 1);
     const durationSelect = document.getElementById("editSvDuration");
     const durationText = String(row.duration || "1次");
     if (durationSelect) {
@@ -1279,6 +1353,7 @@ async function openEditSuperviseOrderModal(taskId) {
     setVal("editSvStartDate", row.startdate || getDatePartFromDateTime(row.waketime) || "");
     setVal("editSvNote", row.note === "-" ? "" : (row.note || ""));
     setVal("editSvStaffId", row.staffid || "");
+    syncSuperviseVideoHoursUi("edit");
     const modal = document.getElementById("editSuperviseOrderModal");
     if (modal) modal.style.display = "flex";
 }
@@ -1317,12 +1392,20 @@ async function saveEditSuperviseOrder() {
     const staffid = document.getElementById("editSvStaffId")?.value.trim() || "";
     const studentname = document.getElementById("editSvStudentName")?.value.trim() || "";
     const tasktime = normalizeSuperviseTaskTime(document.getElementById("editSvTaskClock")?.value || "");
+    const dailyhours = project === "视频监督"
+        ? parseDailyHoursValue(document.getElementById("editSvDailyHours")?.value, 0)
+        : 0;
+    if (project === "视频监督" && !(dailyhours > 0)) {
+        alert("视频监督请填写每天时长（小时）");
+        return;
+    }
 
     const row = { ...all[idx] };
     row.orderno = orderno;
     row.project = project;
     row.studentname = studentname;
     row.tasktime = tasktime;
+    row.dailyhours = dailyhours;
     row.duration = duration;
     row.price = Number.isFinite(price) ? price : 0;
     row.amount = row.price;
@@ -1378,7 +1461,7 @@ function renderSuperviseCards(orders) {
                 <div class="order-card-body svm-card-body">
                     <div class="order-kv"><div class="k">学员</div><div class="v">${item.studentname || "-"}</div></div>
                     <div class="order-kv"><div class="k">时间</div><div class="v">${normalizeSuperviseTaskTime(item.tasktime) || "-"}</div></div>
-                    <div class="order-kv"><div class="k">次数</div><div class="v">${item.duration || "-"}</div></div>
+                    <div class="order-kv"><div class="k">次数</div><div class="v">${formatSuperviseDurationDisplay(item)}</div></div>
                     <div class="order-kv"><div class="k">今日</div><div class="v">${todayStateText}</div></div>
                     <div class="order-kv svm-note-kv"><div class="k">备注</div><div class="v">${item.note || "-"}</div></div>
                 </div>
@@ -2590,8 +2673,12 @@ window.addEventListener("DOMContentLoaded", () => {
     }
     const addProjectSelect = document.getElementById("addSvProject");
     const addDurationSelect = document.getElementById("addSvDuration");
+    const addDailyHoursInput = document.getElementById("addSvDailyHours");
     if (addProjectSelect) {
-        addProjectSelect.addEventListener("change", updateAddSuperviseAutoPrice);
+        addProjectSelect.addEventListener("change", () => {
+            syncSuperviseVideoHoursUi("add");
+            updateAddSuperviseAutoPrice();
+        });
     }
     if (addDurationSelect) {
         addDurationSelect.addEventListener("change", () => {
@@ -2611,6 +2698,42 @@ window.addEventListener("DOMContentLoaded", () => {
             }
             updateAddSuperviseAutoPrice();
         });
+    }
+    if (addDailyHoursInput) {
+        addDailyHoursInput.addEventListener("input", updateAddSuperviseAutoPrice);
+        addDailyHoursInput.addEventListener("change", updateAddSuperviseAutoPrice);
+    }
+    const editProjectSelect = document.getElementById("editSvProject");
+    const editDurationSelect = document.getElementById("editSvDuration");
+    const editDailyHoursInput = document.getElementById("editSvDailyHours");
+    if (editProjectSelect) {
+        editProjectSelect.addEventListener("change", () => {
+            syncSuperviseVideoHoursUi("edit");
+            updateEditSuperviseAutoPrice();
+        });
+    }
+    if (editDurationSelect) {
+        editDurationSelect.addEventListener("change", () => {
+            if (editDurationSelect.value === "其他时间") {
+                const days = parseInt(prompt("请输入监督次数（正整数）", String(customDurationDays || 1)) || "", 10);
+                if (!Number.isFinite(days) || days <= 0) {
+                    editDurationSelect.value = lastDurationValue || "1次";
+                    updateEditSuperviseAutoPrice();
+                    return;
+                }
+                customDurationDays = days;
+                lastDurationValue = "其他时间";
+                const otherOption = editDurationSelect.querySelector('option[value="其他时间"]');
+                if (otherOption) otherOption.textContent = `其他次数（${days}次）`;
+            } else {
+                lastDurationValue = editDurationSelect.value;
+            }
+            updateEditSuperviseAutoPrice();
+        });
+    }
+    if (editDailyHoursInput) {
+        editDailyHoursInput.addEventListener("input", updateEditSuperviseAutoPrice);
+        editDailyHoursInput.addEventListener("change", updateEditSuperviseAutoPrice);
     }
     const dailyInput = document.getElementById("calendarSuperviseImage");
     if (dailyInput) {

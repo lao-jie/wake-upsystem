@@ -109,7 +109,9 @@ function getDefaultPriceStrategy() {
             unitPricePerDay: {
                 "监督早睡": 1.35,
                 "监督早起": 1.35,
-                "监督早睡早起": 2.7
+                "监督早睡早起": 2.7,
+                "文字监督": 1.35,
+                "视频监督": 2
             }
         },
         updatedAt: new Date().toISOString()

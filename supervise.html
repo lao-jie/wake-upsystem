@@ -316,6 +316,8 @@
                     <option value="监督早睡">监督早睡</option>
                     <option value="监督早起">监督早起</option>
                     <option value="监督早睡早起">监督早睡早起</option>
+                    <option value="视频监督">视频监督</option>
+                    <option value="文字监督">文字监督</option>
                 </select>
             </div>
             <div class="modal-form-item" style="display:grid; grid-template-columns:1fr 1fr; gap:10px;">
@@ -327,6 +329,11 @@
                     <label for="addSvTaskClock">时间</label>
                     <input type="time" id="addSvTaskClock" title="监督钟点（选填）">
                 </div>
+            </div>
+            <div class="modal-form-item" id="addSvDailyHoursWrap" style="display:none;">
+                <label for="addSvDailyHours">每天时长（小时）</label>
+                <input type="number" id="addSvDailyHours" step="0.5" min="0.5" value="1" placeholder="视频监督按每天小时数计费">
+                <div style="margin-top:6px;font-size:12px;color:#64748b;">视频监督结算价 = 单价/小时 × 每天时长 × 次数</div>
             </div>
             <div class="modal-form-item" style="display:grid; grid-template-columns:1fr 1fr; gap:10px;">
                 <div>
@@ -386,6 +393,8 @@
                     <option value="监督早睡">监督早睡</option>
                     <option value="监督早起">监督早起</option>
                     <option value="监督早睡早起">监督早睡早起</option>
+                    <option value="视频监督">视频监督</option>
+                    <option value="文字监督">文字监督</option>
                 </select>
             </div>
             <div class="modal-form-item" style="display:grid; grid-template-columns:1fr 1fr; gap:10px;">
@@ -397,6 +406,11 @@
                     <label for="editSvTaskClock">时间</label>
                     <input type="time" id="editSvTaskClock" title="监督钟点（选填）">
                 </div>
+            </div>
+            <div class="modal-form-item" id="editSvDailyHoursWrap" style="display:none;">
+                <label for="editSvDailyHours">每天时长（小时）</label>
+                <input type="number" id="editSvDailyHours" step="0.5" min="0.5" value="1" placeholder="视频监督按每天小时数计费">
+                <div style="margin-top:6px;font-size:12px;color:#64748b;">视频监督结算价 = 单价/小时 × 每天时长 × 次数</div>
             </div>
             <div class="modal-form-item" style="display:grid; grid-template-columns:1fr 1fr; gap:10px;">
                 <div>
