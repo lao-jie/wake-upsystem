@@ -1284,7 +1284,8 @@ const AI_ORDER_PARSE_SYSTEM_PROMPT = `你是叫醒订单识别助手。用户粘
 
 【输出要求】
 - 仅输出一个 JSON 数组，不要 markdown、不要代码块、不要解释、不要注释。
-- 每个元素表示「同一行或同一条连续文案里、同一个手机号」的一批叫醒；字段均为合法 JSON。
+- 必须是合法 JSON：键和字符串一律用英文双引号 "；不要尾逗号；note 内若有引号请去掉或改成空格。
+- 每个元素表示「同一行或同一条连续文案里、同一个手机号」的一批叫醒。
 
 【字段】
 - phone: 字符串，11 位中国大陆手机号，仅数字（去掉空格、短横线、+86 等后剩下的 11 位）。
@@ -1322,6 +1323,61 @@ const AI_ORDER_PARSE_SYSTEM_PROMPT = `你是叫醒订单识别助手。用户粘
 输入：回访 15200001111 9:00
 输出：[{"phone":"15200001111","wakeTime":"09:00","waketype":"回访","note":""}]`;
 
+function repairAiJsonText(text) {
+    let t = String(text || "");
+    // 去掉常见前后缀杂质
+    t = t.replace(/^\uFEFF/, "").trim();
+    // 中文/弯引号 → 英文双引号
+    t = t.replace(/[“”„‟「」『』]/g, '"').replace(/[‘’‚‛]/g, "'");
+    // 全角冒号/逗号（仅在结构性位置尽量替换）
+    t = t.replace(/\uFF1A/g, ":").replace(/\uFF0C/g, ",");
+    // 尾逗号：,{ 或 ,]
+    t = t.replace(/,\s*([}\]])/g, "$1");
+    // 无引号 key：{phone: → {"phone":
+    t = t.replace(/([{,]\s*)([A-Za-z_][A-Za-z0-9_]*)\s*:/g, '$1"$2":');
+    // 单引号字符串 → 双引号（简单场景）
+    t = t.replace(/'([^'\\]*(?:\\.[^'\\]*)*)'/g, (_, inner) => `"${inner.replace(/"/g, '\\"')}"`);
+    return t.trim();
+}
+
+function tryParseJsonArrayLoose(text) {
+    const candidates = [];
+    const raw = String(text || "").trim();
+    if (!raw) return null;
+    candidates.push(raw);
+    candidates.push(repairAiJsonText(raw));
+
+    const idx = raw.indexOf("[");
+    const last = raw.lastIndexOf("]");
+    if (idx !== -1 && last > idx) {
+        const sliced = raw.slice(idx, last + 1);
+        candidates.push(sliced);
+        candidates.push(repairAiJsonText(sliced));
+    }
+
+    for (let i = 0; i < candidates.length; i += 1) {
+        try {
+            const parsed = JSON.parse(candidates[i]);
+            if (Array.isArray(parsed)) return parsed;
+            if (parsed && typeof parsed === "object") return [parsed];
+        } catch (_) { }
+    }
+
+    // 逐个对象抢救：匹配 {...} 片段再拼数组
+    const repaired = repairAiJsonText(raw);
+    const objects = [];
+    const objRe = /\{[^{}]*\}/g;
+    let m;
+    while ((m = objRe.exec(repaired)) !== null) {
+        try {
+            const obj = JSON.parse(repairAiJsonText(m[0]));
+            if (obj && typeof obj === "object") objects.push(obj);
+        } catch (_) { }
+    }
+    if (objects.length > 0) return objects;
+    return null;
+}
+
 function extractJsonArrayFromAiContent(raw) {
     if (raw == null || typeof raw !== "string") {
         throw new Error("模型返回为空");
@@ -1333,28 +1389,70 @@ function extractJsonArrayFromAiContent(raw) {
     } else if (t.startsWith("```")) {
         t = t.replace(/^```[^\n]*\n?/, "").replace(/\n?```\s*$/i, "").trim();
     }
-    try {
-        const parsed = JSON.parse(t);
-        if (!Array.isArray(parsed)) {
-            throw new Error("识别结果必须是 JSON 数组");
+    const parsed = tryParseJsonArrayLoose(t);
+    if (parsed) return parsed;
+    throw new Error("无法解析 JSON：模型返回格式异常，请重试或简化文本");
+}
+
+/** AI 失败时的本地兜底：按行提取手机号 + 时间 */
+function parseWakeOrdersLocallyFromText(text) {
+    const lines = String(text || "")
+        .split(/\r?\n/)
+        .map((l) => l.trim())
+        .filter(Boolean);
+    const out = [];
+    lines.forEach((line) => {
+        const phoneMatch = line.match(/(?:\+?86[-\s]?)?(1[3-9]\d{9})/);
+        if (!phoneMatch) return;
+        const phone = phoneMatch[1];
+        const withoutPhone = line.replace(phoneMatch[0], " ");
+        const times = [];
+        const pushTime = (hh, mm) => {
+            const h = Number(hh);
+            const m = Number(mm);
+            if (!Number.isFinite(h) || !Number.isFinite(m) || h < 0 || h > 23 || m < 0 || m > 59) return;
+            times.push(`${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`);
+        };
+        // 6:30 / 06：30 / 14:15 / 6.30
+        let re = /(\d{1,2})\s*[:：.]\s*(\d{1,2})/g;
+        let tm;
+        while ((tm = re.exec(withoutPhone)) !== null) {
+            pushTime(tm[1], tm[2]);
         }
-        return parsed;
-    } catch (e) {
-        const idx = t.indexOf("[");
-        const last = t.lastIndexOf("]");
-        if (idx !== -1 && last > idx) {
-            try {
-                const parsed = JSON.parse(t.slice(idx, last + 1));
-                if (!Array.isArray(parsed)) {
-                    throw new Error("识别结果必须是 JSON 数组");
-                }
-                return parsed;
-            } catch (e2) {
-                throw new Error("无法解析 JSON：" + (e.message || e));
+        // 六点半 / 早上六点半
+        re = /(凌晨|早上|上午|中午|下午|晚上|今晚)?\s*(\d{1,2}|[零一二三四五六七八九十两]+)\s*点\s*(半)?/g;
+        while ((tm = re.exec(withoutPhone)) !== null) {
+            const cnMap = { 零: 0, 一: 1, 二: 2, 两: 2, 三: 3, 四: 4, 五: 5, 六: 6, 七: 7, 八: 8, 九: 9, 十: 10 };
+            let h = Number(tm[2]);
+            if (!Number.isFinite(h)) {
+                const s = String(tm[2]);
+                if (s === "十") h = 10;
+                else if (s.startsWith("十")) h = 10 + (cnMap[s.slice(1)] || 0);
+                else h = cnMap[s];
             }
+            if (!Number.isFinite(h)) continue;
+            const period = tm[1] || "";
+            if (/下午|晚上|今晚/.test(period) && h < 12) h += 12;
+            if (/中午/.test(period) && h < 11) h = 12;
+            pushTime(h, tm[3] ? 30 : 0);
         }
-        throw new Error("无法解析 JSON：" + (e.message || e));
-    }
+        const uniq = [...new Set(times)];
+        if (uniq.length === 0) return;
+        const note = withoutPhone
+            .replace(/(\d{1,2})\s*[:：.]\s*(\d{1,2})/g, " ")
+            .replace(/(凌晨|早上|上午|中午|下午|晚上|今晚)?\s*(\d{1,2}|[零一二三四五六七八九十两]+)\s*点\s*(半)?/g, " ")
+            .replace(/电话|手机|号码|[:：,，]/g, " ")
+            .replace(/\s+/g, " ")
+            .trim();
+        out.push({
+            phone,
+            wakeTimes: uniq,
+            wakeTime: uniq[0],
+            note,
+            waketype: inferWakeTypeFromAiItem({ note }, uniq.length)
+        });
+    });
+    return out;
 }
 
 function normalizePhoneForAiBatch(phone) {
@@ -1573,13 +1671,30 @@ async function parseBatchOrders() {
         }
 
         const resultText = data.choices[0].message.content;
-        const orders = extractJsonArrayFromAiContent(resultText);
+        let orders = [];
+        let usedLocalFallback = false;
+        try {
+            orders = extractJsonArrayFromAiContent(resultText);
+        } catch (jsonErr) {
+            orders = parseWakeOrdersLocallyFromText(text);
+            usedLocalFallback = true;
+            if (!orders.length) {
+                throw jsonErr;
+            }
+        }
+        if (!Array.isArray(orders) || orders.length === 0) {
+            orders = parseWakeOrdersLocallyFromText(text);
+            usedLocalFallback = true;
+        }
 
         const today = new Date();
         const dateStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
 
         const built = [];
         const warnings = [];
+        if (usedLocalFallback) {
+            warnings.push("AI 返回 JSON 异常，已改用本地规则识别（请核对预览结果）");
+        }
 
         orders.forEach((o, idx) => {
             const phone = normalizePhoneForAiBatch(o.phone);
