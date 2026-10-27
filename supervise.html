@@ -114,9 +114,18 @@
             <button type="button" class="danger" onclick="deleteSelectedSupervise()">删除选中</button>
             <button type="button" onclick="editSelectedSupervise()">修改选中</button>
         </div>
-        <!-- 兼容旧脚本隐藏逻辑 -->
+
+        <div class="admin-form" id="superviseBatchSection" style="flex-direction: column;">
+            <h3 class="batch-upload-title">批量添加监督任务（AI识别）</h3>
+            <textarea id="superviseBatchText"
+                placeholder="粘贴监督任务文本（示例：&#10;TB20260414001&#10;监督早睡&#10;张三&#10;22:30&#10;7次&#10;首单测试&#10;&#10;或单行：TB20260414002 监督早起 李四 07:30 3次 复训）"></textarea>
+            <div style="display: flex; flex-wrap: wrap; gap: 12px;">
+                <button type="button" onclick="parseSuperviseBatchOrders()">识别任务</button>
+                <button type="button" id="superviseUploadBtn" disabled onclick="uploadSuperviseOrders()">批量上传</button>
+            </div>
+            <div id="superviseParsePreview" class="preview-box"></div>
+        </div>
         <div id="superviseTaskFormSection" style="display:none;"></div>
-        <div id="superviseBatchSection" style="display:none;"></div>
 
         <div id="superviseLoadingIndicator" class="loading-indicator" style="display: none;">
             <div class="loading-indicator__spinner" aria-hidden="true"></div>
@@ -287,26 +296,74 @@
         </div>
     </div>
 
-    <!-- 管理员：新增订单（粘贴文本 + AI 识别） -->
+    <!-- 管理员：手动新增订单（表单弹窗） -->
     <div class="modal-overlay" id="addSuperviseOrderModal">
-        <div class="modal-box" style="max-width: 640px;">
+        <div class="modal-box" style="max-width: 560px;">
             <div class="modal-header"
-                style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+                style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
                 <h3>新增监督订单</h3>
                 <button type="button" class="modal-close" onclick="closeAddSuperviseOrderModal()"
                     style="background: none; border: none; font-size: 20px; cursor: pointer; color: #64748b;">✕</button>
             </div>
-            <p style="margin:0 0 10px;font-size:13px;color:#64748b;line-height:1.5;">
-                直接粘贴订单文本，点「识别任务」即可，支持一单或多单，不用逐个填框。
-            </p>
-            <textarea id="superviseBatchText" class="add-supervise-textarea"
-                placeholder="粘贴监督任务文本，例如：&#10;&#10;3317158596121047590&#10;监督早睡&#10;张三&#10;22:30&#10;7次&#10;首单测试&#10;&#10;或单行：TB20260414002 监督早起 李四 07:30 3次 复训"></textarea>
-            <div style="display:flex; flex-wrap:wrap; gap:10px; margin-top:12px;">
-                <button type="button" onclick="parseSuperviseBatchOrders()">识别任务</button>
-                <button type="button" class="success" id="superviseUploadBtn" disabled onclick="uploadSuperviseOrders()">确认上传</button>
-                <button type="button" class="ghost" onclick="closeAddSuperviseOrderModal()">取消</button>
+            <div class="modal-form-item">
+                <label for="addSvOrderNo">订单号</label>
+                <input type="text" id="addSvOrderNo" placeholder="淘宝订单号">
             </div>
-            <div id="superviseParsePreview" class="preview-box" style="margin-top:12px;"></div>
+            <div class="modal-form-item">
+                <label for="addSvProject">项目</label>
+                <select id="addSvProject">
+                    <option value="">请选择项目</option>
+                    <option value="监督早睡">监督早睡</option>
+                    <option value="监督早起">监督早起</option>
+                    <option value="监督早睡早起">监督早睡早起</option>
+                </select>
+            </div>
+            <div class="modal-form-item" style="display:grid; grid-template-columns:1fr 1fr; gap:10px;">
+                <div>
+                    <label for="addSvStudentName">学员名字</label>
+                    <input type="text" id="addSvStudentName" placeholder="选填">
+                </div>
+                <div>
+                    <label for="addSvTaskClock">时间</label>
+                    <input type="time" id="addSvTaskClock" title="监督钟点（选填）">
+                </div>
+            </div>
+            <div class="modal-form-item" style="display:grid; grid-template-columns:1fr 1fr; gap:10px;">
+                <div>
+                    <label for="addSvDuration">次数</label>
+                    <select id="addSvDuration">
+                        <option value="1次">1次</option>
+                        <option value="7次">7次</option>
+                        <option value="15次">15次</option>
+                        <option value="30次">30次</option>
+                        <option value="其他时间">其他次数</option>
+                    </select>
+                </div>
+                <div>
+                    <label for="addSvPrice">结算价格</label>
+                    <input type="number" id="addSvPrice" step="0.01" min="0" placeholder="自动计算，可改">
+                </div>
+            </div>
+            <div class="modal-form-item" style="display:grid; grid-template-columns:1fr 1fr; gap:10px;">
+                <div>
+                    <label for="addSvSupervisor">监督员</label>
+                    <select id="addSvSupervisor">
+                        <option value="">请选择监督员（选填）</option>
+                    </select>
+                </div>
+                <div>
+                    <label for="addSvStartDate">开始日期</label>
+                    <input type="date" id="addSvStartDate">
+                </div>
+            </div>
+            <div class="modal-form-item">
+                <label for="addSvNote">备注</label>
+                <textarea id="addSvNote" rows="3" placeholder="备注（选填）" style="width:100%;box-sizing:border-box;min-height:72px;resize:vertical;"></textarea>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="ghost" onclick="closeAddSuperviseOrderModal()">取消</button>
+                <button type="button" class="success" onclick="saveAddSuperviseOrder()">确认添加</button>
+            </div>
         </div>
     </div>
 

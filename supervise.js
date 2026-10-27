@@ -591,26 +591,95 @@ async function parseSuperviseBatchOrders() {
     }
 }
 
+function updateAddSuperviseAutoPrice() {
+    const project = (document.getElementById("addSvProject")?.value || "").trim();
+    const duration = document.getElementById("addSvDuration")?.value || "1次";
+    const priceInput = document.getElementById("addSvPrice");
+    if (!priceInput) return;
+    const autoPrice = getAutoPriceByProjectAndDuration(project, duration);
+    if (autoPrice === "") return;
+    priceInput.value = Number(autoPrice).toFixed(2);
+}
+
 function openAddSuperviseOrderModal() {
     if (!superviseIsAdmin) {
         alert("只有管理员可以新增监督订单");
         return;
     }
+    const setVal = (id, value) => {
+        const el = document.getElementById(id);
+        if (el) el.value = value == null ? "" : String(value);
+    };
+    setVal("addSvOrderNo", "");
+    setVal("addSvProject", "");
+    setVal("addSvStudentName", "");
+    setVal("addSvTaskClock", "");
+    setVal("addSvDuration", "1次");
+    setVal("addSvPrice", "");
+    setVal("addSvSupervisor", "");
+    setVal("addSvStartDate", getLocalDateString());
+    setVal("addSvNote", "");
+    updateAddSuperviseAutoPrice();
     const modal = document.getElementById("addSuperviseOrderModal");
-    const textarea = document.getElementById("superviseBatchText");
-    const preview = document.getElementById("superviseParsePreview");
-    const uploadBtn = document.getElementById("superviseUploadBtn");
-    parsedSuperviseOrders = [];
-    if (textarea) textarea.value = "";
-    if (preview) preview.innerHTML = "";
-    if (uploadBtn) uploadBtn.disabled = true;
     if (modal) modal.style.display = "flex";
-    if (textarea) setTimeout(() => textarea.focus(), 50);
+    const first = document.getElementById("addSvOrderNo");
+    if (first) setTimeout(() => first.focus(), 50);
 }
 
 function closeAddSuperviseOrderModal() {
     const modal = document.getElementById("addSuperviseOrderModal");
     if (modal) modal.style.display = "none";
+}
+
+async function saveAddSuperviseOrder() {
+    if (!superviseIsAdmin) {
+        alert("只有管理员可以添加监督任务");
+        return;
+    }
+    const orderno = document.getElementById("addSvOrderNo")?.value.trim() || "";
+    const project = document.getElementById("addSvProject")?.value.trim() || "";
+    const duration = document.getElementById("addSvDuration")?.value || "1次";
+    const studentname = document.getElementById("addSvStudentName")?.value.trim() || "";
+    const tasktime = normalizeSuperviseTaskTime(document.getElementById("addSvTaskClock")?.value || "");
+    const inputPrice = parseFloat(document.getElementById("addSvPrice")?.value || "0");
+    const supervisor = document.getElementById("addSvSupervisor")?.value || "";
+    const startDate = document.getElementById("addSvStartDate")?.value.trim() || getLocalDateString();
+    const note = document.getElementById("addSvNote")?.value.trim() || "文字监督";
+    if (!orderno || !project) {
+        alert("请至少填写订单号、项目");
+        return;
+    }
+    const autoPrice = getAutoPriceByProjectAndDuration(project, duration);
+    const finalPrice = autoPrice === "" ? (Number.isFinite(inputPrice) ? inputPrice : 0) : Number(autoPrice);
+    const waketime = `${startDate}T09:00`;
+    const newItem = {
+        id: `${Date.now()}-${Math.floor(Math.random() * 1000000)}`,
+        waketime,
+        phone: "",
+        orderno,
+        project,
+        duration: getDurationTextForSave(duration),
+        studentname,
+        tasktime,
+        price: Number.isFinite(finalPrice) ? finalPrice : 0,
+        supervisor: supervisor || "",
+        endtime: "",
+        startdate: startDate,
+        note: note || "文字监督",
+        amount: Number.isFinite(finalPrice) ? finalPrice : 0,
+        status: "待接单",
+        serialnumber: null,
+        staffid: "",
+        staffname: "",
+        salarysettled: false,
+        submittime: new Date().toISOString()
+    };
+    const existing = await getSuperviseOrders();
+    const merged = generateFixedSerial([...existing, newItem]);
+    await saveSuperviseOrders(merged);
+    closeAddSuperviseOrderModal();
+    if (typeof showToast === "function") showToast("监督订单已添加", "success");
+    loadSuperviseDashboard();
 }
 
 async function uploadSuperviseOrders() {
@@ -626,7 +695,6 @@ async function uploadSuperviseOrders() {
     if (preview) preview.innerHTML = "";
     if (uploadBtn) uploadBtn.disabled = true;
     parsedSuperviseOrders = [];
-    closeAddSuperviseOrderModal();
     if (typeof showToast === "function") showToast("监督订单已上传", "success");
     loadSuperviseDashboard();
 }
@@ -2484,15 +2552,19 @@ window.addEventListener("DOMContentLoaded", () => {
         loadSuperviseDashboard();
     });
     getStaffList().then((staffList) => {
+        const fillSupervisorSelect = (select) => {
+            if (!select) return;
+            (staffList || []).forEach((staff) => {
+                const op = document.createElement("option");
+                op.value = staff.name || staff.id;
+                op.textContent = staff.name || staff.id;
+                select.appendChild(op);
+            });
+        };
+        fillSupervisorSelect(document.getElementById("svSupervisor"));
+        fillSupervisorSelect(document.getElementById("addSvSupervisor"));
         const select = document.getElementById("svSupervisor");
-        if (!select) return;
-        (staffList || []).forEach((staff) => {
-            const op = document.createElement("option");
-            op.value = staff.name || staff.id;
-            op.textContent = staff.name || staff.id;
-            select.appendChild(op);
-        });
-        if (superviseIsStaff) {
+        if (select && superviseIsStaff) {
             select.value = currentSuperviseUser?.name || currentSuperviseUser?.id || "";
             select.disabled = true;
         }
@@ -2514,6 +2586,30 @@ window.addEventListener("DOMContentLoaded", () => {
             }
             lastDurationValue = durationSelect.value;
             updateAutoSupervisePrice();
+        });
+    }
+    const addProjectSelect = document.getElementById("addSvProject");
+    const addDurationSelect = document.getElementById("addSvDuration");
+    if (addProjectSelect) {
+        addProjectSelect.addEventListener("change", updateAddSuperviseAutoPrice);
+    }
+    if (addDurationSelect) {
+        addDurationSelect.addEventListener("change", () => {
+            if (addDurationSelect.value === "其他时间") {
+                const days = parseInt(prompt("请输入监督次数（正整数）", String(customDurationDays || 1)) || "", 10);
+                if (!Number.isFinite(days) || days <= 0) {
+                    addDurationSelect.value = lastDurationValue || "1次";
+                    updateAddSuperviseAutoPrice();
+                    return;
+                }
+                customDurationDays = days;
+                lastDurationValue = "其他时间";
+                const otherOption = addDurationSelect.querySelector('option[value="其他时间"]');
+                if (otherOption) otherOption.textContent = `其他次数（${days}次）`;
+            } else {
+                lastDurationValue = addDurationSelect.value;
+            }
+            updateAddSuperviseAutoPrice();
         });
     }
     const dailyInput = document.getElementById("calendarSuperviseImage");
