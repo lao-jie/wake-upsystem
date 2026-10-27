@@ -2076,7 +2076,8 @@ const targetPage = urlParams.get('page') || "home";
 showPage(targetPage);
 
 if (isAdmin) {
-    document.getElementById("adminUploadArea").style.display = "flex";
+    const adminUploadArea = document.getElementById("adminUploadArea");
+    if (adminUploadArea) adminUploadArea.style.display = "none";
     document.getElementById("batchUploadArea").style.display = "flex";
     document.getElementById("adminButtons").style.display = "flex";
     document.getElementById("addStaffBtnContainer").style.display = "flex";
@@ -2087,7 +2088,7 @@ if (isAdmin) {
 window.onload = async function () {
     const now = new Date();
     const defaultTime = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, 0)}-${String(now.getDate()).padStart(2, 0)}T06:00`;
-    const wakeTimeInput = document.getElementById("wakeTime");
+    const wakeTimeInput = document.getElementById("addWakeTime") || document.getElementById("wakeTime");
     if (wakeTimeInput) wakeTimeInput.value = defaultTime;
 
     // 确保员工界面一定不会显示角色切换按钮

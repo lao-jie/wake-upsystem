@@ -988,12 +988,63 @@ function getChinaTimeISO() {
     return new Date().toISOString();
 }
 
-// 添加单个订单
-async function addSingleOrder() {
-    const waketime = document.getElementById("wakeTime").value;
-    const phone = document.getElementById("phone").value.trim();
-    const waketype = normalizeWakeType(document.getElementById("wakeType")?.value);
-    const note = document.getElementById("note").value.trim();
+function getDefaultWakeDateTimeLocal() {
+    const now = typeof getChinaTime === "function" ? getChinaTime() : new Date();
+    const y = now.getFullYear();
+    const m = String(now.getMonth() + 1).padStart(2, "0");
+    const d = String(now.getDate()).padStart(2, "0");
+    return `${y}-${m}-${d}T06:00`;
+}
+
+function updateAddWakeAutoAmount() {
+    const waketime = document.getElementById("addWakeTime")?.value || "";
+    const amountInput = document.getElementById("addWakeAmount");
+    if (!amountInput) return;
+    const timePart = String(waketime).split("T")[1] || "";
+    if (!timePart) {
+        amountInput.value = "";
+        return;
+    }
+    const amount = Number(calculateAmountByTime(timePart));
+    amountInput.value = Number.isFinite(amount) ? amount.toFixed(2) : "";
+}
+
+function openAddWakeOrderModal() {
+    if (!isAdmin) {
+        alert("只有管理员可以新增叫醒订单");
+        return;
+    }
+    const setVal = (id, value) => {
+        const el = document.getElementById(id);
+        if (el) el.value = value == null ? "" : String(value);
+    };
+    setVal("addWakeTime", getDefaultWakeDateTimeLocal());
+    setVal("addWakePhone", "");
+    setVal("addWakeType", WAKE_TYPE_DEFAULT);
+    setVal("addWakeNote", "");
+    updateAddWakeAutoAmount();
+    const modal = document.getElementById("addWakeOrderModal");
+    if (modal) modal.style.display = "flex";
+    const first = document.getElementById("addWakePhone");
+    if (first) setTimeout(() => first.focus(), 50);
+}
+
+function closeAddWakeOrderModal() {
+    const modal = document.getElementById("addWakeOrderModal");
+    if (modal) modal.style.display = "none";
+}
+
+async function saveAddWakeOrder() {
+    if (!isAdmin) {
+        alert("只有管理员可以新增叫醒订单");
+        return;
+    }
+    const waketime = document.getElementById("addWakeTime")?.value || "";
+    const phone = document.getElementById("addWakePhone")?.value.trim() || "";
+    const waketype = normalizeWakeType(document.getElementById("addWakeType")?.value);
+    const note = document.getElementById("addWakeNote")?.value.trim() || "";
+    const amountRaw = String(document.getElementById("addWakeAmount")?.value || "").trim();
+    const inputAmount = parseFloat(amountRaw);
 
     if (!waketime) return alert("请选择叫醒时间！");
     const wakeTimeDate = new Date(waketime);
@@ -1004,15 +1055,19 @@ async function addSingleOrder() {
     }
     if (!/^1[3-9]\d{9}$/.test(phone)) return alert("请输入11位有效手机号！");
 
-    const time = waketime.split('T')[1];
-    const amount = calculateAmountByTime(time);
+    const time = waketime.split("T")[1];
+    const autoAmount = Number(calculateAmountByTime(time));
+    let amount = autoAmount;
+    if (amountRaw !== "" && Number.isFinite(inputAmount)) {
+        amount = inputAmount;
+    }
 
     const newOrder = {
-        waketime: waketime,
-        phone: phone,
+        waketime,
+        phone,
         waketype,
-        note: note,
-        amount: amount,
+        note,
+        amount: Number.isFinite(amount) ? amount : 0,
         status: "待接单",
         serialnumber: null,
         staffid: "",
@@ -1025,13 +1080,24 @@ async function addSingleOrder() {
     allOrders.push(newOrder);
     await saveOrders(allOrders);
 
-    document.getElementById("phone").value = "";
-    document.getElementById("note").value = "";
-    const typeEl = document.getElementById("wakeType");
-    if (typeEl) typeEl.value = WAKE_TYPE_DEFAULT;
+    closeAddWakeOrderModal();
     loadOrders();
     showToast("上传成功。", "success");
 }
+
+/** 兼容旧按钮名 */
+async function addSingleOrder() {
+    return saveAddWakeOrder();
+}
+
+window.addEventListener("DOMContentLoaded", () => {
+    const timeInput = document.getElementById("addWakeTime");
+    if (timeInput && !timeInput.__wakeAmountBound) {
+        timeInput.__wakeAmountBound = true;
+        timeInput.addEventListener("change", updateAddWakeAutoAmount);
+        timeInput.addEventListener("input", updateAddWakeAutoAmount);
+    }
+});
 
 /** 仅用于管理员主动「删除选中」；自动清理超期订单（cleanExpiredOrders）不得调用，以免扣回已发工资。 */
 async function rollbackWakeOrderIncomeIfSettled(order, rollbackTime = new Date()) {

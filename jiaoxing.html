@@ -15,7 +15,7 @@
     <script src="config.js?v=20261026m" defer></script>
     <script src="utils.js" defer></script>
     <script src="storage.js" defer></script>
-    <script src="order.js?v=20261027w1" defer></script>
+    <script src="order.js?v=20261027w2" defer></script>
     <script src="staff.js" defer></script>
     <script src="app.js" defer></script>
 </head>
@@ -267,19 +267,14 @@
                 <button onclick="clearSearch()">清空</button>
             </div>
 
-            <!-- 管理员：单条上传区域（员工不可见） -->
-            <div id="adminUploadArea" class="admin-form" style="display:none;">
-                <input type="datetime-local" id="wakeTime" placeholder="选择叫醒时间">
-                <input type="text" id="phone" placeholder="11位手机号">
-                <select id="wakeType" title="订单类型">
-                    <option value="叫醒">叫醒</option>
-                    <option value="回访">回访</option>
-                    <option value="多次叫醒">多次叫醒</option>
-                    <option value="多次回访">多次回访</option>
-                </select>
-                <input type="text" id="note" placeholder="备注信息">
-                <button onclick="addSingleOrder()">上传单个订单</button>
+            <!-- 管理员：操作按钮（员工不可见） -->
+            <div id="adminButtons" class="admin-buttons" style="display:none; gap:10px; flex-wrap:wrap; margin-bottom: 12px;">
+                <button type="button" class="success" id="openAddWakeOrderBtn" onclick="openAddWakeOrderModal()">新增订单</button>
+                <button type="button" class="danger" onclick="deleteSelected()">删除选中</button>
+                <button type="button" onclick="editSelected()">修改选中</button>
             </div>
+            <!-- 兼容旧逻辑：保留空节点，避免脚本报错 -->
+            <div id="adminUploadArea" style="display:none;"></div>
 
             <!-- 管理员：批量识别上传区域（员工不可见） -->
             <div id="batchUploadArea" class="admin-form" style="display:none; flex-direction: column;">
@@ -293,12 +288,6 @@
                     <button id="batchUploadBtn" disabled onclick="uploadBatchOrders()">批量上传</button>
                 </div>
                 <div id="parsePreview" class="preview-box"></div>
-            </div>
-
-            <!-- 管理员：删改按钮（员工不可见） -->
-            <div id="adminButtons" class="admin-buttons" style="display:none;">
-                <button class="danger" onclick="deleteSelected()">删除选中</button>
-                <button onclick="editSelected()">修改选中</button>
             </div>
 
             <!-- 员工：一键接单按钮（管理员不可见） -->
@@ -972,6 +961,51 @@
             <div class="modal-footer">
                 <button type="button" class="ghost" onclick="closeTeamSalaryActionModal()">取消</button>
                 <button type="button" class="success" id="teamSalaryActionConfirmBtn" onclick="submitTeamSalaryActionModal()">确认</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 管理员：叫醒新增订单 -->
+    <div class="modal-overlay" id="addWakeOrderModal">
+        <div class="modal-box" style="max-width: 520px;">
+            <div class="modal-header"
+                style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
+                <h3>叫醒新增订单</h3>
+                <button type="button" class="modal-close" onclick="closeAddWakeOrderModal()"
+                    style="background: none; border: none; font-size: 20px; cursor: pointer; color: #64748b;">✕</button>
+            </div>
+            <div class="modal-form-item">
+                <label for="addWakeTime">叫醒时间</label>
+                <input type="datetime-local" id="addWakeTime">
+            </div>
+            <div class="modal-form-item" style="display:grid; grid-template-columns:1fr 1fr; gap:10px;">
+                <div>
+                    <label for="addWakePhone">电话</label>
+                    <input type="text" id="addWakePhone" placeholder="11位手机号" maxlength="11" inputmode="numeric">
+                </div>
+                <div>
+                    <label for="addWakeType">类型</label>
+                    <select id="addWakeType">
+                        <option value="叫醒">叫醒</option>
+                        <option value="回访">回访</option>
+                        <option value="多次叫醒">多次叫醒</option>
+                        <option value="多次回访">多次回访</option>
+                    </select>
+                </div>
+            </div>
+            <div class="modal-form-item">
+                <label for="addWakeAmount">结算金额（元）</label>
+                <input type="number" id="addWakeAmount" step="0.01" min="0" placeholder="按时间自动计算，可改">
+                <div style="margin-top:6px;font-size:12px;color:#64748b;">金额默认按叫醒时段策略计算，可手动修改。</div>
+            </div>
+            <div class="modal-form-item">
+                <label for="addWakeNote">备注</label>
+                <textarea id="addWakeNote" rows="3" placeholder="备注信息（选填）"
+                    style="width:100%;box-sizing:border-box;min-height:72px;resize:vertical;"></textarea>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="ghost" onclick="closeAddWakeOrderModal()">取消</button>
+                <button type="button" class="success" onclick="saveAddWakeOrder()">确认添加</button>
             </div>
         </div>
     </div>
