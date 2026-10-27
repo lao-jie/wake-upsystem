@@ -1284,6 +1284,10 @@ async function addSingleSuperviseTask() {
     await saveSuperviseOrders(merged);
     const timeInput = document.getElementById("svTaskTime");
     if (timeInput) timeInput.value = getLocalDateTimeInputValue();
+    const clockInput = document.getElementById("svTaskClock");
+    if (clockInput) clockInput.value = "";
+    const studentInput = document.getElementById("svStudentName");
+    if (studentInput) studentInput.value = "";
     loadSuperviseDashboard();
 }
 
