@@ -1127,21 +1127,129 @@ function getSuperviseActionHtml(item, statusText = getEffectiveSuperviseStatus(i
     const ownerId = getOwnerIdValue(item);
     const ownerName = getOwnerNameValue(item);
     const hasOwner = hasMeaningfulValue(ownerId) || hasMeaningfulValue(ownerName);
-    const calendarBtn = `<button type="button" onclick="openSuperviseCalendarModal('${item.id}')">监督日志</button>`;
-    const calendarAndFinishBtn = `<button type="button" class="success" onclick="openSuperviseCalendarModal('${item.id}')">监督日志/完成</button>`;
+    const id = String(item.id || "").replace(/'/g, "\\'");
+    const calendarBtn = `<button type="button" onclick="openSuperviseCalendarModal('${id}')">监督日志</button>`;
+    const adminOpsBtn = `<span class="svm-admin-actions"><button type="button" onclick="openEditSuperviseOrderModal('${id}')">操作</button><button type="button" class="success" onclick="openSuperviseCalendarModal('${id}')">日志</button></span>`;
+    if (superviseIsAdmin) {
+        return adminOpsBtn;
+    }
     if (superviseIsStaff && statusText === "待接单" && !hasOwner && !taskReady) {
         return `<span class="svm-start-date">${startDateText} 开始</span>`;
     }
     if (superviseIsStaff && statusText === "待接单" && !hasOwner) {
-        return `<button type="button" class="warning" onclick="takeSuperviseTask('${item.id}')">接单</button>`;
+        return `<button type="button" class="warning" onclick="takeSuperviseTask('${id}')">接单</button>`;
     }
     if (superviseIsStaff && ownerId === String(currentSuperviseUser?.id || "").trim() && statusText === "进行中") {
         return calendarBtn;
     }
-    if ((superviseIsAdmin || ownerId === String(currentSuperviseUser?.id || "").trim()) && statusText === "进行中") {
-        return superviseIsAdmin ? calendarAndFinishBtn : calendarBtn;
-    }
     return calendarBtn;
+}
+
+let editingSuperviseOrderId = "";
+
+async function openEditSuperviseOrderModal(taskId) {
+    if (!superviseIsAdmin) {
+        alert("只有管理员可以编辑监督订单");
+        return;
+    }
+    const all = await getSuperviseOrders();
+    const row = all.find((item) => String(item.id) === String(taskId));
+    if (!row) {
+        alert("未找到该订单");
+        return;
+    }
+    editingSuperviseOrderId = String(taskId);
+    const setVal = (id, value) => {
+        const el = document.getElementById(id);
+        if (el) el.value = value == null ? "" : String(value);
+    };
+    setVal("editSvOrderNo", row.orderno || "");
+    setVal("editSvProject", row.project || "");
+    setVal("editSvStudentName", row.studentname || "");
+    setVal("editSvTaskClock", normalizeSuperviseTaskTime(row.tasktime) || "");
+    const durationSelect = document.getElementById("editSvDuration");
+    const durationText = String(row.duration || "1次");
+    if (durationSelect) {
+        const known = ["1次", "7次", "15次", "30次"];
+        if (known.includes(durationText)) {
+            durationSelect.value = durationText;
+        } else {
+            durationSelect.value = "其他时间";
+            const days = getDurationDays(durationText);
+            customDurationDays = days;
+            const otherOption = durationSelect.querySelector('option[value="其他时间"]');
+            if (otherOption) otherOption.textContent = `其他次数（${days}次）`;
+        }
+    }
+    setVal("editSvPrice", Number(row.price || row.amount || 0).toFixed(2));
+    setVal("editSvSupervisor", row.supervisor || row.staffname || "");
+    setVal("editSvStatus", getEffectiveSuperviseStatus(row));
+    setVal("editSvStartDate", row.startdate || getDatePartFromDateTime(row.waketime) || "");
+    setVal("editSvNote", row.note === "-" ? "" : (row.note || ""));
+    setVal("editSvStaffId", row.staffid || "");
+    const modal = document.getElementById("editSuperviseOrderModal");
+    if (modal) modal.style.display = "flex";
+}
+
+function closeEditSuperviseOrderModal() {
+    const modal = document.getElementById("editSuperviseOrderModal");
+    if (modal) modal.style.display = "none";
+    editingSuperviseOrderId = "";
+}
+
+async function saveEditSuperviseOrder() {
+    if (!superviseIsAdmin) {
+        alert("只有管理员可以编辑监督订单");
+        return;
+    }
+    if (!editingSuperviseOrderId) return;
+    const all = await getSuperviseOrders();
+    const idx = all.findIndex((item) => String(item.id) === String(editingSuperviseOrderId));
+    if (idx < 0) {
+        alert("未找到该订单");
+        return;
+    }
+    const orderno = document.getElementById("editSvOrderNo")?.value.trim() || "";
+    const project = document.getElementById("editSvProject")?.value.trim() || "";
+    if (!orderno || !project) {
+        alert("订单号和项目不能为空");
+        return;
+    }
+    const durationRaw = document.getElementById("editSvDuration")?.value || "1次";
+    const duration = getDurationTextForSave(durationRaw);
+    const price = parseFloat(document.getElementById("editSvPrice")?.value || "0");
+    const supervisor = document.getElementById("editSvSupervisor")?.value.trim() || "";
+    const status = document.getElementById("editSvStatus")?.value.trim() || "待接单";
+    const startdate = document.getElementById("editSvStartDate")?.value.trim() || "";
+    const note = document.getElementById("editSvNote")?.value.trim() || "-";
+    const staffid = document.getElementById("editSvStaffId")?.value.trim() || "";
+    const studentname = document.getElementById("editSvStudentName")?.value.trim() || "";
+    const tasktime = normalizeSuperviseTaskTime(document.getElementById("editSvTaskClock")?.value || "");
+
+    const row = { ...all[idx] };
+    row.orderno = orderno;
+    row.project = project;
+    row.studentname = studentname;
+    row.tasktime = tasktime;
+    row.duration = duration;
+    row.price = Number.isFinite(price) ? price : 0;
+    row.amount = row.price;
+    row.supervisor = supervisor;
+    row.staffname = supervisor;
+    row.staffid = staffid;
+    row.status = status;
+    row.startdate = startdate || row.startdate || "";
+    row.note = note;
+    if (status === "待接单" && !staffid && !supervisor) {
+        row.staffid = "";
+        row.staffname = "";
+        row.supervisor = "";
+    }
+    all[idx] = row;
+    await saveSuperviseOrders(generateFixedSerial(all));
+    closeEditSuperviseOrderModal();
+    if (typeof showToast === "function") showToast("订单已保存", "success");
+    loadSuperviseDashboard();
 }
 
 function renderSuperviseCards(orders) {

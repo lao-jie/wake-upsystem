@@ -5076,6 +5076,14 @@ textarea {
 }
 
 /* ??????????????????????????? */
+.svm-admin-actions {
+    display: inline-flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    align-items: center;
+    justify-content: flex-end;
+}
+
 .supervise-mobile-cards {
     display: none;
     flex-direction: column;
