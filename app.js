@@ -1897,7 +1897,10 @@ function getHomeOrderDisplayMainText(item) {
     if (item.orderType === "supervise") {
         return `${item.orderno || "-"}｜${item.project || "-"}｜${item.studentname || "-"}`;
     }
-    return `${item.phone || "-"}｜${item.note || "-"}`;
+    const wakeType = typeof formatWakeTypeDisplay === "function"
+        ? formatWakeTypeDisplay(item)
+        : (item.waketype || item.wakeType || "叫醒");
+    return `${item.phone || "-"}｜${wakeType}｜${item.note || "-"}`;
 }
 
 async function getAllHomeOrders() {

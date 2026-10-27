@@ -580,6 +580,10 @@ function renderProfileCards(orders) {
                             <div class="v">${order.phone}</div>
                         </div>
                         <div class="order-kv">
+                            <div class="k">类型</div>
+                            <div class="v">${typeof formatWakeTypeDisplay === "function" ? formatWakeTypeDisplay(order) : (order.waketype || "叫醒")}</div>
+                        </div>
+                        <div class="order-kv">
                             <div class="k">结算状态</div>
                             <div class="v">${settleStatus}</div>
                         </div>

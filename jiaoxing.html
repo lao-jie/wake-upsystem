@@ -15,7 +15,7 @@
     <script src="config.js?v=20261026m" defer></script>
     <script src="utils.js" defer></script>
     <script src="storage.js" defer></script>
-    <script src="order.js" defer></script>
+    <script src="order.js?v=20261027w1" defer></script>
     <script src="staff.js" defer></script>
     <script src="app.js" defer></script>
 </head>
@@ -262,7 +262,7 @@
 
             <!-- 搜索区域 -->
             <div style="margin-bottom: 16px; display: flex; gap: 8px; flex-wrap: wrap; align-items: center;">
-                <input type="text" id="searchInput" placeholder="搜索：电话、时间、备注" style="flex: 1; min-width: 200px;">
+                <input type="text" id="searchInput" placeholder="搜索：电话、类型、时间、备注" style="flex: 1; min-width: 200px;">
                 <button onclick="searchOrders()">搜索</button>
                 <button onclick="clearSearch()">清空</button>
             </div>
@@ -271,6 +271,12 @@
             <div id="adminUploadArea" class="admin-form" style="display:none;">
                 <input type="datetime-local" id="wakeTime" placeholder="选择叫醒时间">
                 <input type="text" id="phone" placeholder="11位手机号">
+                <select id="wakeType" title="订单类型">
+                    <option value="叫醒">叫醒</option>
+                    <option value="回访">回访</option>
+                    <option value="多次叫醒">多次叫醒</option>
+                    <option value="多次回访">多次回访</option>
+                </select>
                 <input type="text" id="note" placeholder="备注信息">
                 <button onclick="addSingleOrder()">上传单个订单</button>
             </div>

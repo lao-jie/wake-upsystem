@@ -26,6 +26,9 @@ async function saveOrders(orders) {
             id: order.id || Math.floor(Math.random() * 1000000), // 使用6位随机数作为ID，避免超出整数范围
             waketime: order.waketime,
             phone: order.phone,
+            waketype: (typeof normalizeWakeType === "function"
+                ? normalizeWakeType(order.waketype || order.wakeType)
+                : (String(order.waketype || order.wakeType || "叫醒").trim() || "叫醒")),
             note: order.note || '',
             amount: parseFloat(order.amount || order.money || 0), // 确保是数值类型
             status: order.status || '待接单',

@@ -27,12 +27,39 @@ function formatWakeTimeDisplay(waketime) {
     return hhmmMatch ? `${String(Number(hhmmMatch[1])).padStart(2, "0")}:${hhmmMatch[2]}` : raw || "-";
 }
 
+const WAKE_TYPE_OPTIONS = ["叫醒", "回访", "多次叫醒", "多次回访"];
+const WAKE_TYPE_DEFAULT = "叫醒";
+
+function normalizeWakeType(value, fallback = WAKE_TYPE_DEFAULT) {
+    const s = String(value || "").trim();
+    if (WAKE_TYPE_OPTIONS.includes(s)) return s;
+    if (s.includes("多次回访")) return "多次回访";
+    if (s.includes("多次叫醒")) return "多次叫醒";
+    if (s.includes("回访")) return "回访";
+    if (s.includes("叫醒")) return "叫醒";
+    return fallback;
+}
+
+function inferWakeTypeFromAiItem(item, timesCount = 1) {
+    const explicit = normalizeWakeType(item?.waketype || item?.wakeType || item?.type || "", "");
+    if (explicit) return explicit;
+    const note = String(item?.note || "");
+    const isVisit = /回访/.test(note);
+    if (Number(timesCount) > 1) return isVisit ? "多次回访" : "多次叫醒";
+    return isVisit ? "回访" : WAKE_TYPE_DEFAULT;
+}
+
+function formatWakeTypeDisplay(item) {
+    return normalizeWakeType(item?.waketype || item?.wakeType);
+}
+
 function buildOrdersSignature(orders) {
     return (orders || []).map((o) => [
         o.id || "",
         o.serialnumber || "",
         o.waketime || "",
         o.phone || "",
+        o.waketype || o.wakeType || "",
         o.note || "",
         Number(o.amount || o.money || 0).toFixed(2),
         o.status || "",
@@ -208,6 +235,7 @@ function renderOrders(orders) {
                         <th>序号</th>
                         <th>叫醒时间</th>
                         <th>电话</th>
+                        <th>类型</th>
                         <th>备注</th>
                         <th>状态</th>
                         <th>金额</th>
@@ -238,6 +266,7 @@ function renderOrders(orders) {
                             <td>${item.serialnumber}</td>
                             <td>${showTime}</td>
                             <td>${item.phone}</td>
+                            <td>${formatWakeTypeDisplay(item)}</td>
                             <td>${item.note || '-'}</td>
                             <td><span class="status-badge ${statusClass}">${item.status}</span></td>
                             <td>${formatMoneyDisplay(item.amount ?? item.money)} 元</td>
@@ -247,7 +276,7 @@ function renderOrders(orders) {
                             `;
                         });
                     } else {
-                        html = `<tr><td colspan="8" style="text-align: center; padding: 20px; color: #64748b;">暂无订单</td></tr>`;
+                        html = `<tr><td colspan="9" style="text-align: center; padding: 20px; color: #64748b;">暂无订单</td></tr>`;
                     }
                     tableContainer.innerHTML = html;
                 }
@@ -275,6 +304,7 @@ function renderCards(orders) {
                         <th>序号</th>
                         <th>叫醒时间</th>
                         <th>电话</th>
+                        <th>类型</th>
                         <th>备注</th>
                         <th>状态</th>
                         <th>金额</th>
@@ -305,6 +335,7 @@ function renderCards(orders) {
                             <td>${item.serialnumber}</td>
                             <td>${showTime}</td>
                             <td>${item.phone}</td>
+                            <td>${formatWakeTypeDisplay(item)}</td>
                             <td>${item.note || '-'}</td>
                             <td><span class="status-badge ${statusClass}">${item.status}</span></td>
                             <td>${formatMoneyDisplay(item.amount ?? item.money)} 元</td>
@@ -314,7 +345,7 @@ function renderCards(orders) {
                         `;
                     });
                 } else {
-                    html = `<tr><td colspan="8" style="text-align: center; padding: 20px; color: #64748b;">暂无订单</td></tr>`;
+                    html = `<tr><td colspan="9" style="text-align: center; padding: 20px; color: #64748b;">暂无订单</td></tr>`;
                 }
                 tableContainer.innerHTML = html;
             }
@@ -360,6 +391,10 @@ function renderCards(orders) {
                             <div class="v">${item.phone}</div>
                         </div>
                         <div class="order-kv">
+                            <div class="k">类型</div>
+                            <div class="v">${formatWakeTypeDisplay(item)}</div>
+                        </div>
+                        <div class="order-kv">
                             <div class="k">备注</div>
                             <div class="v">${item.note || '-'}</div>
                         </div>
@@ -402,7 +437,7 @@ function renderTable(orders) {
             const dateOrders = ordersByDate[date];
             html += `
             <tr class="date-collapse-header">
-                <td colspan="10" style="padding: 0;">
+                <td colspan="11" style="padding: 0;">
                     <div class="date-header" onclick="toggleDateCollapse('admin-${date}')">
                         <span class="date-title">${date}（${dateOrders.length}单）</span>
                         <span class="date-arrow">▶</span>
@@ -410,11 +445,11 @@ function renderTable(orders) {
                 </td>
             </tr>
             <tr class="date-collapse-content" id="collapse-admin-${date}" style="display: none;">
-                <td colspan="10" style="padding: 0;">
+                <td colspan="11" style="padding: 0;">
                     <div class="order-detail-wrap">
                         <table class="order-detail-table">
                             <colgroup>
-                                <col><col><col><col><col><col><col><col><col><col>
+                                <col><col><col><col><col><col><col><col><col><col><col>
                             </colgroup>
                             <thead>
                                 <tr>
@@ -422,6 +457,7 @@ function renderTable(orders) {
                                     <th>序号</th>
                                     <th>叫醒时间</th>
                                     <th>电话</th>
+                                    <th>类型</th>
                                     <th>备注</th>
                                     <th>叫醒员</th>
                                     <th>状态</th>
@@ -467,6 +503,7 @@ function renderTable(orders) {
                     <td class="serial-number">${item.serialnumber}</td>
                     <td>${showTime}</td>
                     <td>${item.phone}</td>
+                    <td>${formatWakeTypeDisplay(item)}</td>
                     <td>${item.note || '-'}</td>
                     <td>${wakeStaffNameCellHtml(item)}</td>
                     <td><span class="status-badge ${statusClass}">${item.status}</span></td>
@@ -493,6 +530,7 @@ function renderTable(orders) {
                     <th>序号</th>
                     <th>叫醒时间</th>
                     <th>电话</th>
+                    <th>类型</th>
                     <th>备注</th>
                     <th>叫醒员</th>
                     <th>状态</th>
@@ -537,6 +575,7 @@ function renderTable(orders) {
       <td class="serial-number">${item.serialnumber}</td>
       <td>${showTime}</td>
       <td>${item.phone}</td>
+      <td>${formatWakeTypeDisplay(item)}</td>
       <td>${item.note || '-'}</td>
       <td>${wakeStaffNameCellHtml(item)}</td>
       <td><span class="status-badge ${statusClass}">${item.status}</span></td>
@@ -547,7 +586,7 @@ function renderTable(orders) {
         });
     }
 
-    document.getElementById("orderTable").innerHTML = html || `<tr><td colspan="10" style="text-align: center; padding: 20px; color: #64748b;">暂无订单</td></tr>`;
+    document.getElementById("orderTable").innerHTML = html || `<tr><td colspan="11" style="text-align: center; padding: 20px; color: #64748b;">暂无订单</td></tr>`;
 }
 
 function wakeStaffNameCellHtml(item) {
@@ -953,6 +992,7 @@ function getChinaTimeISO() {
 async function addSingleOrder() {
     const waketime = document.getElementById("wakeTime").value;
     const phone = document.getElementById("phone").value.trim();
+    const waketype = normalizeWakeType(document.getElementById("wakeType")?.value);
     const note = document.getElementById("note").value.trim();
 
     if (!waketime) return alert("请选择叫醒时间！");
@@ -970,6 +1010,7 @@ async function addSingleOrder() {
     const newOrder = {
         waketime: waketime,
         phone: phone,
+        waketype,
         note: note,
         amount: amount,
         status: "待接单",
@@ -986,6 +1027,8 @@ async function addSingleOrder() {
 
     document.getElementById("phone").value = "";
     document.getElementById("note").value = "";
+    const typeEl = document.getElementById("wakeType");
+    if (typeEl) typeEl.value = WAKE_TYPE_DEFAULT;
     loadOrders();
     showToast("上传成功。", "success");
 }
@@ -1091,10 +1134,17 @@ async function editSelected() {
     const target = allOrders[targetIndex];
     const newTime = prompt("修改叫醒时间（格式：YYYY-MM-DDTHH:MM）", target.waketime);
     const newPhone = prompt("修改手机号", target.phone);
+    const newType = prompt(
+        `修改类型（${WAKE_TYPE_OPTIONS.join(" / ")}）`,
+        formatWakeTypeDisplay(target)
+    );
     const newNote = prompt("修改备注", target.note);
 
     if (!newTime || !newPhone) return alert("时间和手机号不能为空！");
     if (!/^1[3-9]\d{9}$/.test(newPhone)) return alert("手机号格式错误！");
+    if (newType == null) return;
+    const normalizedType = normalizeWakeType(newType, "");
+    if (!normalizedType) return alert(`类型无效，请填写：${WAKE_TYPE_OPTIONS.join("、")}`);
     const newTimeDate = new Date(newTime);
     const now = new Date();
     if (newTimeDate < now) {
@@ -1104,8 +1154,10 @@ async function editSelected() {
 
     target.waketime = newTime;
     target.phone = newPhone;
+    target.waketype = normalizedType;
     target.note = newNote;
-    target.money = calculateAmountByTime(newTime.split('T')[1]);
+    target.amount = calculateAmountByTime(newTime.split('T')[1]);
+    target.money = target.amount;
 
     await saveOrders(allOrders);
     loadOrders();
@@ -1131,6 +1183,11 @@ function searchOrders() {
         // 搜索时间
         const waketime = formatWakeTimeDisplay(order.waketime);
         if (waketime && waketime.toLowerCase().includes(searchTerm)) {
+            return true;
+        }
+        // 搜索类型
+        const waketype = formatWakeTypeDisplay(order);
+        if (waketype && waketype.toLowerCase().includes(searchTerm)) {
             return true;
         }
         // 搜索备注
@@ -1168,30 +1225,36 @@ const AI_ORDER_PARSE_SYSTEM_PROMPT = `你是叫醒订单识别助手。用户粘
 - wakeTime: 可选，单个叫醒时刻，必须是 24 小时制字符串 HH:mm（如 07:20、09:05）。
 - wakeTimes: 可选，字符串数组；同一行同一号码有多个叫醒点时，把所有点都放进这里，每项均为 HH:mm。
 - wakeDate: 可选，字符串 YYYY-MM-DD；仅当原文明确「明天/后天/大后天/具体日期」对应叫醒日时才填，否则不要填（系统会用当天）。
-- note: 字符串，除电话与时间外的提醒内容；没有则 ""。
+- waketype: 字符串，订单类型，只能是「叫醒」「回访」「多次叫醒」「多次回访」之一；原文未写则填「叫醒」。同一号码一行多个时刻优先「多次叫醒」；文案含回访且多时刻用「多次回访」；仅回访单次用「回访」。
+- note: 字符串，除电话与时间外的提醒内容；没有则 ""。不要把类型词单独塞进 note（类型放 waketype）。
 
 【识别规则】
-1. 一行里只有一个号码、多个时间（如「13900001111 7:00 7:20 7:40」「10点 10点20 10点40 189xxx」），只输出 1 个对象，多个时刻全部进 wakeTimes，不要拆成多个对象。
+1. 一行里只有一个号码、多个时间（如「13900001111 7:00 7:20 7:40」「10点 10点20 10点40 189xxx」），只输出 1 个对象，多个时刻全部进 wakeTimes，不要拆成多个对象；waketype 用「多次叫醒」（若文案含回访则「多次回访」）。
 2. 原文换行后再次出现同一号码，视为另一批订单，单独输出对象（各自时间与备注）。
 3. 若同时有 wakeTime 与 wakeTimes，合并所有时刻并去重，不要丢 wakeTime。
 4. 电话与时间顺序可互换；可带圆圈序号①、破折号、逗号、中文逗号，一律忽略。
 5. 中文时间必须换算为 HH:mm：早上七点半→07:30、早9点30/早9:30→09:30、上午8点→08:00、中午12点→12:00、下午2点→14:00、下午2点半→14:30、晚上8点15→20:15、今晚9点→21:00、零点/凌晨0点30→00:30、凌晨3点→03:00、8點整→08:00。
 6. 「明天早上7点」：wakeDate 用明天日期，wakeTime 用 07:00；只有「明天」没有钟点则不要臆造时间。
 7. 备注里若包含与叫醒无关的长说明，保留简短可执行信息即可；不要把手机号写进 note。
+8. 原文出现「回访」「多次叫醒」「多次回访」等字样时，正确填入 waketype。
 
 【输出示例 1】
 输入一行：18953772567 10点 10点20 10点40
-输出：[{"phone":"18953772567","wakeTimes":["10:00","10:20","10:40"],"note":""}]
+输出：[{"phone":"18953772567","wakeTimes":["10:00","10:20","10:40"],"waketype":"多次叫醒","note":""}]
 
 【输出示例 2】
 输入：今天9:45，17371992416
-输出：[{"phone":"17371992416","wakeTime":"09:45","note":""}]
+输出：[{"phone":"17371992416","wakeTime":"09:45","waketype":"叫醒","note":""}]
 
 【输出示例 3】
 输入两行同一号码不同时间：
 18900001111 7:00 第一条
 18900001111 8:30 第二条
-输出：[{"phone":"18900001111","wakeTime":"07:00","note":"第一条"},{"phone":"18900001111","wakeTime":"08:30","note":"第二条"}]`;
+输出：[{"phone":"18900001111","wakeTime":"07:00","waketype":"叫醒","note":"第一条"},{"phone":"18900001111","wakeTime":"08:30","waketype":"叫醒","note":"第二条"}]
+
+【输出示例 4】
+输入：回访 15200001111 9:00
+输出：[{"phone":"15200001111","wakeTime":"09:00","waketype":"回访","note":""}]`;
 
 function extractJsonArrayFromAiContent(raw) {
     if (raw == null || typeof raw !== "string") {
@@ -1466,6 +1529,7 @@ async function parseBatchOrders() {
             }
             const noteRaw = o.note != null ? String(o.note).trim() : "";
             const note = noteRaw === "" ? "-" : noteRaw;
+            const waketype = inferWakeTypeFromAiItem(o, rawTimes.length);
             const dateForRow = pickWakeDateStr(o, dateStr);
             const lineHint = [noteRaw, o.wakeTime, o.waketime, o.wake_time, Array.isArray(o.wakeTimes) ? o.wakeTimes.join(" ") : ""]
                 .filter((x) => x != null && String(x).trim() !== "")
@@ -1480,6 +1544,7 @@ async function parseBatchOrders() {
                 built.push({
                     waketime: `${dateForRow}T${time}`,
                     phone,
+                    waketype,
                     note,
                     amount: calculateAmountByTime(time),
                     status: "待接单",
@@ -1508,7 +1573,7 @@ async function parseBatchOrders() {
 
         let html = "<div>✅ 识别完成：</div>";
         parsedBatchOrders.forEach((it, i) => {
-            html += `<div>第${i + 1}单：${formatWakeTimeDisplay(it.waketime)} ${it.phone} 备注：${it.note}</div>`;
+            html += `<div>第${i + 1}单：${formatWakeTimeDisplay(it.waketime)} ${it.phone} ${formatWakeTypeDisplay(it)} 备注：${it.note}</div>`;
         });
         if (warnings.length) {
             html += '<div style="margin-top:10px;color:#b45309;font-size:13px;">⚠ 部分提示（已跳过无效项）：<br>' + warnings.map(w => `· ${w}`).join("<br>") + "</div>";

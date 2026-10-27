@@ -27,6 +27,7 @@ CREATE TABLE IF NOT EXISTS `wake_orders` (
   `id` bigint NOT NULL AUTO_INCREMENT,
   `waketime` varchar(64) NOT NULL,
   `phone` varchar(32) NOT NULL,
+  `waketype` varchar(32) NOT NULL DEFAULT '叫醒',
   `note` text,
   `amount` decimal(12,2) NOT NULL DEFAULT 0.00,
   `status` varchar(32) NOT NULL DEFAULT '待接单',
@@ -158,5 +159,8 @@ INSERT IGNORE INTO `page_notices` (`page`, `content`, `updatedby`, `updatedat`)
 VALUES
   ('wake', '', 'system', NOW(3)),
   ('supervise', '', 'system', NOW(3));
+
+-- 已有库升级：叫醒订单类型（已存在会报 Duplicate column，可忽略）
+ALTER TABLE `wake_orders` ADD COLUMN `waketype` varchar(32) NOT NULL DEFAULT '叫醒' AFTER `phone`;
 
 SET FOREIGN_KEY_CHECKS = 1;
