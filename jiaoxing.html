@@ -9,13 +9,13 @@
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="default">
     <title>老街网创 - 叫醒订单管理</title>
-    <link rel="stylesheet" href="styles.css?v=20261027w4">
+    <link rel="stylesheet" href="styles.css?v=20261027w5">
     <script src="db-client.js?v=20261026m"></script>
     <script src="https://unpkg.com/lucide@latest"></script>
     <script src="config.js?v=20261026m" defer></script>
     <script src="utils.js" defer></script>
     <script src="storage.js" defer></script>
-    <script src="order.js?v=20261027w4" defer></script>
+    <script src="order.js?v=20261027w5" defer></script>
     <script src="staff.js" defer></script>
     <script src="app.js" defer></script>
 </head>
@@ -993,10 +993,15 @@
                     </select>
                 </div>
             </div>
+            <div class="modal-form-item" id="addWakeRequiredTimesWrap" style="display:none;">
+                <label for="addWakeRequiredTimes">需完成次数</label>
+                <input type="number" id="addWakeRequiredTimes" min="2" step="1" value="2" placeholder="至少 2 次">
+                <div style="margin-top:6px;font-size:12px;color:#64748b;">多次叫醒/多次回访：记满次数后才自动完成并结算到余额。</div>
+            </div>
             <div class="modal-form-item">
                 <label for="addWakeAmount">结算金额（元）</label>
                 <input type="number" id="addWakeAmount" step="0.01" min="0" placeholder="按时间自动计算，可改">
-                <div style="margin-top:6px;font-size:12px;color:#64748b;">金额默认按叫醒时段策略计算，可手动修改。</div>
+                <div style="margin-top:6px;font-size:12px;color:#64748b;">金额默认按叫醒时段策略计算，可手动修改；多次订单整单达标后一次性结算。</div>
             </div>
             <div class="modal-form-item">
                 <label for="addWakeNote">备注</label>

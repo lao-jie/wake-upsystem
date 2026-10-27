@@ -2937,6 +2937,18 @@ body.is-staff #page_wake .order-list-table td:nth-child(8) {
     white-space: nowrap;
 }
 
+.wake-progress-tag {
+    display: inline-block;
+    padding: 1px 7px;
+    border-radius: 999px;
+    font-size: 11px;
+    font-weight: 600;
+    line-height: 1.4;
+    color: #9a3412;
+    background: #ffedd5;
+    white-space: nowrap;
+}
+
 .wake-note-inline {
     color: #64748b;
 }

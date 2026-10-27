@@ -29,6 +29,7 @@ function formatWakeTimeDisplay(waketime) {
 
 const WAKE_TYPE_OPTIONS = ["叫醒", "回访", "多次叫醒", "多次回访"];
 const WAKE_TYPE_DEFAULT = "叫醒";
+const WAKE_MULTI_TYPES = new Set(["多次叫醒", "多次回访"]);
 
 function normalizeWakeType(value, fallback = WAKE_TYPE_DEFAULT) {
     const s = String(value || "").trim();
@@ -40,17 +41,58 @@ function normalizeWakeType(value, fallback = WAKE_TYPE_DEFAULT) {
     return fallback;
 }
 
+function isMultiWakeType(orderOrType) {
+    const t = typeof orderOrType === "string"
+        ? normalizeWakeType(orderOrType)
+        : normalizeWakeType(orderOrType?.waketype || orderOrType?.wakeType);
+    return WAKE_MULTI_TYPES.has(t);
+}
+
+function getWakeRequiredTimes(order) {
+    const n = parseInt(order?.required_times ?? order?.requiredTimes ?? 0, 10);
+    if (Number.isFinite(n) && n > 0) return n;
+    return isMultiWakeType(order) ? 2 : 1;
+}
+
+function getWakeCompletedTimes(order) {
+    const n = parseInt(order?.completed_times ?? order?.completedTimes ?? 0, 10);
+    return Number.isFinite(n) && n >= 0 ? n : 0;
+}
+
+function parseRequiredTimesFromText(...parts) {
+    const s = parts.map((p) => String(p || "")).join(" ");
+    if (/两次|二回|2回/.test(s)) return 2;
+    if (/三次|3回/.test(s)) return 3;
+    const m = s.match(/(\d+)\s*次/);
+    if (m) {
+        const n = parseInt(m[1], 10);
+        if (Number.isFinite(n) && n > 0) return n;
+    }
+    return 0;
+}
+
 function inferWakeTypeFromAiItem(item, timesCount = 1) {
     const explicit = normalizeWakeType(item?.waketype || item?.wakeType || item?.type || "", "");
     if (explicit) return explicit;
     const note = String(item?.note || "");
     const isVisit = /回访/.test(note);
-    if (Number(timesCount) > 1) return isVisit ? "多次回访" : "多次叫醒";
+    const fromNote = parseRequiredTimesFromText(note);
+    if (Number(timesCount) > 1 || fromNote > 1) return isVisit ? "多次回访" : "多次叫醒";
     return isVisit ? "回访" : WAKE_TYPE_DEFAULT;
 }
 
 function formatWakeTypeDisplay(item) {
     return normalizeWakeType(item?.waketype || item?.wakeType);
+}
+
+function formatWakeProgressDisplay(item) {
+    if (!isMultiWakeType(item)) return "";
+    return `${getWakeCompletedTimes(item)}/${getWakeRequiredTimes(item)}次`;
+}
+
+function canSettleWakeOrder(order) {
+    if (!isMultiWakeType(order)) return true;
+    return getWakeCompletedTimes(order) >= getWakeRequiredTimes(order);
 }
 
 function buildOrdersSignature(orders) {
@@ -60,6 +102,8 @@ function buildOrdersSignature(orders) {
         o.waketime || "",
         o.phone || "",
         o.waketype || o.wakeType || "",
+        o.required_times || o.requiredTimes || "",
+        o.completed_times || o.completedTimes || "",
         o.note || "",
         Number(o.amount || o.money || 0).toFixed(2),
         o.status || "",
@@ -225,18 +269,21 @@ function wakeTimeCellHtml(item) {
 function wakePhoneCellHtml(item) {
     const phone = item.phone || "-";
     const type = formatWakeTypeDisplay(item);
+    const progress = formatWakeProgressDisplay(item);
     const noteRaw = String(item.note || "").trim();
     const note = noteRaw && noteRaw !== "-" ? noteRaw : "";
     const typeHtml = `<span class="wake-type-tag">${type}</span>`;
+    const progressHtml = progress ? `<span class="wake-progress-tag">${progress}</span>` : "";
     const noteHtml = note ? `<span class="wake-note-inline">${typeof escapeHtml === "function" ? escapeHtml(note) : note}</span>` : "";
-    return `<div class="wake-cell-main">${phone}</div><div class="wake-cell-sub">${typeHtml}${noteHtml}</div>`;
+    return `<div class="wake-cell-main">${phone}</div><div class="wake-cell-sub">${typeHtml}${progressHtml}${noteHtml}</div>`;
 }
 
 function getWakeRowActionHtml(item) {
     if (isAdmin) {
         if (item.status === "进行中") {
             const identity = escapeJsSingleQuote(getOrderIdentity(item));
-            return `<button class="success" onclick="finishOrderByIdentity('${identity}')">完成</button>`;
+            const label = isMultiWakeType(item) ? "记一次" : "完成";
+            return `<button class="success" onclick="finishOrderByIdentity('${identity}')">${label}</button>`;
         }
         if (item.status === "待接单") return "待接单";
         return "已完成";
@@ -244,6 +291,10 @@ function getWakeRowActionHtml(item) {
     if (isStaff && item.status === "待接单") {
         const identity = escapeJsSingleQuote(getOrderIdentity(item));
         return `<button class="warning" onclick="takeOrderByIdentity('${identity}')">接单</button>`;
+    }
+    if (isStaff && item.status === "进行中" && isMultiWakeType(item) && String(item.staffid || "") === String(user?.id || "")) {
+        const identity = escapeJsSingleQuote(getOrderIdentity(item));
+        return `<button class="success" onclick="finishOrderByIdentity('${identity}')">记一次</button>`;
     }
     if (item.status === "进行中") return "进行中";
     if (item.status === "已完成") return "已完成";
@@ -423,6 +474,7 @@ function renderCards(orders) {
                             <span class="serial-number">${item.serialnumber}</span>
                             <span class="time">${showTime}</span>
                             <span class="wake-type-tag">${formatWakeTypeDisplay(item)}</span>
+                            ${formatWakeProgressDisplay(item) ? `<span class="wake-progress-tag">${formatWakeProgressDisplay(item)}</span>` : ""}
                         </div>
                         <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;justify-content:flex-end;">
                             <span class="status-badge ${statusClass}">${item.status}</span>
@@ -820,7 +872,7 @@ async function batchTakeOrders() {
     showToast(`接单成功，共 ${successCount} 单。`, "success");
 }
 
-// 完成订单
+// 完成订单（多次类型：每次 +1，达次数后才结单入账）
 async function finishOrderByIdentity(identity) {
     let allOrders = await getOrders();
     const targetIndex = findOrderIndexByIdentity(allOrders, identity);
@@ -833,9 +885,30 @@ async function finishOrderByIdentity(identity) {
         alert("仅能完成「进行中」的订单！");
         return;
     }
-    targetOrder.status = "已完成";
-    // 传递当前时间作为完成时间
+    if (isStaff && !isAdmin && String(targetOrder.staffid || "") !== String(user.id || "")) {
+        alert("只能给自己接的订单记次！");
+        return;
+    }
+
     const completedTime = new Date();
+    if (isMultiWakeType(targetOrder)) {
+        const required = getWakeRequiredTimes(targetOrder);
+        let done = getWakeCompletedTimes(targetOrder) + 1;
+        if (done > required) done = required;
+        targetOrder.completed_times = done;
+        targetOrder.required_times = required;
+        if (done < required) {
+            await saveOrders(allOrders);
+            loadOrders();
+            showToast(`已记 1 次，进度 ${done}/${required}，达次数后才会完成并结算。`, "success");
+            return;
+        }
+    } else {
+        targetOrder.required_times = 1;
+        targetOrder.completed_times = 1;
+    }
+
+    targetOrder.status = "已完成";
     const settleRes = await settleOrderIncomeOnce(targetOrder, completedTime);
     targetOrder.salarysettled = settleRes.settled === true || settleRes.reason === "already_settled";
 
@@ -857,6 +930,7 @@ async function checkExpiredOrders() {
 
     for (const item of allOrders) {
         if (item.status === "已完成" && !item.salarysettled) {
+            if (!canSettleWakeOrder(item)) continue;
             const settleRes = await settleOrderIncomeOnce(item, now);
             const settled = settleRes.settled === true || settleRes.reason === "already_settled";
             if (settled) {
@@ -866,36 +940,49 @@ async function checkExpiredOrders() {
             continue;
         }
         if (item.status === "进行中") {
-            // 获取订单提交时间（JavaScript 会自动将 UTC 时间转换为本地时间）
             const submitDate = new Date(item.submittime);
-
-            // 获取订单提交日期（年-月-日，本地时间）
             const submitYear = submitDate.getFullYear();
             const submitMonth = submitDate.getMonth();
             const submitDay = submitDate.getDate();
-
-            // 获取当前日期（年-月-日，本地时间）
             const currentYear = now.getFullYear();
             const currentMonth = now.getMonth();
             const currentDay = now.getDate();
-
-            // 检查是否是昨天的订单（提交日期早于当前日期）
             const submitDateObj = new Date(submitYear, submitMonth, submitDay);
             const currentDateObj = new Date(currentYear, currentMonth, currentDay);
+            const todayKey = `${currentYear}-${String(currentMonth + 1).padStart(2, "0")}-${String(currentDay).padStart(2, "0")}`;
+
+            // 多次：跨日自动记 1 次；未达次数不结单、不入账
+            if (isMultiWakeType(item)) {
+                const required = getWakeRequiredTimes(item);
+                item.required_times = required;
+                if (submitDateObj < currentDateObj && String(item.progress_date || "") !== todayKey) {
+                    let done = getWakeCompletedTimes(item) + 1;
+                    if (done > required) done = required;
+                    item.completed_times = done;
+                    item.progress_date = todayKey;
+                    isUpdated = true;
+                    if (done >= required && !item.salarysettled) {
+                        item.status = "已完成";
+                        const settleRes = await settleOrderIncomeOnce(item, now);
+                        item.salarysettled = settleRes.settled === true || settleRes.reason === "already_settled";
+                    }
+                }
+                continue;
+            }
 
             if (submitDateObj < currentDateObj && !item.salarysettled) {
+                item.required_times = 1;
+                item.completed_times = 1;
                 item.status = "已完成";
-                // 传递当前时间作为完成时间
                 const settleRes = await settleOrderIncomeOnce(item, now);
                 item.salarysettled = settleRes.settled === true || settleRes.reason === "already_settled";
                 isUpdated = true;
             } else if (submitDateObj.getTime() === currentDateObj.getTime()) {
-                // 计算提交日期的午夜（本地时间）
                 const submitMidnight = new Date(submitYear, submitMonth, submitDay + 1);
-
                 if (now >= submitMidnight && !item.salarysettled) {
+                    item.required_times = 1;
+                    item.completed_times = 1;
                     item.status = "已完成";
-                    // 传递当前时间作为完成时间
                     const settleRes = await settleOrderIncomeOnce(item, now);
                     item.salarysettled = settleRes.settled === true || settleRes.reason === "already_settled";
                     isUpdated = true;
@@ -993,12 +1080,20 @@ function openAddWakeOrderModal() {
     setVal("addWakeTime", getDefaultWakeDateTimeLocal());
     setVal("addWakePhone", "");
     setVal("addWakeType", WAKE_TYPE_DEFAULT);
+    setVal("addWakeRequiredTimes", "2");
     setVal("addWakeNote", "");
+    syncAddWakeRequiredTimesUi();
     updateAddWakeAutoAmount();
     const modal = document.getElementById("addWakeOrderModal");
     if (modal) modal.style.display = "flex";
     const first = document.getElementById("addWakePhone");
     if (first) setTimeout(() => first.focus(), 50);
+}
+
+function syncAddWakeRequiredTimesUi() {
+    const type = normalizeWakeType(document.getElementById("addWakeType")?.value);
+    const wrap = document.getElementById("addWakeRequiredTimesWrap");
+    if (wrap) wrap.style.display = isMultiWakeType(type) ? "" : "none";
 }
 
 function closeAddWakeOrderModal() {
@@ -1017,6 +1112,13 @@ async function saveAddWakeOrder() {
     const note = document.getElementById("addWakeNote")?.value.trim() || "";
     const amountRaw = String(document.getElementById("addWakeAmount")?.value || "").trim();
     const inputAmount = parseFloat(amountRaw);
+    let requiredTimes = 1;
+    if (isMultiWakeType(waketype)) {
+        requiredTimes = parseInt(document.getElementById("addWakeRequiredTimes")?.value || "2", 10);
+        if (!Number.isFinite(requiredTimes) || requiredTimes < 2) {
+            return alert("多次类型请填写至少 2 次需完成次数");
+        }
+    }
 
     if (!waketime) return alert("请选择叫醒时间！");
     const wakeTimeDate = new Date(waketime);
@@ -1038,6 +1140,9 @@ async function saveAddWakeOrder() {
         waketime,
         phone,
         waketype,
+        required_times: requiredTimes,
+        completed_times: 0,
+        progress_date: "",
         note,
         amount: Number.isFinite(amount) ? amount : 0,
         status: "待接单",
@@ -1068,6 +1173,11 @@ window.addEventListener("DOMContentLoaded", () => {
         timeInput.__wakeAmountBound = true;
         timeInput.addEventListener("change", updateAddWakeAutoAmount);
         timeInput.addEventListener("input", updateAddWakeAutoAmount);
+    }
+    const typeSelect = document.getElementById("addWakeType");
+    if (typeSelect && !typeSelect.__wakeTimesBound) {
+        typeSelect.__wakeTimesBound = true;
+        typeSelect.addEventListener("change", syncAddWakeRequiredTimesUi);
     }
 });
 
@@ -1265,6 +1375,7 @@ const AI_ORDER_PARSE_SYSTEM_PROMPT = `你是叫醒订单识别助手。用户粘
 - wakeTimes: 可选，字符串数组；同一行同一号码有多个叫醒点时，把所有点都放进这里，每项均为 HH:mm。
 - wakeDate: 可选，字符串 YYYY-MM-DD；仅当原文明确「明天/后天/大后天/具体日期」对应叫醒日时才填，否则不要填（系统会用当天）。
 - waketype: 字符串，订单类型，只能是「叫醒」「回访」「多次叫醒」「多次回访」之一；原文未写则填「叫醒」。同一号码一行多个时刻优先「多次叫醒」；文案含回访且多时刻用「多次回访」；仅回访单次用「回访」。
+- required_times: 整数；多次叫醒/多次回访必填（如文案「两次」「7次」或 wakeTimes 个数）；单次类型填 1。
 - note: 字符串，除电话与时间外的提醒内容；没有则 ""。不要把类型词单独塞进 note（类型放 waketype）。
 
 【识别规则】
@@ -1416,12 +1527,17 @@ function parseWakeOrdersLocallyFromText(text) {
             .replace(/电话|手机|号码|[:：,，]/g, " ")
             .replace(/\s+/g, " ")
             .trim();
+        const waketype = inferWakeTypeFromAiItem({ note }, uniq.length);
+        const required = isMultiWakeType(waketype)
+            ? Math.max(2, parseRequiredTimesFromText(note) || uniq.length || 2)
+            : 1;
         out.push({
             phone,
             wakeTimes: uniq,
             wakeTime: uniq[0],
             note,
-            waketype: inferWakeTypeFromAiItem({ note }, uniq.length)
+            waketype,
+            required_times: required
         });
     });
     return out;
@@ -1688,16 +1804,52 @@ async function parseBatchOrders() {
                 .filter((x) => x != null && String(x).trim() !== "")
                 .join(" ");
 
+            const normalizedTimes = [];
             rawTimes.forEach((timeRaw) => {
                 const time = coerceTimeToHHmm(timeRaw, lineHint);
                 if (!time) {
                     warnings.push(`号码 ${phone}：时刻「${timeRaw}」无法解析，已跳过`);
                     return;
                 }
+                normalizedTimes.push(time);
+            });
+            if (normalizedTimes.length === 0) return;
+
+            const fromNoteTimes = parseRequiredTimesFromText(noteRaw, o.required_times, o.requiredTimes);
+            const requiredTimes = isMultiWakeType(waketype)
+                ? Math.max(2, fromNoteTimes || normalizedTimes.length || 2)
+                : 1;
+
+            // 多次：合并为一单，达次数后才结算；单次：仍按每个时刻一单
+            if (isMultiWakeType(waketype)) {
+                const amountSum = normalizedTimes.reduce((sum, t) => sum + Number(calculateAmountByTime(t) || 0), 0);
+                built.push({
+                    waketime: `${dateForRow}T${normalizedTimes[0]}`,
+                    phone,
+                    waketype,
+                    required_times: requiredTimes,
+                    completed_times: 0,
+                    progress_date: "",
+                    note,
+                    amount: Number(amountSum.toFixed(2)),
+                    status: "待接单",
+                    serialnumber: null,
+                    staffid: "",
+                    staffname: "",
+                    salarysettled: false,
+                    submittime: getChinaTimeISO()
+                });
+                return;
+            }
+
+            normalizedTimes.forEach((time) => {
                 built.push({
                     waketime: `${dateForRow}T${time}`,
                     phone,
                     waketype,
+                    required_times: 1,
+                    completed_times: 0,
+                    progress_date: "",
                     note,
                     amount: calculateAmountByTime(time),
                     status: "待接单",
@@ -1726,7 +1878,8 @@ async function parseBatchOrders() {
 
         let html = "<div>✅ 识别完成：</div>";
         parsedBatchOrders.forEach((it, i) => {
-            html += `<div>第${i + 1}单：${formatWakeTimeDisplay(it.waketime)} ${it.phone} ${formatWakeTypeDisplay(it)} 备注：${it.note}</div>`;
+            const prog = isMultiWakeType(it) ? ` ${getWakeRequiredTimes(it)}次达标结算` : "";
+            html += `<div>第${i + 1}单：${formatWakeTimeDisplay(it.waketime)} ${it.phone} ${formatWakeTypeDisplay(it)}${prog} 备注：${it.note}</div>`;
         });
         if (warnings.length) {
             html += '<div style="margin-top:10px;color:#b45309;font-size:13px;">⚠ 部分提示（已跳过无效项）：<br>' + warnings.map(w => `· ${w}`).join("<br>") + "</div>";

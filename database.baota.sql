@@ -28,6 +28,9 @@ CREATE TABLE IF NOT EXISTS `wake_orders` (
   `waketime` varchar(64) NOT NULL,
   `phone` varchar(32) NOT NULL,
   `waketype` varchar(32) NOT NULL DEFAULT '叫醒',
+  `required_times` int NOT NULL DEFAULT 1,
+  `completed_times` int NOT NULL DEFAULT 0,
+  `progress_date` varchar(16) DEFAULT '',
   `note` text,
   `amount` decimal(12,2) NOT NULL DEFAULT 0.00,
   `status` varchar(32) NOT NULL DEFAULT '待接单',
@@ -162,5 +165,8 @@ VALUES
 
 -- 已有库升级：叫醒订单类型（已存在会报 Duplicate column，可忽略）
 ALTER TABLE `wake_orders` ADD COLUMN `waketype` varchar(32) NOT NULL DEFAULT '叫醒' AFTER `phone`;
+ALTER TABLE `wake_orders` ADD COLUMN `required_times` int NOT NULL DEFAULT 1;
+ALTER TABLE `wake_orders` ADD COLUMN `completed_times` int NOT NULL DEFAULT 0;
+ALTER TABLE `wake_orders` ADD COLUMN `progress_date` varchar(16) DEFAULT '';
 
 SET FOREIGN_KEY_CHECKS = 1;

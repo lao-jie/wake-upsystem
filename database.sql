@@ -56,6 +56,9 @@ create table if not exists public.wake_orders (
   waketime text not null,
   phone text not null,
   waketype text not null default '叫醒',
+  required_times integer not null default 1,
+  completed_times integer not null default 0,
+  progress_date text default '',
   note text default '',
   amount numeric(12,2) not null default 0,
   status text not null default '待接单',
@@ -69,6 +72,9 @@ create table if not exists public.wake_orders (
 alter table public.wake_orders add column if not exists waketime text;
 alter table public.wake_orders add column if not exists phone text;
 alter table public.wake_orders add column if not exists waketype text;
+alter table public.wake_orders add column if not exists required_times integer;
+alter table public.wake_orders add column if not exists completed_times integer;
+alter table public.wake_orders add column if not exists progress_date text;
 alter table public.wake_orders add column if not exists note text;
 alter table public.wake_orders add column if not exists amount numeric(12,2);
 alter table public.wake_orders add column if not exists status text;

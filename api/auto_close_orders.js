@@ -54,34 +54,63 @@ export default async function handler(req, res) {
       });
     }
 
-    // 5. 先将超时单标记为已完成（不直接标记为已结算）
-    const updateResponse = await fetch(
-      `${SUPABASE_URL}/rest/v1/wake_orders?status=eq.进行中&submittime=lt.${todayZeroUTC.toISOString()}`,
-      {
-        method: "PATCH",
-        headers: {
-          "apikey": SUPABASE_SERVICE_KEY,
-          "Authorization": `Bearer ${SUPABASE_SERVICE_KEY}`,
-          "Content-Type": "application/json",
-          "Prefer": "return=representation"
-        },
-        body: JSON.stringify({ 
-          status: "已完成",
-          salarysettled: false 
-        })
+    const todayKey = `${beijingTime.getUTCFullYear()}-${String(beijingTime.getUTCMonth() + 1).padStart(2, "0")}-${String(beijingTime.getUTCDate()).padStart(2, "0")}`;
+    const isMultiType = (t) => {
+      const s = String(t || "").trim();
+      return s === "多次叫醒" || s === "多次回访";
+    };
+
+    // 5. 逐单处理：多次类型先记次，达次数才结单；普通类型直接完成
+    const updatedOrders = [];
+    for (const order of ordersToComplete) {
+      const patch = {};
+      if (isMultiType(order.waketype)) {
+        const required = Math.max(2, parseInt(order.required_times || 2, 10) || 2);
+        let done = Math.max(0, parseInt(order.completed_times || 0, 10) || 0);
+        if (String(order.progress_date || "") !== todayKey) {
+          done = Math.min(required, done + 1);
+          patch.completed_times = done;
+          patch.required_times = required;
+          patch.progress_date = todayKey;
+        } else {
+          done = Math.min(required, done);
+        }
+        if (done >= required) {
+          patch.status = "已完成";
+          patch.salarysettled = false;
+          patch.completed_times = required;
+          patch.required_times = required;
+        } else if (!Object.keys(patch).length) {
+          continue;
+        }
+      } else {
+        patch.status = "已完成";
+        patch.salarysettled = false;
+        patch.required_times = 1;
+        patch.completed_times = 1;
       }
-    );
 
-    if (!updateResponse.ok) {
-      const errorResult = await updateResponse.json();
-      return res.status(500).json({
-        error: "更新订单状态失败",
-        statusCode: updateResponse.status,
-        details: errorResult
-      });
+      const updateOne = await fetch(
+        `${SUPABASE_URL}/rest/v1/wake_orders?id=eq.${order.id}`,
+        {
+          method: "PATCH",
+          headers: {
+            "apikey": SUPABASE_SERVICE_KEY,
+            "Authorization": `Bearer ${SUPABASE_SERVICE_KEY}`,
+            "Content-Type": "application/json",
+            "Prefer": "return=representation"
+          },
+          body: JSON.stringify(patch)
+        }
+      );
+      if (!updateOne.ok) continue;
+      const rows = await updateOne.json();
+      const next = Array.isArray(rows) && rows[0] ? rows[0] : { ...order, ...patch };
+      // 仅已完成的进入结算
+      if (String(next.status || "") === "已完成") {
+        updatedOrders.push(next);
+      }
     }
-
-    const updatedOrders = await updateResponse.json();
 
     // 6. 逐单结算：写明细 -> 加余额 -> 标记该单已结算
     const settledOrderIds = [];

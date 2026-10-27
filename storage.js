@@ -29,6 +29,9 @@ async function saveOrders(orders) {
             waketype: (typeof normalizeWakeType === "function"
                 ? normalizeWakeType(order.waketype || order.wakeType)
                 : (String(order.waketype || order.wakeType || "叫醒").trim() || "叫醒")),
+            required_times: Math.max(1, parseInt(order.required_times ?? order.requiredTimes ?? 1, 10) || 1),
+            completed_times: Math.max(0, parseInt(order.completed_times ?? order.completedTimes ?? 0, 10) || 0),
+            progress_date: String(order.progress_date || order.progressDate || ""),
             note: order.note || '',
             amount: parseFloat(order.amount || order.money || 0), // 确保是数值类型
             status: order.status || '待接单',
