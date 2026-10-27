@@ -3614,20 +3614,26 @@ body.is-staff.is-mobile #staffProfileArea #profileOrderCards {
         display: none;
     }
 
-    html,
-    body {
+    html {
         overflow-x: hidden;
+        overflow-y: auto;
+        height: auto;
         overscroll-behavior-x: none;
-        touch-action: pan-y;
+        -webkit-overflow-scrolling: touch;
         -webkit-tap-highlight-color: transparent;
     }
 
     body {
+        display: block;
         flex-direction: column;
-        height: auto;
+        height: auto !important;
         min-height: 100vh;
         min-height: 100dvh;
-        overflow: visible;
+        overflow-x: hidden;
+        overflow-y: visible !important;
+        overscroll-behavior-x: none;
+        touch-action: manipulation;
+        -webkit-tap-highlight-color: transparent;
     }
 
     .sidebar {
@@ -3745,14 +3751,30 @@ body.is-staff.is-mobile #staffProfileArea #profileOrderCards {
     }
 
     .main-content {
+        display: block;
+        flex: none !important;
+        height: auto !important;
+        max-height: none !important;
+        min-height: 0;
+        overflow: visible !important;
+        -webkit-overflow-scrolling: touch;
         padding: 12px;
         padding-left: max(12px, env(safe-area-inset-left, 0px));
         padding-right: max(12px, env(safe-area-inset-right, 0px));
         padding-top: calc(56px + env(safe-area-inset-top, 0px));
         padding-bottom: calc(68px + env(safe-area-inset-bottom, 0px));
-        overscroll-behavior-y: contain;
+        overscroll-behavior-y: auto;
         border-radius: 16px 16px 0 0;
         box-shadow: 0 -2px 24px rgba(15, 23, 42, 0.06);
+    }
+
+    /* 叫醒接单大厅：避免卡片区域再套一层滚动/裁切 */
+    #page_wake,
+    #page_wake #orderCards,
+    body.is-mobile #page_wake .order-cards {
+        overflow: visible !important;
+        max-height: none !important;
+        height: auto !important;
     }
 
     .modal-overlay {
@@ -5686,7 +5708,7 @@ table td {
     }
 
     body.side-open {
-        overflow: hidden;
+        overflow: hidden !important;
     }
 
     .sidebar {
@@ -5706,10 +5728,12 @@ table td {
         transform: translateX(-105%);
         transition: transform 0.22s ease;
         overflow: hidden;
+        pointer-events: none;
     }
 
     body.side-open .sidebar {
         transform: translateX(0);
+        pointer-events: auto;
     }
 
     .sidebar-header {
@@ -5848,11 +5872,24 @@ table td {
 
     .main-content {
         padding-top: calc(52px + env(safe-area-inset-top, 0px) + 12px) !important;
-        padding-bottom: calc(16px + env(safe-area-inset-bottom, 0px)) !important;
+        padding-bottom: calc(24px + env(safe-area-inset-bottom, 0px)) !important;
         border-radius: 0 !important;
         box-shadow: none !important;
         width: 100% !important;
         margin-left: 0 !important;
+        overflow: visible !important;
+        height: auto !important;
+        max-height: none !important;
+        flex: none !important;
+    }
+
+    /* 侧栏收起时不拦截页面滑动 */
+    .sidebar {
+        pointer-events: none;
+    }
+
+    body.side-open .sidebar {
+        pointer-events: auto;
     }
 
     .supervise-page .main-content {
