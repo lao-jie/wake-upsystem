@@ -280,13 +280,14 @@ function wakePhoneCellHtml(item) {
 
 function getWakeRowActionHtml(item) {
     if (isAdmin) {
+        const identity = escapeJsSingleQuote(getOrderIdentity(item));
+        const editBtn = `<button type="button" class="ghost wake-edit-btn" onclick="event.stopPropagation();openEditWakeOrderModal('${identity}')">编辑</button>`;
         if (item.status === "进行中") {
-            const identity = escapeJsSingleQuote(getOrderIdentity(item));
             const label = isMultiWakeType(item) ? "记一次" : "完成";
-            return `<button class="success" onclick="finishOrderByIdentity('${identity}')">${label}</button>`;
+            return `${editBtn} <button class="success" onclick="event.stopPropagation();finishOrderByIdentity('${identity}')">${label}</button>`;
         }
-        if (item.status === "待接单") return "待接单";
-        return "已完成";
+        if (item.status === "待接单") return `${editBtn}`;
+        return `${editBtn}`;
     }
     if (isStaff && item.status === "待接单") {
         const identity = escapeJsSingleQuote(getOrderIdentity(item));
@@ -466,11 +467,15 @@ function renderCards(orders) {
                 const note = noteRaw && noteRaw !== "-" ? noteRaw : "-";
                 const footerHint = isStaff ? "勾选后可一键接单" : "勾选后可批量删改";
 
+                const identity = escapeJsSingleQuote(getOrderIdentity(item));
+                const cardClick = isAdmin
+                    ? `onclick="openEditWakeOrderModal('${identity}')" style="cursor:pointer;"`
+                    : "";
                 html += `
-                <div class="order-card">
+                <div class="order-card" ${cardClick}>
                     <div class="order-card-header">
                         <div class="order-card-title">
-                            <input type="checkbox" class="order-checkbox" value="${escapeJsSingleQuote(getOrderIdentity(item))}" ${item.status !== "待接单" ? "data-status='processed'" : ""}>
+                            <input type="checkbox" class="order-checkbox" value="${identity}" ${item.status !== "待接单" ? "data-status='processed'" : ""} onclick="event.stopPropagation()">
                             <span class="serial-number">${item.serialnumber}</span>
                             <span class="time">${showTime}</span>
                             <span class="wake-type-tag">${formatWakeTypeDisplay(item)}</span>
@@ -499,8 +504,8 @@ function renderCards(orders) {
                             <div class="v">${formatSubmitTimeCompact(item.submittime)}</div>
                         </div>
                     </div>
-                    <div class="order-card-footer">
-                        <div style="color:#64748b;font-size:12px;">${footerHint}</div>
+                    <div class="order-card-footer" onclick="event.stopPropagation()">
+                        <div style="color:#64748b;font-size:12px;">${isAdmin ? "点击卡片可编辑" : footerHint}</div>
                         <div>${actionHtml}</div>
                     </div>
                 </div>`;
@@ -546,15 +551,19 @@ function renderTable(orders) {
             case "进行中": statusClass = "status-processing"; break;
             case "已完成": statusClass = "status-done"; break;
         }
+        const identity = escapeJsSingleQuote(getOrderIdentity(item));
+        const rowClick = isAdmin
+            ? `class="wake-order-row" style="cursor:pointer;" onclick="openEditWakeOrderModal('${identity}')"`
+            : "";
         return `
-                <tr>
-                    <td><input type="checkbox" class="order-checkbox" value="${escapeJsSingleQuote(getOrderIdentity(item))}" ${item.status !== "待接单" ? "data-status='processed'" : ""}></td>
+                <tr ${rowClick}>
+                    <td onclick="event.stopPropagation()"><input type="checkbox" class="order-checkbox" value="${identity}" ${item.status !== "待接单" ? "data-status='processed'" : ""}></td>
                     <td>${wakeTimeCellHtml(item)}</td>
                     <td class="wake-phone-cell">${wakePhoneCellHtml(item)}</td>
-                    <td>${wakeStaffNameCellHtml(item)}</td>
+                    <td onclick="event.stopPropagation()">${wakeStaffNameCellHtml(item)}</td>
                     <td><span class="status-badge ${statusClass}">${item.status}</span></td>
                     <td>${formatMoneyDisplay(item.amount ?? item.money)}</td>
-                    <td>${getWakeRowActionHtml(item)}</td>
+                    <td onclick="event.stopPropagation()">${getWakeRowActionHtml(item)}</td>
                     <td title="${formatTime(item.submittime)}">${formatSubmitTimeCompact(item.submittime)}</td>
                 </tr>`;
     };
@@ -624,7 +633,7 @@ function wakeStaffNameCellHtml(item) {
         ? escapeHtml(rawName)
         : String(rawName).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/"/g, "&quot;");
     const identity = escapeJsSingleQuote(getOrderIdentity(item));
-    return `<button type="button" class="wake-staff-link" title="转派给其他叫醒员" onclick="openWakeReassignModal('${identity}')">${safeName}</button>`;
+    return `<button type="button" class="wake-staff-link" title="转派给其他叫醒员" onclick="event.stopPropagation();openWakeReassignModal('${identity}')">${safeName}</button>`;
 }
 
 function closeWakeReassignModal() {
@@ -1179,6 +1188,16 @@ window.addEventListener("DOMContentLoaded", () => {
         typeSelect.__wakeTimesBound = true;
         typeSelect.addEventListener("change", syncAddWakeRequiredTimesUi);
     }
+    const editTimeInput = document.getElementById("editWakeTime");
+    if (editTimeInput && !editTimeInput.__wakeAmountBound) {
+        editTimeInput.__wakeAmountBound = true;
+        editTimeInput.addEventListener("change", updateEditWakeAutoAmount);
+    }
+    const editTypeSelect = document.getElementById("editWakeType");
+    if (editTypeSelect && !editTypeSelect.__wakeTimesBound) {
+        editTypeSelect.__wakeTimesBound = true;
+        editTypeSelect.addEventListener("change", syncEditWakeRequiredTimesUi);
+    }
 });
 
 /** 仅用于管理员主动「删除选中」；自动清理超期订单（cleanExpiredOrders）不得调用，以免扣回已发工资。 */
@@ -1267,49 +1286,154 @@ async function deleteSelected() {
     }
 }
 
-// 修改选中订单
+let editingWakeOrderIdentity = "";
+
+function toDatetimeLocalValue(waketime) {
+    const raw = String(waketime || "").trim();
+    if (!raw) return "";
+    // 已是 datetime-local 形态
+    if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/.test(raw)) return raw.slice(0, 16);
+    const d = new Date(raw);
+    if (Number.isNaN(d.getTime())) return raw.slice(0, 16);
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, "0");
+    const day = String(d.getDate()).padStart(2, "0");
+    const hh = String(d.getHours()).padStart(2, "0");
+    const mm = String(d.getMinutes()).padStart(2, "0");
+    return `${y}-${m}-${day}T${hh}:${mm}`;
+}
+
+function syncEditWakeRequiredTimesUi() {
+    const type = normalizeWakeType(document.getElementById("editWakeType")?.value);
+    const wrap = document.getElementById("editWakeRequiredTimesWrap");
+    if (wrap) wrap.style.display = isMultiWakeType(type) ? "" : "none";
+}
+
+function updateEditWakeAutoAmount() {
+    const waketime = document.getElementById("editWakeTime")?.value || "";
+    const amountInput = document.getElementById("editWakeAmount");
+    if (!amountInput) return;
+    const timePart = String(waketime).split("T")[1] || "";
+    if (!timePart) return;
+    const amount = Number(calculateAmountByTime(timePart));
+    if (Number.isFinite(amount)) amountInput.value = amount.toFixed(2);
+}
+
+async function openEditWakeOrderModal(identity) {
+    if (!isAdmin) {
+        alert("只有管理员可以编辑叫醒订单");
+        return;
+    }
+    const key = String(identity || "").trim();
+    if (!key) return;
+    const allOrders = await getOrders();
+    const row = allOrders.find((item) => getOrderIdentity(item) === key);
+    if (!row) {
+        alert("订单不存在！");
+        return;
+    }
+    editingWakeOrderIdentity = key;
+    const setVal = (id, value) => {
+        const el = document.getElementById(id);
+        if (el) el.value = value == null ? "" : String(value);
+    };
+    setVal("editWakeTime", toDatetimeLocalValue(row.waketime));
+    setVal("editWakePhone", row.phone || "");
+    setVal("editWakeType", formatWakeTypeDisplay(row));
+    setVal("editWakeRequiredTimes", String(getWakeRequiredTimes(row)));
+    setVal("editWakeCompletedTimes", String(getWakeCompletedTimes(row)));
+    setVal("editWakeAmount", Number(row.amount || row.money || 0).toFixed(2));
+    setVal("editWakeStatus", row.status || "待接单");
+    setVal("editWakeStaffName", row.staffname || "");
+    setVal("editWakeStaffId", row.staffid || "");
+    setVal("editWakeNote", row.note === "-" ? "" : (row.note || ""));
+    syncEditWakeRequiredTimesUi();
+    const modal = document.getElementById("editWakeOrderModal");
+    if (modal) modal.style.display = "flex";
+}
+
+function closeEditWakeOrderModal() {
+    const modal = document.getElementById("editWakeOrderModal");
+    if (modal) modal.style.display = "none";
+    editingWakeOrderIdentity = "";
+}
+
+async function saveEditWakeOrder() {
+    if (!isAdmin) {
+        alert("只有管理员可以编辑叫醒订单");
+        return;
+    }
+    if (!editingWakeOrderIdentity) return;
+    const allOrders = await getOrders();
+    const idx = allOrders.findIndex((item) => getOrderIdentity(item) === editingWakeOrderIdentity);
+    if (idx < 0) {
+        alert("订单不存在！");
+        return;
+    }
+
+    const waketime = document.getElementById("editWakeTime")?.value || "";
+    const phone = document.getElementById("editWakePhone")?.value.trim() || "";
+    const waketype = normalizeWakeType(document.getElementById("editWakeType")?.value);
+    const note = document.getElementById("editWakeNote")?.value.trim() || "";
+    const status = document.getElementById("editWakeStatus")?.value.trim() || "待接单";
+    const staffname = document.getElementById("editWakeStaffName")?.value.trim() || "";
+    const staffid = document.getElementById("editWakeStaffId")?.value.trim() || "";
+    const amountRaw = String(document.getElementById("editWakeAmount")?.value || "").trim();
+    const amount = parseFloat(amountRaw);
+
+    if (!waketime) return alert("请选择叫醒时间！");
+    if (!/^1[3-9]\d{9}$/.test(phone)) return alert("请输入11位有效手机号！");
+    if (!["待接单", "进行中", "已完成"].includes(status)) return alert("状态无效");
+
+    let requiredTimes = 1;
+    let completedTimes = 0;
+    if (isMultiWakeType(waketype)) {
+        requiredTimes = parseInt(document.getElementById("editWakeRequiredTimes")?.value || "2", 10);
+        completedTimes = parseInt(document.getElementById("editWakeCompletedTimes")?.value || "0", 10);
+        if (!Number.isFinite(requiredTimes) || requiredTimes < 2) {
+            return alert("多次类型请填写至少 2 次需完成次数");
+        }
+        if (!Number.isFinite(completedTimes) || completedTimes < 0) completedTimes = 0;
+        if (completedTimes > requiredTimes) completedTimes = requiredTimes;
+    }
+
+    const row = { ...allOrders[idx] };
+    row.waketime = waketime;
+    row.phone = phone;
+    row.waketype = waketype;
+    row.required_times = requiredTimes;
+    row.completed_times = completedTimes;
+    row.note = note || "-";
+    row.status = status;
+    row.staffname = staffname;
+    row.staffid = staffid;
+    row.amount = Number.isFinite(amount) ? amount : Number(calculateAmountByTime(waketime.split("T")[1] || "") || 0);
+    row.money = row.amount;
+    if (status === "待接单" && !staffid && !staffname) {
+        row.staffid = "";
+        row.staffname = "";
+    }
+    // 已完成且多次达次数，或普通已完成：允许补结算标记由后续定时任务处理；此处不强制改 salarysettled
+    if (status !== "已完成") {
+        // 未完成时保持原结算标记，一般未结算
+    }
+
+    allOrders[idx] = row;
+    await saveOrders(allOrders);
+    closeEditWakeOrderModal();
+    loadOrders();
+    if (typeof showToast === "function") showToast("修改成功。", "success");
+    else alert("修改成功！");
+}
+
+// 修改选中订单 → 打开编辑弹窗
 async function editSelected() {
     const checkedKeys = Array.from(document.querySelectorAll(".order-checkbox:checked"))
         .map((cb) => String(cb.value || "").trim())
         .filter(Boolean);
 
     if (checkedKeys.length !== 1) return alert("请仅选择一条订单进行修改！");
-
-    let allOrders = await getOrders();
-    const targetIndex = allOrders.findIndex((item) => getOrderIdentity(item) === checkedKeys[0]);
-    if (targetIndex === -1) return alert("订单不存在！");
-
-    const target = allOrders[targetIndex];
-    const newTime = prompt("修改叫醒时间（格式：YYYY-MM-DDTHH:MM）", target.waketime);
-    const newPhone = prompt("修改手机号", target.phone);
-    const newType = prompt(
-        `修改类型（${WAKE_TYPE_OPTIONS.join(" / ")}）`,
-        formatWakeTypeDisplay(target)
-    );
-    const newNote = prompt("修改备注", target.note);
-
-    if (!newTime || !newPhone) return alert("时间和手机号不能为空！");
-    if (!/^1[3-9]\d{9}$/.test(newPhone)) return alert("手机号格式错误！");
-    if (newType == null) return;
-    const normalizedType = normalizeWakeType(newType, "");
-    if (!normalizedType) return alert(`类型无效，请填写：${WAKE_TYPE_OPTIONS.join("、")}`);
-    const newTimeDate = new Date(newTime);
-    const now = new Date();
-    if (newTimeDate < now) {
-        alert("不能选择过去的时间作为叫醒时间！");
-        return;
-    }
-
-    target.waketime = newTime;
-    target.phone = newPhone;
-    target.waketype = normalizedType;
-    target.note = newNote;
-    target.amount = calculateAmountByTime(newTime.split('T')[1]);
-    target.money = target.amount;
-
-    await saveOrders(allOrders);
-    loadOrders();
-    alert("修改成功！");
+    await openEditWakeOrderModal(checkedKeys[0]);
 }
 
 // 搜索订单

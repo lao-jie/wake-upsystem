@@ -3426,6 +3426,21 @@ body.is-staff.is-mobile #staffProfileArea #profileOrderCards {
     margin-top: 16px;
 }
 
+.wake-order-clickable {
+    cursor: pointer;
+}
+
+.wake-order-row:hover {
+    background-color: rgba(219, 234, 254, 0.55) !important;
+}
+
+.order-detail-table td .wake-edit-btn,
+.order-card-footer .wake-edit-btn {
+    margin-right: 6px;
+    padding: 4px 10px;
+    font-size: 12px;
+}
+
 .order-card {
     background: var(--glass-strong);
     backdrop-filter: blur(12px);

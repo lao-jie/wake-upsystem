@@ -9,13 +9,13 @@
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="default">
     <title>老街网创 - 叫醒订单管理</title>
-    <link rel="stylesheet" href="styles.css?v=20261027w6">
+    <link rel="stylesheet" href="styles.css?v=20261028e1">
     <script src="db-client.js?v=20261026m"></script>
     <script src="https://unpkg.com/lucide@latest"></script>
     <script src="config.js?v=20261026m" defer></script>
     <script src="utils.js" defer></script>
     <script src="storage.js" defer></script>
-    <script src="order.js?v=20261027w5" defer></script>
+    <script src="order.js?v=20261028e1" defer></script>
     <script src="staff.js" defer></script>
     <script src="app.js" defer></script>
 </head>
@@ -1011,6 +1011,83 @@
             <div class="modal-footer">
                 <button type="button" class="ghost" onclick="closeAddWakeOrderModal()">取消</button>
                 <button type="button" class="success" onclick="saveAddWakeOrder()">确认添加</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 管理员：编辑叫醒订单 -->
+    <div class="modal-overlay" id="editWakeOrderModal">
+        <div class="modal-box" style="max-width: 520px;">
+            <div class="modal-header"
+                style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
+                <h3>编辑叫醒订单</h3>
+                <button type="button" class="modal-close" onclick="closeEditWakeOrderModal()"
+                    style="background: none; border: none; font-size: 20px; cursor: pointer; color: #64748b;">✕</button>
+            </div>
+            <div class="modal-form-item">
+                <label for="editWakeTime">叫醒时间</label>
+                <input type="datetime-local" id="editWakeTime">
+            </div>
+            <div class="modal-form-item" style="display:grid; grid-template-columns:1fr 1fr; gap:10px;">
+                <div>
+                    <label for="editWakePhone">电话</label>
+                    <input type="text" id="editWakePhone" placeholder="11位手机号" maxlength="11" inputmode="numeric">
+                </div>
+                <div>
+                    <label for="editWakeType">类型</label>
+                    <select id="editWakeType">
+                        <option value="叫醒">叫醒</option>
+                        <option value="回访">回访</option>
+                        <option value="多次叫醒">多次叫醒</option>
+                        <option value="多次回访">多次回访</option>
+                    </select>
+                </div>
+            </div>
+            <div class="modal-form-item" id="editWakeRequiredTimesWrap" style="display:none;">
+                <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px;">
+                    <div>
+                        <label for="editWakeRequiredTimes">需完成次数</label>
+                        <input type="number" id="editWakeRequiredTimes" min="2" step="1" value="2">
+                    </div>
+                    <div>
+                        <label for="editWakeCompletedTimes">已完成次数</label>
+                        <input type="number" id="editWakeCompletedTimes" min="0" step="1" value="0">
+                    </div>
+                </div>
+                <div style="margin-top:6px;font-size:12px;color:#64748b;">达次数后才会完成并结算。</div>
+            </div>
+            <div class="modal-form-item" style="display:grid; grid-template-columns:1fr 1fr; gap:10px;">
+                <div>
+                    <label for="editWakeAmount">结算金额（元）</label>
+                    <input type="number" id="editWakeAmount" step="0.01" min="0" placeholder="0.00">
+                </div>
+                <div>
+                    <label for="editWakeStatus">状态</label>
+                    <select id="editWakeStatus">
+                        <option value="待接单">待接单</option>
+                        <option value="进行中">进行中</option>
+                        <option value="已完成">已完成</option>
+                    </select>
+                </div>
+            </div>
+            <div class="modal-form-item" style="display:grid; grid-template-columns:1fr 1fr; gap:10px;">
+                <div>
+                    <label for="editWakeStaffName">叫醒员</label>
+                    <input type="text" id="editWakeStaffName" placeholder="姓名（可空）">
+                </div>
+                <div>
+                    <label for="editWakeStaffId">员工账号 ID</label>
+                    <input type="text" id="editWakeStaffId" placeholder="可空">
+                </div>
+            </div>
+            <div class="modal-form-item">
+                <label for="editWakeNote">备注</label>
+                <textarea id="editWakeNote" rows="3" placeholder="备注信息"
+                    style="width:100%;box-sizing:border-box;min-height:72px;resize:vertical;"></textarea>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="ghost" onclick="closeEditWakeOrderModal()">取消</button>
+                <button type="button" class="success" onclick="saveEditWakeOrder()">保存修改</button>
             </div>
         </div>
     </div>
