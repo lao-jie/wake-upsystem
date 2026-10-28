@@ -256,7 +256,13 @@ function showPage(page) {
         // 根据用户角色更新页面标题
         const wakePageTitle = document.getElementById("wakePageTitle");
         if (wakePageTitle) {
-            wakePageTitle.innerText = isStaff ? "接单大厅" : "叫醒订单管理";
+            if (isStaff) {
+                wakePageTitle.innerText = "";
+                wakePageTitle.style.display = "none";
+            } else {
+                wakePageTitle.innerText = "叫醒订单管理";
+                wakePageTitle.style.display = "";
+            }
         }
         loadOrders();
     } else if (page === "noticeSetting") {
