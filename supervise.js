@@ -160,6 +160,61 @@ function getSuperviseTaskStartDateStr(row) {
     return getLocalDateString();
 }
 
+/** 开始日 + 次数 - 1（含首尾）→ 预计结束日期 YYYY-MM-DD */
+function getSuperviseEndDateStr(startDateStr, duration) {
+    const start = parseDateOnlyToLocal(String(startDateStr || "").trim());
+    if (!start) return "";
+    const total = Math.max(1, getDurationDays(duration || "1次"));
+    const end = new Date(start.getFullYear(), start.getMonth(), start.getDate() + total - 1);
+    return getLocalDateString(end);
+}
+
+function syncSuperviseWakeTimeWithStartDate(row, startDateStr) {
+    const startDate = String(startDateStr || "").trim();
+    if (!row || !/^\d{4}-\d{2}-\d{2}$/.test(startDate)) return;
+    const wake = String(row.waketime || "").trim();
+    const timePart = (wake.match(/T(\d{2}:\d{2}(?::\d{2})?)/) || [])[1] || "09:00";
+    row.waketime = `${startDate}T${timePart}`;
+}
+
+function updateTakeSuperviseEndDateHint() {
+    const hint = document.getElementById("takeSuperviseEndDateHint");
+    if (!hint) return;
+    const startDate = String(document.getElementById("takeSuperviseStartDate")?.value || "").trim();
+    const row = (window.__pendingTakeSuperviseRow || null);
+    const endDate = getSuperviseEndDateStr(startDate, row?.duration || "1次");
+    const days = Math.max(1, getDurationDays(row?.duration || "1次"));
+    hint.textContent = endDate
+        ? `预计结束日期：${endDate}（共 ${days} 天，含开始日）`
+        : "预计结束日期：请先选择开始日期";
+}
+
+function updateAddSuperviseEndDateHint() {
+    const hint = document.getElementById("addSvEndDateHint");
+    if (!hint) return;
+    const startDate = String(document.getElementById("addSvStartDate")?.value || "").trim();
+    const durationRaw = document.getElementById("addSvDuration")?.value || "1次";
+    const duration = getDurationTextForSave(durationRaw);
+    const endDate = getSuperviseEndDateStr(startDate, duration);
+    const days = Math.max(1, getDurationDays(duration));
+    hint.textContent = endDate
+        ? `预计结束日期：${endDate}（共 ${days} 天，含开始日）`
+        : "预计结束日期：请先选择开始日期";
+}
+
+function updateEditSuperviseEndDateHint() {
+    const hint = document.getElementById("editSvEndDateHint");
+    if (!hint) return;
+    const startDate = String(document.getElementById("editSvStartDate")?.value || "").trim();
+    const durationRaw = document.getElementById("editSvDuration")?.value || "1次";
+    const duration = getDurationTextForSave(durationRaw);
+    const endDate = getSuperviseEndDateStr(startDate, duration);
+    const days = Math.max(1, getDurationDays(duration));
+    hint.textContent = endDate
+        ? `预计结束日期：${endDate}（共 ${days} 天，含开始日）`
+        : "预计结束日期：请先选择开始日期";
+}
+
 function normalizeTakeStartModeByProject(project, mode) {
     const p = String(project || "").trim();
     const m = String(mode || "").trim();
@@ -711,6 +766,7 @@ function openAddSuperviseOrderModal() {
     setVal("addSvNote", "");
     syncSuperviseVideoHoursUi("add");
     updateAddSuperviseAutoPrice();
+    updateAddSuperviseEndDateHint();
     const modal = document.getElementById("addSuperviseOrderModal");
     if (modal) modal.style.display = "flex";
     const first = document.getElementById("addSvOrderNo");
@@ -1176,17 +1232,22 @@ async function rollbackSuperviseIncomeIfSettled(row, rollbackTime = new Date()) 
 
 function getExpectedDateSet(row) {
     const set = new Set();
-    const start = parseDateOnlyToLocal(row?.startdate) || new Date(row?.submittime || Date.now());
+    const start =
+        parseDateOnlyToLocal(getSuperviseTaskStartDateStr(row)) ||
+        parseDateOnlyToLocal(row?.startdate) ||
+        new Date(row?.submittime || Date.now());
     const today = parseDateOnlyToLocal(getLocalDateString()) || new Date();
     const requiredDays = getDurationDays(row?.duration || "1次");
     const total = Math.max(1, requiredDays);
     const endByDuration = new Date(start.getFullYear(), start.getMonth(), start.getDate() + total - 1);
+    // 「待传」只标到今天：未到期的未来日不提前要求提交
     let end = endByDuration < today ? endByDuration : today;
     if (String(row?.project || "").trim() === "监督早睡早起") {
         const N = Math.max(1, requiredDays);
         const sleepDone = countPassedSuperviseSlotLabel(row, "监督早睡");
         const wakeDone = countPassedSuperviseSlotLabel(row, "监督早起");
-        if (sleepDone < N || wakeDone < N) {
+        // 次数未满且理论周期已过：开放到今天以便补交（不把未到期周期截成「只有今天」）
+        if ((sleepDone < N || wakeDone < N) && endByDuration < today) {
             end = today;
         }
     }
@@ -1386,6 +1447,7 @@ async function openEditSuperviseOrderModal(taskId) {
     setVal("editSvNote", row.note === "-" ? "" : (row.note || ""));
     setVal("editSvStaffId", row.staffid || "");
     syncSuperviseVideoHoursUi("edit");
+    updateEditSuperviseEndDateHint();
     const modal = document.getElementById("editSuperviseOrderModal");
     if (modal) modal.style.display = "flex";
 }
@@ -1446,6 +1508,7 @@ async function saveEditSuperviseOrder() {
     row.staffid = staffid;
     row.status = status;
     row.startdate = startdate || row.startdate || "";
+    if (row.startdate) syncSuperviseWakeTimeWithStartDate(row, row.startdate);
     row.note = note;
     if (status === "待接单" && !staffid && !supervisor) {
         row.staffid = "";
@@ -1691,11 +1754,13 @@ async function takeSuperviseTask(id) {
         return;
     }
     pendingTakeTaskId = String(id || "");
+    window.__pendingTakeSuperviseRow = row;
     const modal = document.getElementById("takeSuperviseModal");
     const startInput = document.getElementById("takeSuperviseStartDate");
     const modeSelect = document.getElementById("takeSuperviseStartMode");
     const modeWrap = document.getElementById("takeSuperviseStartModeWrap");
     if (startInput) startInput.value = getSuperviseTaskStartDateStr(row);
+    updateTakeSuperviseEndDateHint();
     const isSleepWakeProject = String(row.project || "").trim() === "监督早睡早起";
     if (modeWrap) modeWrap.style.display = isSleepWakeProject ? "block" : "none";
     if (modeSelect) {
@@ -1708,6 +1773,7 @@ function closeTakeSuperviseModal() {
     const modal = document.getElementById("takeSuperviseModal");
     if (modal) modal.style.display = "none";
     pendingTakeTaskId = "";
+    window.__pendingTakeSuperviseRow = null;
 }
 
 async function confirmTakeSuperviseTask() {
@@ -1730,6 +1796,7 @@ async function confirmTakeSuperviseTask() {
     row.staffname = currentSuperviseUser?.name || "";
     row.supervisor = currentSuperviseUser?.name || currentSuperviseUser?.id || row.supervisor || "";
     row.startdate = startDate;
+    syncSuperviseWakeTimeWithStartDate(row, startDate);
     row.startmode = normalizeTakeStartModeByProject(row.project, modeSelect?.value || "");
     row.dailylogs = row.dailylogs && typeof row.dailylogs === "object" ? row.dailylogs : {};
     const next = generateFixedSerial(all);
@@ -1745,11 +1812,20 @@ function renderSuperviseCalendar(taskId, targetMonthDate) {
         const row = all.find((it) => String(it.id) === taskIdStr);
         if (!row) return;
 
-        const baseDate = targetMonthDate || parseDateOnlyToLocal(row.startdate) || new Date(row.submittime || Date.now());
+        const startDateStr = getSuperviseTaskStartDateStr(row);
+        const baseDate = targetMonthDate || parseDateOnlyToLocal(startDateStr) || new Date(row.submittime || Date.now());
         currentCalendarMonthCursor = new Date(baseDate.getFullYear(), baseDate.getMonth(), 1);
         const monthLabel = document.getElementById("superviseCalendarMonthLabel");
         if (monthLabel) {
             monthLabel.textContent = `${currentCalendarMonthCursor.getFullYear()}年${String(currentCalendarMonthCursor.getMonth() + 1).padStart(2, "0")}月`;
+        }
+        const periodHint = document.getElementById("superviseCalendarPeriodHint");
+        if (periodHint) {
+            const endDateStr = getSuperviseEndDateStr(startDateStr, row.duration || "1次");
+            const days = Math.max(1, getDurationDays(row.duration || "1次"));
+            periodHint.textContent = endDateStr
+                ? `监督周期：${startDateStr} ～ ${endDateStr}（共 ${days} 天）`
+                : `监督周期：${startDateStr || "--"} 起`;
         }
 
         const grid = document.getElementById("superviseCalendarGrid");
@@ -2738,11 +2814,17 @@ window.addEventListener("DOMContentLoaded", async () => {
                 lastDurationValue = addDurationSelect.value;
             }
             updateAddSuperviseAutoPrice();
+            updateAddSuperviseEndDateHint();
         });
     }
     if (addDailyHoursInput) {
         addDailyHoursInput.addEventListener("input", updateAddSuperviseAutoPrice);
         addDailyHoursInput.addEventListener("change", updateAddSuperviseAutoPrice);
+    }
+    const addStartDateInput = document.getElementById("addSvStartDate");
+    if (addStartDateInput) {
+        addStartDateInput.addEventListener("change", updateAddSuperviseEndDateHint);
+        addStartDateInput.addEventListener("input", updateAddSuperviseEndDateHint);
     }
     const editProjectSelect = document.getElementById("editSvProject");
     const editDurationSelect = document.getElementById("editSvDuration");
@@ -2770,11 +2852,22 @@ window.addEventListener("DOMContentLoaded", async () => {
                 lastDurationValue = editDurationSelect.value;
             }
             updateEditSuperviseAutoPrice();
+            updateEditSuperviseEndDateHint();
         });
     }
     if (editDailyHoursInput) {
         editDailyHoursInput.addEventListener("input", updateEditSuperviseAutoPrice);
         editDailyHoursInput.addEventListener("change", updateEditSuperviseAutoPrice);
+    }
+    const editStartDateInput = document.getElementById("editSvStartDate");
+    if (editStartDateInput) {
+        editStartDateInput.addEventListener("change", updateEditSuperviseEndDateHint);
+        editStartDateInput.addEventListener("input", updateEditSuperviseEndDateHint);
+    }
+    const takeStartDateInput = document.getElementById("takeSuperviseStartDate");
+    if (takeStartDateInput) {
+        takeStartDateInput.addEventListener("change", updateTakeSuperviseEndDateHint);
+        takeStartDateInput.addEventListener("input", updateTakeSuperviseEndDateHint);
     }
     const dailyInput = document.getElementById("calendarSuperviseImage");
     if (dailyInput) {
@@ -2851,7 +2944,8 @@ function showProgressModal(taskId) {
                     <div style="margin-bottom: 4px;"><strong>剩余：</strong>${Math.max(0, N - completedDays)}次</div>
                     ${countLine}
                     <div style="margin-bottom: 4px;"><strong>状态：</strong>${task.status || "-"}</div>
-                    <div><strong>开始时间：</strong>${task.waketime || "-"}</div>
+                    <div style="margin-bottom: 4px;"><strong>开始日期：</strong>${getSuperviseTaskStartDateStr(task)}</div>
+                    <div><strong>预计结束：</strong>${getSuperviseEndDateStr(getSuperviseTaskStartDateStr(task), task.duration || "1次") || "-"}</div>
                 </div>
             </div>
         </div>

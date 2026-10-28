@@ -175,6 +175,7 @@
                             onclick="closeSuperviseCalendarModal()">×</button>
                     </div>
                 </div>
+                <div id="superviseCalendarPeriodHint" style="margin:6px 0 0;font-size:12px;color:#64748b;">监督周期：--</div>
                 <div id="superviseCalendarLegend" class="sv-cal-legend">
                     <span class="sv-cal-legend__item">✅ 已完成</span>
                     <span class="sv-cal-legend__item" title="仅通过部分（如早睡早起只传了 1 张）">🔸 部分</span>
@@ -261,6 +262,7 @@
             <div class="modal-form-item">
                 <label for="takeSuperviseStartDate">开始监督日期</label>
                 <input type="date" id="takeSuperviseStartDate">
+                <div id="takeSuperviseEndDateHint" style="margin-top:6px;font-size:12px;color:#64748b;">预计结束日期：--</div>
             </div>
             <div class="modal-form-item" id="takeSuperviseStartModeWrap">
                 <label for="takeSuperviseStartMode">当天监督模式（仅首日）</label>
@@ -363,6 +365,7 @@
                     <input type="date" id="addSvStartDate">
                 </div>
             </div>
+            <div id="addSvEndDateHint" style="margin:-4px 0 10px;font-size:12px;color:#64748b;">预计结束日期：--</div>
             <div class="modal-form-item">
                 <label for="addSvNote">备注</label>
                 <textarea id="addSvNote" rows="3" placeholder="备注（选填）" style="width:100%;box-sizing:border-box;min-height:72px;resize:vertical;"></textarea>
@@ -452,6 +455,7 @@
                     <input type="date" id="editSvStartDate">
                 </div>
             </div>
+            <div id="editSvEndDateHint" style="margin:-4px 0 10px;font-size:12px;color:#64748b;">预计结束日期：--</div>
             <div class="modal-form-item">
                 <label for="editSvNote">备注</label>
                 <textarea id="editSvNote" rows="3" placeholder="备注" style="width:100%;box-sizing:border-box;min-height:72px;resize:vertical;"></textarea>
