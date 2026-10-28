@@ -465,29 +465,28 @@ function renderCards(orders) {
                 const showTime = formatWakeTimeDisplay(item.waketime);
                 const noteRaw = String(item.note || "").trim();
                 const note = noteRaw && noteRaw !== "-" ? noteRaw : "-";
-                const footerHint = isStaff ? "勾选后可一键接单" : "勾选后可批量删改";
-
+                const footerHint = isStaff ? "勾选后可一键接单" : "点击卡片可编辑";
                 const identity = escapeJsSingleQuote(getOrderIdentity(item));
                 const cardClick = isAdmin
                     ? `onclick="openEditWakeOrderModal('${identity}')" style="cursor:pointer;"`
                     : "";
+                const progress = formatWakeProgressDisplay(item);
                 html += `
-                <div class="order-card" ${cardClick}>
+                <div class="order-card wake-mobile-card" ${cardClick}>
                     <div class="order-card-header">
                         <div class="order-card-title">
                             <input type="checkbox" class="order-checkbox" value="${identity}" ${item.status !== "待接单" ? "data-status='processed'" : ""} onclick="event.stopPropagation()">
-                            <span class="serial-number">${item.serialnumber}</span>
                             <span class="time">${showTime}</span>
                             <span class="wake-type-tag">${formatWakeTypeDisplay(item)}</span>
-                            ${formatWakeProgressDisplay(item) ? `<span class="wake-progress-tag">${formatWakeProgressDisplay(item)}</span>` : ""}
+                            ${progress ? `<span class="wake-progress-tag">${progress}</span>` : ""}
                         </div>
-                        <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;justify-content:flex-end;">
+                        <div class="order-card-meta">
                             <span class="status-badge ${statusClass}">${item.status}</span>
                             <span class="order-money">${formatMoneyDisplay(item.amount ?? item.money)} 元</span>
                         </div>
                     </div>
                     <div class="order-card-body">
-                        <div class="order-kv">
+                        <div class="order-kv order-kv-full">
                             <div class="k">电话</div>
                             <div class="v">${item.phone || "-"}</div>
                         </div>
@@ -496,16 +495,16 @@ function renderCards(orders) {
                             <div class="v">${wakeStaffNameCellHtml(item)}</div>
                         </div>
                         <div class="order-kv">
-                            <div class="k">备注</div>
-                            <div class="v">${typeof escapeHtml === "function" ? escapeHtml(note) : note}</div>
-                        </div>
-                        <div class="order-kv">
                             <div class="k">提交</div>
                             <div class="v">${formatSubmitTimeCompact(item.submittime)}</div>
                         </div>
+                        <div class="order-kv order-kv-full">
+                            <div class="k">备注</div>
+                            <div class="v">${typeof escapeHtml === "function" ? escapeHtml(note) : note}</div>
+                        </div>
                     </div>
                     <div class="order-card-footer" onclick="event.stopPropagation()">
-                        <div style="color:#64748b;font-size:12px;">${isAdmin ? "点击卡片可编辑" : footerHint}</div>
+                        <div style="color:#94a3b8;font-size:12px;">#${item.serialnumber || "-"} · ${footerHint}</div>
                         <div>${actionHtml}</div>
                     </div>
                 </div>`;

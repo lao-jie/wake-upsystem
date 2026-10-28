@@ -1498,7 +1498,7 @@ function renderSuperviseCards(orders) {
                     <div class="order-kv svm-note-kv"><div class="k">备注</div><div class="v">${item.note || "-"}</div></div>
                 </div>
                 <div class="order-card-footer">
-                    <button class="progress-btn" onclick="showProgressModal('${item.id}')" style="font-size:14px;font-weight:600;color:white;background:linear-gradient(135deg, #0e7490 0%, #06b6d4 100%);border:1px solid rgba(34, 211, 238, 0.45);border-radius:10px;padding:10px 18px;cursor:pointer;transition:all 0.3s ease-out;box-shadow:0 2px 12px rgba(6, 182, 212, 0.22),0 1px 0 rgba(255, 255, 255, 0.35) inset;">进度：${progressText}</button>
+                    <button class="progress-btn" onclick="showProgressModal('${item.id}')" style="font-size:13px;font-weight:600;color:#1d4ed8;background:#eff6ff;border:1px solid #bfdbfe;border-radius:6px;padding:8px 14px;cursor:pointer;">进度：${progressText}</button>
                     <div>${actionHtml}</div>
                 </div>
             </div>
