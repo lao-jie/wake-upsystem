@@ -265,6 +265,16 @@ function showPage(page) {
             }
         }
         loadOrders();
+    } else if (page === "myOrders") {
+        const navMyOrders = document.getElementById("nav-my-orders");
+        if (navMyOrders) navMyOrders.classList.add("active");
+        const myOrdersUserName = document.getElementById("myOrdersUserName");
+        if (myOrdersUserName) myOrdersUserName.innerText = user.name;
+        const content = document.getElementById("myOrdersPageContent");
+        if (content) {
+            content.innerHTML = `<div style="text-align:center;padding:24px;color:#94a3b8;">加载中…</div>`;
+            renderMyOrdersDetail(content);
+        }
     } else if (page === "noticeSetting") {
         document.getElementById("nav-notice-setting").classList.add("active");
         const noticeSettingUserName = document.getElementById("noticeSettingUserName");
