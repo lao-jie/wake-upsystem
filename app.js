@@ -3324,7 +3324,7 @@ function renderMyOrdersWakeListHtml(orders) {
             const typeText = typeof formatWakeTypeDisplay === "function" ? formatWakeTypeDisplay(item) : (item.waketype || item.type || "-");
             const money = typeof formatMoneyDisplay === "function"
                 ? formatMoneyDisplay(item.amount ?? item.money)
-                : Number(item.amount ?? item.money || 0).toFixed(2);
+                : Number(item.amount ?? item.money ?? 0).toFixed(2);
             const submitText = typeof formatTime === "function" ? formatTime(item.submittime) : (item.submittime || "-");
             html += `
                 <div class="order-card my-orders-card">
@@ -3374,7 +3374,7 @@ function renderMyOrdersWakeListHtml(orders) {
         const typeText = typeof formatWakeTypeDisplay === "function" ? formatWakeTypeDisplay(item) : (item.waketype || item.type || "-");
         const money = typeof formatMoneyDisplay === "function"
             ? formatMoneyDisplay(item.amount ?? item.money)
-            : Number(item.amount ?? item.money || 0).toFixed(2);
+            : Number(item.amount ?? item.money ?? 0).toFixed(2);
         const submitText = typeof formatTime === "function" ? formatTime(item.submittime) : (item.submittime || "-");
         html += `
             <tr>
@@ -3510,28 +3510,6 @@ async function renderMyOrdersDetail(container) {
         myOrdersActiveTab = "supervise";
     } else if (myOrdersActiveTab === "supervise" && myOrdersCache.supervise.length === 0 && myOrdersCache.wake.length > 0) {
         myOrdersActiveTab = "wake";
-    }
-
-    // 小组件弹窗里也显示分类切换
-    const isWidget = container.id === "widgetDetailContent";
-    if (isWidget) {
-        container.innerHTML = `
-            <div class="my-orders-tabs my-orders-tabs--embed">
-                <button type="button" class="my-orders-tab ${myOrdersActiveTab === "wake" ? "active" : ""}" data-tab="wake" onclick="switchMyOrdersTab('wake')">叫醒订单（${myOrdersCache.wake.length}）</button>
-                <button type="button" class="my-orders-tab ${myOrdersActiveTab === "supervise" ? "active" : ""}" data-tab="supervise" onclick="switchMyOrdersTab('supervise')">监督订单（${myOrdersCache.supervise.length}）</button>
-            </div>
-            <div id="myOrdersPageContent"></div>
-        `;
-        const inner = document.getElementById("myOrdersPageContent");
-        if (inner) {
-            if (myOrdersActiveTab === "supervise") {
-                inner.innerHTML = renderMyOrdersSuperviseListHtml(myOrdersCache.supervise);
-            } else {
-                inner.innerHTML = renderMyOrdersWakeListHtml(myOrdersCache.wake);
-            }
-        }
-        renderLucideIcons();
-        return;
     }
 
     updateMyOrdersTabLabels();
