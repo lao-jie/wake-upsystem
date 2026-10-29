@@ -1830,6 +1830,9 @@ async function confirmTakeSuperviseTask() {
     await saveSuperviseOrders(next);
     closeTakeSuperviseModal();
     loadSuperviseDashboard();
+    if (typeof showToast === "function") {
+        showToast("接单成功，已移至「我的订单 → 监督订单」。", "success");
+    }
 }
 
 function renderSuperviseCalendar(taskId, targetMonthDate) {
@@ -2707,19 +2710,8 @@ async function loadSuperviseDashboard() {
             return tb - ta;
         });
         if (superviseIsStaff) {
-            const myId = String(currentSuperviseUser?.id || "").trim();
-            ordered = ordered.filter((item) => {
-                const statusText = getEffectiveSuperviseStatus(item);
-                const ownerId = String(item.staffid || "").trim();
-                const ownerName = String(item.staffname || item.supervisor || "").trim();
-                const isMine =
-                    ownerId === myId ||
-                    ownerName === String(currentSuperviseUser?.name || "").trim() ||
-                    ownerName === myId;
-                // 待接单（含预约未到开始日）也要展示，否则员工端会“完全看不到”
-                const isOpenPending = statusText === "待接单";
-                return isOpenPending || isMine;
-            });
+            // 员工监督接单大厅：只显示待接新单；已接单去「我的订单 → 监督订单」
+            ordered = ordered.filter((item) => getEffectiveSuperviseStatus(item) === "待接单");
         }
 
         const filters = getSuperviseFilters();
@@ -2927,7 +2919,12 @@ window.addEventListener("DOMContentLoaded", async () => {
         if (addBtn) addBtn.style.display = "";
     }
     updateAutoSupervisePrice();
-    loadSuperviseDashboard();
+    const openId = new URLSearchParams(window.location.search).get("open");
+    Promise.resolve(loadSuperviseDashboard()).then(() => {
+        if (openId && typeof openSuperviseCalendarModal === "function") {
+            openSuperviseCalendarModal(openId);
+        }
+    });
 });
 
 // 显示进度详情模态框

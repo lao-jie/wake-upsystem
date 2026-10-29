@@ -202,28 +202,12 @@ async function loadOrders() {
         if (isAdmin) {
             displayOrders = [...ordersWithSerial].sort((a, b) => a.serialnumber - b.serialnumber);
         } else if (isStaff) {
-            // 员工：待接单池仍为「当日提交」；已接单订单按 wake_staff_since（或提交时间）落在当日则可见（含管理员转派到本日的单）
-            displayOrders = ordersWithSerial.filter(item => {
-                if (item.status === "待接单") {
-                    const orderDate = new Date(item.submittime);
-                    return orderDate >= todayStart && orderDate < todayEnd;
-                }
-                if (item.staffid !== user.id) {
-                    return false;
-                }
-                return typeof isWakeOrderAssignedToStaffOnLocalCalendarDay === "function"
-                    ? isWakeOrderAssignedToStaffOnLocalCalendarDay(item, user.id, todayStart, todayEnd)
-                    : (() => {
-                        const orderDate = new Date(item.submittime);
-                        return orderDate >= todayStart && orderDate < todayEnd;
-                    })();
-            }).sort((a, b) => {
-                // 优先展示未接的订单
-                if (a.status === "待接单" && b.status !== "待接单") return -1;
-                if (a.status !== "待接单" && b.status === "待接单") return 1;
-                // 然后按序号排序
-                return a.serialnumber - b.serialnumber;
-            });
+            // 员工接单大厅：只显示当日待接新单；已接单去「我的订单 → 叫醒订单」
+            displayOrders = ordersWithSerial.filter((item) => {
+                if (item.status !== "待接单") return false;
+                const orderDate = new Date(item.submittime);
+                return orderDate >= todayStart && orderDate < todayEnd;
+            }).sort((a, b) => a.serialnumber - b.serialnumber);
         }
 
         if (currentToken !== latestLoadOrdersToken) {
@@ -293,9 +277,10 @@ function getWakeRowActionHtml(item) {
         const identity = escapeJsSingleQuote(getOrderIdentity(item));
         return `<button class="warning" onclick="takeOrderByIdentity('${identity}')">接单</button>`;
     }
-    if (isStaff && item.status === "进行中" && isMultiWakeType(item) && String(item.staffid || "") === String(user?.id || "")) {
+    if (isStaff && item.status === "进行中" && String(item.staffid || "") === String(user?.id || "")) {
         const identity = escapeJsSingleQuote(getOrderIdentity(item));
-        return `<button class="success" onclick="finishOrderByIdentity('${identity}')">记一次</button>`;
+        const label = isMultiWakeType(item) ? "记一次" : "完成";
+        return `<button class="success" onclick="event.stopPropagation();finishOrderByIdentity('${identity}')">${label}</button>`;
     }
     if (item.status === "进行中") return "进行中";
     if (item.status === "已完成") return "已完成";
@@ -832,7 +817,7 @@ async function takeOrderByIdentity(identity) {
 
     await saveOrders(allOrders);
     loadOrders();
-    showToast("接单成功。", "success");
+    showToast("接单成功，已移至「我的订单 → 叫醒订单」。", "success");
 }
 
 // 批量接单
@@ -877,7 +862,7 @@ async function batchTakeOrders() {
 
     await saveOrders(allOrders);
     loadOrders();
-    showToast(`接单成功，共 ${successCount} 单。`, "success");
+    showToast(`接单成功 ${successCount} 单，已移至「我的订单 → 叫醒订单」。`, "success");
 }
 
 // 完成订单（多次类型：每次 +1，达次数后才结单入账）
@@ -908,6 +893,10 @@ async function finishOrderByIdentity(identity) {
         if (done < required) {
             await saveOrders(allOrders);
             loadOrders();
+            if (typeof currentPage !== "undefined" && currentPage === "myWakeOrders" && typeof loadMyWakeOrdersPage === "function") {
+                const el = document.getElementById("myWakeOrdersContent");
+                if (el) loadMyWakeOrdersPage(el);
+            }
             showToast(`已记 1 次，进度 ${done}/${required}，达次数后才会完成并结算。`, "success");
             return;
         }
@@ -922,6 +911,10 @@ async function finishOrderByIdentity(identity) {
 
     await saveOrders(allOrders);
     loadOrders();
+    if (typeof currentPage !== "undefined" && currentPage === "myWakeOrders" && typeof loadMyWakeOrdersPage === "function") {
+        const el = document.getElementById("myWakeOrdersContent");
+        if (el) loadMyWakeOrdersPage(el);
+    }
     if (targetOrder.salarysettled) {
         showToast("订单已完成，薪资已结算。", "success");
     } else {

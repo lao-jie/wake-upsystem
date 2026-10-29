@@ -3344,6 +3344,8 @@ function renderMyOrdersWakeListHtml(orders) {
         `;
     }
 
+    const actionOf = (item) => (typeof getWakeRowActionHtml === "function" ? getWakeRowActionHtml(item) : "");
+
     if (isMyOrdersMobileView()) {
         let html = `<div class="my-orders-cards">`;
         list.forEach((item) => {
@@ -3356,6 +3358,7 @@ function renderMyOrdersWakeListHtml(orders) {
                 ? formatMoneyDisplay(item.amount ?? item.money)
                 : Number(item.amount ?? item.money ?? 0).toFixed(2);
             const submitText = typeof formatTime === "function" ? formatTime(item.submittime) : (item.submittime || "-");
+            const actionHtml = actionOf(item);
             html += `
                 <div class="order-card my-orders-card">
                     <div class="order-card-header">
@@ -3373,6 +3376,7 @@ function renderMyOrdersWakeListHtml(orders) {
                         <div class="order-kv order-kv-full"><div class="k">提交</div><div class="v">${submitText}</div></div>
                         <div class="order-kv order-kv-full"><div class="k">备注</div><div class="v">${escapeHtml(String(item.note || "-"))}</div></div>
                     </div>
+                    <div class="order-card-footer">${actionHtml}</div>
                 </div>
             `;
         });
@@ -3392,6 +3396,7 @@ function renderMyOrdersWakeListHtml(orders) {
                         <th>金额</th>
                         <th>备注</th>
                         <th>提交时间</th>
+                        <th>操作</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -3415,6 +3420,7 @@ function renderMyOrdersWakeListHtml(orders) {
                 <td>${money} 元</td>
                 <td>${escapeHtml(String(item.note || "-"))}</td>
                 <td>${submitText}</td>
+                <td>${actionOf(item)}</td>
             </tr>
         `;
     });
@@ -3424,6 +3430,16 @@ function renderMyOrdersWakeListHtml(orders) {
         </div>
     `;
     return html;
+}
+
+function getMySuperviseOrderActionHtml(item) {
+    const id = String(item?.id || "").replace(/'/g, "\\'");
+    if (!id) return "-";
+    const statusText = String(item.status || "").trim();
+    if (statusText === "已完成") {
+        return `<button type="button" class="ghost" onclick="window.location.href='supervise.html?open=${encodeURIComponent(id)}'">查看日志</button>`;
+    }
+    return `<button type="button" class="success" onclick="window.location.href='supervise.html?open=${encodeURIComponent(id)}'">监督日志</button>`;
 }
 
 function renderMyOrdersSuperviseListHtml(orders) {
@@ -3462,6 +3478,7 @@ function renderMyOrdersSuperviseListHtml(orders) {
                         <div class="order-kv"><div class="k">开始</div><div class="v">${startDate}</div></div>
                         <div class="order-kv order-kv-full"><div class="k">备注</div><div class="v">${escapeHtml(shortenSuperviseNote(item.note))}</div></div>
                     </div>
+                    <div class="order-card-footer">${getMySuperviseOrderActionHtml(item)}</div>
                 </div>
             `;
         });
@@ -3482,6 +3499,7 @@ function renderMyOrdersSuperviseListHtml(orders) {
                         <th>状态</th>
                         <th>金额</th>
                         <th>备注</th>
+                        <th>操作</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -3501,6 +3519,7 @@ function renderMyOrdersSuperviseListHtml(orders) {
                 <td><span class="status-badge ${statusClass}">${statusText}</span></td>
                 <td>${amount} 元</td>
                 <td>${escapeHtml(shortenSuperviseNote(item.note))}</td>
+                <td>${getMySuperviseOrderActionHtml(item)}</td>
             </tr>
         `;
     });
