@@ -63,9 +63,15 @@
                 <div class="sub-item active">监督</div>
             </div>
 
-            <div class="nav-item" id="nav-my-orders" onclick="window.location.href='jiaoxing.html?page=myOrders'">
+            <div class="nav-item" id="nav-my-orders" onclick="toggleMyOrdersSubMenu()">
                 <span class="icon"><i data-lucide="file-text"></i></span>
                 <span>我的订单</span>
+                <span class="arrow" id="myOrdersArrow">▼</span>
+            </div>
+
+            <div class="sub-menu" id="myOrdersSubMenu" style="display:none;">
+                <div class="sub-item" id="sub-my-wake" onclick="window.location.href='jiaoxing.html?page=myWakeOrders'">叫醒订单</div>
+                <div class="sub-item" id="sub-my-supervise" onclick="window.location.href='jiaoxing.html?page=mySuperviseOrders'">监督订单</div>
             </div>
 
             <div class="nav-item" onclick="window.location.href='jiaoxing.html?page=team'">

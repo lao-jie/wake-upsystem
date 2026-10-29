@@ -17,7 +17,7 @@
     <script src="storage.js" defer></script>
     <script src="order.js?v=20261028e1" defer></script>
     <script src="staff.js" defer></script>
-    <script src="app.js?v=20261029fix1" defer></script>
+    <script src="app.js?v=20261029orders2" defer></script>
 </head>
 
 <body>
@@ -79,9 +79,15 @@
                 <div class="sub-item" id="sub-supervise" onclick="window.location.href='supervise.html'">监督</div>
             </div>
 
-            <div class="nav-item" id="nav-my-orders" onclick="showPage('myOrders')">
+            <div class="nav-item" id="nav-my-orders" onclick="toggleMyOrdersSubMenu()">
                 <span class="icon"><i data-lucide="file-text"></i></span>
                 <span>我的订单</span>
+                <span class="arrow" id="myOrdersArrow">▼</span>
+            </div>
+
+            <div class="sub-menu" id="myOrdersSubMenu">
+                <div class="sub-item" id="sub-my-wake" onclick="showPage('myWakeOrders')">叫醒订单</div>
+                <div class="sub-item" id="sub-my-supervise" onclick="showPage('mySuperviseOrders')">监督订单</div>
             </div>
 
             <div class="nav-item" id="nav-team" onclick="showPage('team')">
@@ -317,15 +323,16 @@
             </div>
         </div>
 
-        <!-- 团队管理/个人中心页面 -->
-        <div id="page_myOrders" class="page">
-            <h2>我的订单</h2>
-            <div class="user-info">当前用户：<span id="myOrdersUserName">-</span></div>
-            <div class="my-orders-tabs" id="myOrdersTabs" style="display:none;">
-                <button type="button" class="my-orders-tab active" data-tab="wake" onclick="switchMyOrdersTab('wake')">叫醒订单</button>
-                <button type="button" class="my-orders-tab" data-tab="supervise" onclick="switchMyOrdersTab('supervise')">监督订单</button>
-            </div>
-            <div id="myOrdersPageContent" class="my-orders-page-content" style="margin-top: 14px;"></div>
+        <div id="page_myWakeOrders" class="page">
+            <h2>叫醒订单</h2>
+            <div class="user-info">当前用户：<span id="myWakeOrdersUserName">-</span></div>
+            <div id="myWakeOrdersContent" class="my-orders-page-content" style="margin-top: 14px;"></div>
+        </div>
+
+        <div id="page_mySuperviseOrders" class="page">
+            <h2>监督订单</h2>
+            <div class="user-info">当前用户：<span id="mySuperviseOrdersUserName">-</span></div>
+            <div id="mySuperviseOrdersContent" class="my-orders-page-content" style="margin-top: 14px;"></div>
         </div>
 
         <div id="page_team" class="page">

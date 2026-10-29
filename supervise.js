@@ -62,6 +62,10 @@ function toggleSubMenu() {
     const sub = document.getElementById("subMenu");
     const arr = document.getElementById("arrow");
     if (!sub || !arr) return;
+    const mySub = document.getElementById("myOrdersSubMenu");
+    const myArr = document.getElementById("myOrdersArrow");
+    if (mySub) mySub.style.display = "none";
+    if (myArr) myArr.innerText = "▼";
     if (typeof isSubMenuPanelOpen === "function" && isSubMenuPanelOpen(sub)) {
         sub.style.display = "none";
         sub.style.left = "";
@@ -73,6 +77,29 @@ function toggleSubMenu() {
             positionTaobaoSubmenuMobile();
         }
         arr.innerText = "▲";
+    }
+}
+
+function toggleMyOrdersSubMenu() {
+    const sub = document.getElementById("myOrdersSubMenu");
+    const arr = document.getElementById("myOrdersArrow");
+    const navItem = document.getElementById("nav-my-orders");
+    if (!sub) return;
+    const tbSub = document.getElementById("subMenu");
+    const tbArr = document.getElementById("arrow");
+    if (tbSub) {
+        tbSub.style.display = "none";
+        tbSub.style.left = "";
+        tbSub.style.width = "";
+    }
+    if (tbArr) tbArr.innerText = "▼";
+    if (typeof isSubMenuPanelOpen === "function" && isSubMenuPanelOpen(sub)) {
+        sub.style.display = "none";
+        if (arr) arr.innerText = "▼";
+    } else {
+        sub.style.display = "block";
+        if (arr) arr.innerText = "▲";
+        if (navItem) navItem.classList.add("active");
     }
 }
 

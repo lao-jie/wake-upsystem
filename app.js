@@ -197,6 +197,7 @@ function logout() {
 }
 
 function showPage(page) {
+    if (page === "myOrders") page = "myWakeOrders";
     if (!document.getElementById(`page_${page}`)) {
         page = "home";
     }
@@ -265,17 +266,29 @@ function showPage(page) {
             }
         }
         loadOrders();
-    } else if (page === "myOrders") {
+    } else if (page === "myWakeOrders") {
         const navMyOrders = document.getElementById("nav-my-orders");
         if (navMyOrders) navMyOrders.classList.add("active");
-        const myOrdersUserName = document.getElementById("myOrdersUserName");
-        if (myOrdersUserName) myOrdersUserName.innerText = user.name;
-        const tabs = document.getElementById("myOrdersTabs");
-        if (tabs) tabs.style.display = "flex";
-        const content = document.getElementById("myOrdersPageContent");
+        const sub = document.getElementById("sub-my-wake");
+        if (sub) sub.classList.add("active");
+        const nameEl = document.getElementById("myWakeOrdersUserName");
+        if (nameEl) nameEl.innerText = user.name;
+        const content = document.getElementById("myWakeOrdersContent");
         if (content) {
             content.innerHTML = `<div class="my-orders-empty">加载中…</div>`;
-            renderMyOrdersDetail(content);
+            loadMyWakeOrdersPage(content);
+        }
+    } else if (page === "mySuperviseOrders") {
+        const navMyOrders = document.getElementById("nav-my-orders");
+        if (navMyOrders) navMyOrders.classList.add("active");
+        const sub = document.getElementById("sub-my-supervise");
+        if (sub) sub.classList.add("active");
+        const nameEl = document.getElementById("mySuperviseOrdersUserName");
+        if (nameEl) nameEl.innerText = user.name;
+        const content = document.getElementById("mySuperviseOrdersContent");
+        if (content) {
+            content.innerHTML = `<div class="my-orders-empty">加载中…</div>`;
+            loadMySuperviseOrdersPage(content);
         }
     } else if (page === "noticeSetting") {
         document.getElementById("nav-notice-setting").classList.add("active");
@@ -2269,6 +2282,15 @@ function closeSubMenu() {
         sub.style.width = "";
     }
     if (arr) arr.innerText = "▼";
+
+    const mySub = document.getElementById("myOrdersSubMenu");
+    const myArr = document.getElementById("myOrdersArrow");
+    if (mySub) {
+        mySub.style.display = "none";
+        mySub.style.left = "";
+        mySub.style.width = "";
+    }
+    if (myArr) myArr.innerText = "▼";
 }
 
 function toggleSubMenu() {
@@ -2277,17 +2299,56 @@ function toggleSubMenu() {
     const navItem = document.getElementById("nav-taobao");
     if (!sub || !arr || !navItem) return;
 
+    // 展开淘宝子菜单时收起「我的订单」子菜单
+    const mySub = document.getElementById("myOrdersSubMenu");
+    const myArr = document.getElementById("myOrdersArrow");
+    if (mySub) mySub.style.display = "none";
+    if (myArr) myArr.innerText = "▼";
+
     if (isSubMenuPanelOpen(sub)) {
-        closeSubMenu();
-        // 如果当前就在叫醒/监督页，保持“淘宝监督项目”高亮
+        sub.style.display = "none";
+        sub.style.left = "";
+        sub.style.width = "";
+        arr.innerText = "▼";
         if (currentPage !== "wake" && currentPage !== "supervise") {
             navItem.classList.remove("active");
         }
     } else {
         sub.style.display = "block";
-        positionTaobaoSubmenuMobile();
-        requestAnimationFrame(() => positionTaobaoSubmenuMobile());
+        if (typeof positionTaobaoSubmenuMobile === "function") {
+            positionTaobaoSubmenuMobile();
+            requestAnimationFrame(() => positionTaobaoSubmenuMobile());
+        }
         arr.innerText = "▲";
+        navItem.classList.add("active");
+    }
+}
+
+function toggleMyOrdersSubMenu() {
+    const sub = document.getElementById("myOrdersSubMenu");
+    const arr = document.getElementById("myOrdersArrow");
+    const navItem = document.getElementById("nav-my-orders");
+    if (!sub || !navItem) return;
+
+    // 展开「我的订单」时收起淘宝子菜单
+    const tbSub = document.getElementById("subMenu");
+    const tbArr = document.getElementById("arrow");
+    if (tbSub) {
+        tbSub.style.display = "none";
+        tbSub.style.left = "";
+        tbSub.style.width = "";
+    }
+    if (tbArr) tbArr.innerText = "▼";
+
+    if (isSubMenuPanelOpen(sub)) {
+        sub.style.display = "none";
+        if (arr) arr.innerText = "▼";
+        if (currentPage !== "myWakeOrders" && currentPage !== "mySuperviseOrders") {
+            navItem.classList.remove("active");
+        }
+    } else {
+        sub.style.display = "block";
+        if (arr) arr.innerText = "▲";
         navItem.classList.add("active");
     }
 }
@@ -2805,9 +2866,9 @@ async function showWidgetDetail(widgetType) {
             await renderBalanceDetail(content);
             break;
         case 'myOrders':
-            title.textContent = '我的订单';
-            await renderMyOrdersDetail(content);
-            break;
+            modal.style.display = 'none';
+            showPage('myWakeOrders');
+            return;
         case 'myLeaves':
             title.textContent = '我的请假订单';
             await renderMyLeaveOrdersDetail(content);
@@ -3234,9 +3295,6 @@ async function renderBalanceDetail(container) {
     renderLucideIcons();
 }
 
-let myOrdersCache = { wake: [], supervise: [] };
-let myOrdersActiveTab = "wake";
-
 function isMyOrdersMobileView() {
     if (document.body.classList.contains("is-mobile")) return true;
     try {
@@ -3273,34 +3331,6 @@ function shortenSuperviseNote(noteText) {
         // not JSON
     }
     return text.length > 40 ? `${text.slice(0, 40)}…` : text;
-}
-
-function updateMyOrdersTabLabels() {
-    const wakeCount = myOrdersCache.wake.length;
-    const svCount = myOrdersCache.supervise.length;
-    document.querySelectorAll(".my-orders-tabs").forEach((tabs) => {
-        const wakeBtn = tabs.querySelector('[data-tab="wake"]');
-        const svBtn = tabs.querySelector('[data-tab="supervise"]');
-        if (wakeBtn) wakeBtn.textContent = `叫醒订单（${wakeCount}）`;
-        if (svBtn) svBtn.textContent = `监督订单（${svCount}）`;
-        if (tabs.id === "myOrdersTabs") tabs.style.display = "flex";
-        tabs.querySelectorAll(".my-orders-tab").forEach((btn) => {
-            btn.classList.toggle("active", btn.getAttribute("data-tab") === myOrdersActiveTab);
-        });
-    });
-}
-
-function switchMyOrdersTab(tab) {
-    myOrdersActiveTab = tab === "supervise" ? "supervise" : "wake";
-    updateMyOrdersTabLabels();
-    const container = document.getElementById("myOrdersPageContent");
-    if (!container) return;
-    if (myOrdersActiveTab === "supervise") {
-        container.innerHTML = renderMyOrdersSuperviseListHtml(myOrdersCache.supervise);
-    } else {
-        container.innerHTML = renderMyOrdersWakeListHtml(myOrdersCache.wake);
-    }
-    renderLucideIcons();
 }
 
 function renderMyOrdersWakeListHtml(orders) {
@@ -3482,41 +3512,29 @@ function renderMyOrdersSuperviseListHtml(orders) {
     return html;
 }
 
-// 渲染我的订单详情（分类：叫醒 / 监督；电脑端表格行，手机端卡片）
-async function renderMyOrdersDetail(container) {
+async function loadMyWakeOrdersPage(container) {
     if (!container) return;
-    container.innerHTML = `<div class="my-orders-empty">加载中…</div>`;
-
-    const orders = await getOrders();
-    const myWakeOrders = (orders || []).filter((item) => String(item.staffid || "") === String(user.id || ""));
-
-    let superviseOrders = [];
     try {
-        const { data } = await supabaseClient.from("supervise_orders").select("*").eq("staffid", user.id);
-        if (data && Array.isArray(data)) {
-            superviseOrders = data;
-        }
+        const orders = await getOrders();
+        const myWakeOrders = (orders || []).filter((item) => String(item.staffid || "") === String(user.id || ""));
+        container.innerHTML = renderMyOrdersWakeListHtml(myWakeOrders);
+    } catch (e) {
+        console.error("读取叫醒订单失败：", e);
+        container.innerHTML = `<div class="my-orders-empty">读取失败，请稍后重试</div>`;
+    }
+    renderLucideIcons();
+}
+
+async function loadMySuperviseOrdersPage(container) {
+    if (!container) return;
+    try {
+        const { data, error } = await supabaseClient.from("supervise_orders").select("*").eq("staffid", user.id);
+        if (error) throw error;
+        const superviseOrders = Array.isArray(data) ? data : [];
+        container.innerHTML = renderMyOrdersSuperviseListHtml(superviseOrders);
     } catch (e) {
         console.error("读取监督订单失败：", e);
-    }
-
-    myOrdersCache = {
-        wake: sortMyOrdersByTime(myWakeOrders),
-        supervise: sortMyOrdersByTime(superviseOrders)
-    };
-
-    // 若当前分类为空、另一类有数据，自动切到有数据的分类
-    if (myOrdersActiveTab === "wake" && myOrdersCache.wake.length === 0 && myOrdersCache.supervise.length > 0) {
-        myOrdersActiveTab = "supervise";
-    } else if (myOrdersActiveTab === "supervise" && myOrdersCache.supervise.length === 0 && myOrdersCache.wake.length > 0) {
-        myOrdersActiveTab = "wake";
-    }
-
-    updateMyOrdersTabLabels();
-    if (myOrdersActiveTab === "supervise") {
-        container.innerHTML = renderMyOrdersSuperviseListHtml(myOrdersCache.supervise);
-    } else {
-        container.innerHTML = renderMyOrdersWakeListHtml(myOrdersCache.wake);
+        container.innerHTML = `<div class="my-orders-empty">读取失败，请稍后重试</div>`;
     }
     renderLucideIcons();
 }
