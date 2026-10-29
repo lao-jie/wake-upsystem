@@ -270,9 +270,11 @@ function showPage(page) {
         if (navMyOrders) navMyOrders.classList.add("active");
         const myOrdersUserName = document.getElementById("myOrdersUserName");
         if (myOrdersUserName) myOrdersUserName.innerText = user.name;
+        const tabs = document.getElementById("myOrdersTabs");
+        if (tabs) tabs.style.display = "flex";
         const content = document.getElementById("myOrdersPageContent");
         if (content) {
-            content.innerHTML = `<div style="text-align:center;padding:24px;color:#94a3b8;">加载中…</div>`;
+            content.innerHTML = `<div class="my-orders-empty">加载中…</div>`;
             renderMyOrdersDetail(content);
         }
     } else if (page === "noticeSetting") {
@@ -3232,10 +3234,261 @@ async function renderBalanceDetail(container) {
     renderLucideIcons();
 }
 
-// 渲染我的订单详情
+let myOrdersCache = { wake: [], supervise: [] };
+let myOrdersActiveTab = "wake";
+
+function isMyOrdersMobileView() {
+    if (document.body.classList.contains("is-mobile")) return true;
+    try {
+        return window.matchMedia("(max-width: 768px)").matches;
+    } catch (e) {
+        return false;
+    }
+}
+
+function getMyOrdersStatusClass(status) {
+    switch (String(status || "").trim()) {
+        case "待接单": return "status-pending";
+        case "进行中": return "status-processing";
+        case "已完成": return "status-done";
+        default: return "";
+    }
+}
+
+function sortMyOrdersByTime(list) {
+    return (list || []).slice().sort((a, b) => {
+        const ta = new Date(a.submittime || a.createdat || a.waketime || 0).getTime();
+        const tb = new Date(b.submittime || b.createdat || b.waketime || 0).getTime();
+        return (Number.isFinite(tb) ? tb : 0) - (Number.isFinite(ta) ? ta : 0);
+    });
+}
+
+function shortenSuperviseNote(noteText) {
+    let text = String(noteText || "").trim();
+    if (!text || text === "-") return "-";
+    try {
+        const parsed = JSON.parse(text);
+        if (parsed && parsed.orderno) return `订单号：${parsed.orderno}`;
+    } catch (e) {
+        // not JSON
+    }
+    return text.length > 40 ? `${text.slice(0, 40)}…` : text;
+}
+
+function updateMyOrdersTabLabels() {
+    const wakeCount = myOrdersCache.wake.length;
+    const svCount = myOrdersCache.supervise.length;
+    document.querySelectorAll(".my-orders-tabs").forEach((tabs) => {
+        const wakeBtn = tabs.querySelector('[data-tab="wake"]');
+        const svBtn = tabs.querySelector('[data-tab="supervise"]');
+        if (wakeBtn) wakeBtn.textContent = `叫醒订单（${wakeCount}）`;
+        if (svBtn) svBtn.textContent = `监督订单（${svCount}）`;
+        if (tabs.id === "myOrdersTabs") tabs.style.display = "flex";
+        tabs.querySelectorAll(".my-orders-tab").forEach((btn) => {
+            btn.classList.toggle("active", btn.getAttribute("data-tab") === myOrdersActiveTab);
+        });
+    });
+}
+
+function switchMyOrdersTab(tab) {
+    myOrdersActiveTab = tab === "supervise" ? "supervise" : "wake";
+    updateMyOrdersTabLabels();
+    const container = document.getElementById("myOrdersPageContent");
+    if (!container) return;
+    if (myOrdersActiveTab === "supervise") {
+        container.innerHTML = renderMyOrdersSuperviseListHtml(myOrdersCache.supervise);
+    } else {
+        container.innerHTML = renderMyOrdersWakeListHtml(myOrdersCache.wake);
+    }
+    renderLucideIcons();
+}
+
+function renderMyOrdersWakeListHtml(orders) {
+    const list = sortMyOrdersByTime(orders);
+    if (list.length === 0) {
+        return `
+            <div class="my-orders-empty">
+                <div class="my-orders-empty__icon"><i data-lucide="alarm-clock"></i></div>
+                <div>暂无叫醒订单</div>
+            </div>
+        `;
+    }
+
+    if (isMyOrdersMobileView()) {
+        let html = `<div class="my-orders-cards">`;
+        list.forEach((item) => {
+            const statusClass = getMyOrdersStatusClass(item.status);
+            const showTime = typeof formatWakeTimeDisplay === "function"
+                ? formatWakeTimeDisplay(item.waketime)
+                : (typeof formatWakeTimeForDisplay === "function" ? formatWakeTimeForDisplay(item.waketime) : (item.waketime || "-"));
+            const typeText = typeof formatWakeTypeDisplay === "function" ? formatWakeTypeDisplay(item) : (item.waketype || item.type || "-");
+            const money = typeof formatMoneyDisplay === "function"
+                ? formatMoneyDisplay(item.amount ?? item.money)
+                : Number(item.amount ?? item.money || 0).toFixed(2);
+            const submitText = typeof formatTime === "function" ? formatTime(item.submittime) : (item.submittime || "-");
+            html += `
+                <div class="order-card my-orders-card">
+                    <div class="order-card-header">
+                        <div class="order-card-title">
+                            <span class="time">${showTime}</span>
+                            <span class="wake-type-tag">${typeText}</span>
+                        </div>
+                        <div class="order-card-meta">
+                            <span class="status-badge ${statusClass}">${item.status || "-"}</span>
+                            <span class="order-money">${money} 元</span>
+                        </div>
+                    </div>
+                    <div class="order-card-body">
+                        <div class="order-kv order-kv-full"><div class="k">电话</div><div class="v">${item.phone || "-"}</div></div>
+                        <div class="order-kv order-kv-full"><div class="k">提交</div><div class="v">${submitText}</div></div>
+                        <div class="order-kv order-kv-full"><div class="k">备注</div><div class="v">${escapeHtml(String(item.note || "-"))}</div></div>
+                    </div>
+                </div>
+            `;
+        });
+        html += `</div>`;
+        return html;
+    }
+
+    let html = `
+        <div class="table-wrapper my-orders-table-wrap">
+            <table class="order-list-table my-orders-table">
+                <thead>
+                    <tr>
+                        <th>叫醒时间</th>
+                        <th>电话</th>
+                        <th>类型</th>
+                        <th>状态</th>
+                        <th>金额</th>
+                        <th>备注</th>
+                        <th>提交时间</th>
+                    </tr>
+                </thead>
+                <tbody>
+    `;
+    list.forEach((item) => {
+        const statusClass = getMyOrdersStatusClass(item.status);
+        const showTime = typeof formatWakeTimeDisplay === "function"
+            ? formatWakeTimeDisplay(item.waketime)
+            : (typeof formatWakeTimeForDisplay === "function" ? formatWakeTimeForDisplay(item.waketime) : (item.waketime || "-"));
+        const typeText = typeof formatWakeTypeDisplay === "function" ? formatWakeTypeDisplay(item) : (item.waketype || item.type || "-");
+        const money = typeof formatMoneyDisplay === "function"
+            ? formatMoneyDisplay(item.amount ?? item.money)
+            : Number(item.amount ?? item.money || 0).toFixed(2);
+        const submitText = typeof formatTime === "function" ? formatTime(item.submittime) : (item.submittime || "-");
+        html += `
+            <tr>
+                <td>${showTime}</td>
+                <td>${item.phone || "-"}</td>
+                <td>${typeText}</td>
+                <td><span class="status-badge ${statusClass}">${item.status || "-"}</span></td>
+                <td>${money} 元</td>
+                <td>${escapeHtml(String(item.note || "-"))}</td>
+                <td>${submitText}</td>
+            </tr>
+        `;
+    });
+    html += `
+                </tbody>
+            </table>
+        </div>
+    `;
+    return html;
+}
+
+function renderMyOrdersSuperviseListHtml(orders) {
+    const list = sortMyOrdersByTime(orders);
+    if (list.length === 0) {
+        return `
+            <div class="my-orders-empty">
+                <div class="my-orders-empty__icon"><i data-lucide="eye"></i></div>
+                <div>暂无监督订单</div>
+            </div>
+        `;
+    }
+
+    if (isMyOrdersMobileView()) {
+        let html = `<div class="my-orders-cards">`;
+        list.forEach((item) => {
+            const statusText = item.status || "-";
+            const statusClass = getMyOrdersStatusClass(statusText);
+            const amount = Number(item.price || item.amount || item.money || 0).toFixed(2);
+            const startDate = item.startdate || (typeof getDatePartFromDateTime === "function" ? getDatePartFromDateTime(item.waketime) : "") || "-";
+            html += `
+                <div class="order-card my-orders-card">
+                    <div class="order-card-header">
+                        <div class="order-card-title">
+                            <span class="time">${item.orderno || "-"}</span>
+                        </div>
+                        <div class="order-card-meta">
+                            <span class="status-badge ${statusClass}">${statusText}</span>
+                            <span class="order-money">${amount} 元</span>
+                        </div>
+                    </div>
+                    <div class="order-card-body">
+                        <div class="order-kv"><div class="k">项目</div><div class="v">${item.project || "-"}</div></div>
+                        <div class="order-kv"><div class="k">学员</div><div class="v">${item.studentname || "-"}</div></div>
+                        <div class="order-kv"><div class="k">次数</div><div class="v">${item.duration || "-"}</div></div>
+                        <div class="order-kv"><div class="k">开始</div><div class="v">${startDate}</div></div>
+                        <div class="order-kv order-kv-full"><div class="k">备注</div><div class="v">${escapeHtml(shortenSuperviseNote(item.note))}</div></div>
+                    </div>
+                </div>
+            `;
+        });
+        html += `</div>`;
+        return html;
+    }
+
+    let html = `
+        <div class="table-wrapper my-orders-table-wrap">
+            <table class="order-list-table my-orders-table">
+                <thead>
+                    <tr>
+                        <th>订单号</th>
+                        <th>项目</th>
+                        <th>学员</th>
+                        <th>次数</th>
+                        <th>开始日期</th>
+                        <th>状态</th>
+                        <th>金额</th>
+                        <th>备注</th>
+                    </tr>
+                </thead>
+                <tbody>
+    `;
+    list.forEach((item) => {
+        const statusText = item.status || "-";
+        const statusClass = getMyOrdersStatusClass(statusText);
+        const amount = Number(item.price || item.amount || item.money || 0).toFixed(2);
+        const startDate = item.startdate || (typeof getDatePartFromDateTime === "function" ? getDatePartFromDateTime(item.waketime) : "") || "-";
+        html += `
+            <tr>
+                <td>${item.orderno || "-"}</td>
+                <td>${item.project || "-"}</td>
+                <td>${item.studentname || "-"}</td>
+                <td>${item.duration || "-"}</td>
+                <td>${startDate}</td>
+                <td><span class="status-badge ${statusClass}">${statusText}</span></td>
+                <td>${amount} 元</td>
+                <td>${escapeHtml(shortenSuperviseNote(item.note))}</td>
+            </tr>
+        `;
+    });
+    html += `
+                </tbody>
+            </table>
+        </div>
+    `;
+    return html;
+}
+
+// 渲染我的订单详情（分类：叫醒 / 监督；电脑端表格行，手机端卡片）
 async function renderMyOrdersDetail(container) {
+    if (!container) return;
+    container.innerHTML = `<div class="my-orders-empty">加载中…</div>`;
+
     const orders = await getOrders();
-    const myWakeOrders = orders.filter(item => item.staffid === user.id);
+    const myWakeOrders = (orders || []).filter((item) => String(item.staffid || "") === String(user.id || ""));
 
     let superviseOrders = [];
     try {
@@ -3247,65 +3500,46 @@ async function renderMyOrdersDetail(container) {
         console.error("读取监督订单失败：", e);
     }
 
-    const allOrders = [
-        ...myWakeOrders.map(o => ({ ...o, orderType: 'wake' })),
-        ...superviseOrders.map(o => ({ ...o, orderType: 'supervise' }))
-    ].sort((a, b) => new Date(b.submittime || b.createdat) - new Date(a.submittime || a.createdat));
+    myOrdersCache = {
+        wake: sortMyOrdersByTime(myWakeOrders),
+        supervise: sortMyOrdersByTime(superviseOrders)
+    };
 
-    if (allOrders.length === 0) {
+    // 若当前分类为空、另一类有数据，自动切到有数据的分类
+    if (myOrdersActiveTab === "wake" && myOrdersCache.wake.length === 0 && myOrdersCache.supervise.length > 0) {
+        myOrdersActiveTab = "supervise";
+    } else if (myOrdersActiveTab === "supervise" && myOrdersCache.supervise.length === 0 && myOrdersCache.wake.length > 0) {
+        myOrdersActiveTab = "wake";
+    }
+
+    // 小组件弹窗里也显示分类切换
+    const isWidget = container.id === "widgetDetailContent";
+    if (isWidget) {
         container.innerHTML = `
-            <div style="text-align: center; padding: 40px 20px; color: #94a3b8;">
-                <div style="margin-bottom: 16px;"><i data-lucide="file-text" style="width: 48px; height: 48px;"></i></div>
-                <div>暂无订单记录</div>
+            <div class="my-orders-tabs my-orders-tabs--embed">
+                <button type="button" class="my-orders-tab ${myOrdersActiveTab === "wake" ? "active" : ""}" data-tab="wake" onclick="switchMyOrdersTab('wake')">叫醒订单（${myOrdersCache.wake.length}）</button>
+                <button type="button" class="my-orders-tab ${myOrdersActiveTab === "supervise" ? "active" : ""}" data-tab="supervise" onclick="switchMyOrdersTab('supervise')">监督订单（${myOrdersCache.supervise.length}）</button>
             </div>
+            <div id="myOrdersPageContent"></div>
         `;
+        const inner = document.getElementById("myOrdersPageContent");
+        if (inner) {
+            if (myOrdersActiveTab === "supervise") {
+                inner.innerHTML = renderMyOrdersSuperviseListHtml(myOrdersCache.supervise);
+            } else {
+                inner.innerHTML = renderMyOrdersWakeListHtml(myOrdersCache.wake);
+            }
+        }
         renderLucideIcons();
         return;
     }
 
-    let html = '<div style="display: flex; flex-direction: column; gap: 12px;">';
-    allOrders.forEach(order => {
-        const isWake = order.orderType === 'wake';
-        const phone = isWake ? order.phone : (order.studentname || order.phone || '-');
-        const statusClass = order.status === '已完成' ? '#dcfce7' : order.status === '待接单' ? '#fef3c7' : '#dbeafe';
-        const statusColor = order.status === '已完成' ? '#166534' : order.status === '待接单' ? '#92400e' : '#1e40af';
-        const time = isWake
-            ? (typeof formatWakeTimeForDisplay === 'function' ? formatWakeTimeForDisplay(order.waketime) : order.waketime)
-            : (order.waketime || order.duration || '-');
-        const submitTime = order.submittime || order.createdat;
-        const submitTimeText = typeof formatTime === 'function' ? formatTime(submitTime) : submitTime;
-
-        // 处理监督订单的note，避免显示完整JSON
-        let noteText = order.note || '';
-        if (!isWake && noteText) {
-            // 尝试解析JSON，如果是JSON则只显示部分信息
-            try {
-                const parsed = JSON.parse(noteText);
-                if (parsed.orderno) {
-                    noteText = `订单号：${parsed.orderno}`;
-                } else {
-                    noteText = noteText.substring(0, 50) + (noteText.length > 50 ? '...' : '');
-                }
-            } catch (e) {
-                // 如果不是JSON，只显示前50个字符
-                noteText = noteText.substring(0, 50) + (noteText.length > 50 ? '...' : '');
-            }
-        }
-
-        html += `
-            <div style="padding: 12px; background: #f8fafc; border-radius: 8px; border: 1px solid rgba(148, 163, 184, 0.2);">
-                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
-                    <span style="font-weight: 600; color: #1e293b;">${isWake ? '叫醒' : '监督'}订单 - ${phone}</span>
-                    <span style="font-size: 12px; padding: 4px 8px; border-radius: 4px; background: ${statusClass}; color: ${statusColor};">${order.status}</span>
-                </div>
-                <div style="font-size: 13px; color: #64748b;"><i data-lucide="alarm-clock" style="width: 14px; height: 14px; margin-right: 4px;"></i>${time}</div>
-                <div style="font-size: 12px; color: #94a3b8; margin-top: 4px;"><i data-lucide="calendar-days" style="width: 13px; height: 13px; margin-right: 4px;"></i>${submitTimeText}</div>
-                ${noteText ? `<div style="font-size: 12px; color: #94a3b8; margin-top: 4px;"><i data-lucide="file-text" style="width: 13px; height: 13px; margin-right: 4px;"></i>${noteText}</div>` : ''}
-            </div>
-        `;
-    });
-    html += '</div>';
-    container.innerHTML = html;
+    updateMyOrdersTabLabels();
+    if (myOrdersActiveTab === "supervise") {
+        container.innerHTML = renderMyOrdersSuperviseListHtml(myOrdersCache.supervise);
+    } else {
+        container.innerHTML = renderMyOrdersWakeListHtml(myOrdersCache.wake);
+    }
     renderLucideIcons();
 }
 

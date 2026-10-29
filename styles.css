@@ -3400,6 +3400,86 @@ body.is-staff #page_wake td:nth-child(10) {
     grid-template-columns: 1fr;
 }
 
+/* 我的订单：分类切换 + 桌面表格 / 手机卡片 */
+.my-orders-tabs {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+    margin-top: 12px;
+}
+
+.my-orders-tabs--embed {
+    margin: 0 0 12px;
+}
+
+.my-orders-tab {
+    border: 1px solid #e2e8f0;
+    background: #fff;
+    color: #64748b;
+    border-radius: 8px;
+    padding: 8px 14px;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+}
+
+.my-orders-tab:hover {
+    border-color: #bfdbfe;
+    color: #1d4ed8;
+    background: #eff6ff;
+}
+
+.my-orders-tab.active {
+    border-color: #93c5fd;
+    background: #eff6ff;
+    color: #1d4ed8;
+}
+
+.my-orders-table-wrap {
+    margin-top: 4px;
+}
+
+.my-orders-table {
+    width: 100%;
+}
+
+.my-orders-empty {
+    text-align: center;
+    padding: 40px 20px;
+    color: #94a3b8;
+}
+
+.my-orders-empty__icon {
+    margin-bottom: 12px;
+}
+
+.my-orders-empty__icon .lucide {
+    width: 40px;
+    height: 40px;
+}
+
+.my-orders-cards {
+    display: grid;
+    gap: 12px;
+    grid-template-columns: 1fr;
+}
+
+@media (max-width: 768px) {
+    .my-orders-table-wrap {
+        display: none !important;
+    }
+
+    .my-orders-tabs {
+        margin-top: 10px;
+    }
+
+    .my-orders-tab {
+        flex: 1;
+        text-align: center;
+        padding: 10px 8px;
+    }
+}
+
 body.is-mobile #page_wake .table-wrapper {
     display: none !important;
 }

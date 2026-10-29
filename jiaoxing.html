@@ -321,6 +321,10 @@
         <div id="page_myOrders" class="page">
             <h2>我的订单</h2>
             <div class="user-info">当前用户：<span id="myOrdersUserName">-</span></div>
+            <div class="my-orders-tabs" id="myOrdersTabs" style="display:none;">
+                <button type="button" class="my-orders-tab active" data-tab="wake" onclick="switchMyOrdersTab('wake')">叫醒订单</button>
+                <button type="button" class="my-orders-tab" data-tab="supervise" onclick="switchMyOrdersTab('supervise')">监督订单</button>
+            </div>
             <div id="myOrdersPageContent" class="my-orders-page-content" style="margin-top: 14px;"></div>
         </div>
 
