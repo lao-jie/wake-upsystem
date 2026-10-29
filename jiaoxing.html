@@ -17,7 +17,7 @@
     <script src="storage.js" defer></script>
     <script src="order.js?v=20261028e1" defer></script>
     <script src="staff.js" defer></script>
-    <script src="app.js?v=20261029orders2" defer></script>
+    <script src="app.js?v=20261029orders3" defer></script>
 </head>
 
 <body>
@@ -326,13 +326,27 @@
         <div id="page_myWakeOrders" class="page">
             <h2>叫醒订单</h2>
             <div class="user-info">当前用户：<span id="myWakeOrdersUserName">-</span></div>
-            <div id="myWakeOrdersContent" class="my-orders-page-content" style="margin-top: 14px;"></div>
+            <div style="margin: 12px 0 14px; display: flex; gap: 8px; flex-wrap: wrap; align-items: center;">
+                <input type="text" id="myWakeOrdersSearchInput" placeholder="搜索：电话、类型、时间、状态、备注"
+                    style="flex: 1; min-width: 200px;"
+                    onkeydown="if(event.key==='Enter'){event.preventDefault();searchMyWakeOrders();}">
+                <button type="button" onclick="searchMyWakeOrders()">搜索</button>
+                <button type="button" class="ghost" onclick="clearMyWakeOrdersSearch()">清空</button>
+            </div>
+            <div id="myWakeOrdersContent" class="my-orders-page-content"></div>
         </div>
 
         <div id="page_mySuperviseOrders" class="page">
             <h2>监督订单</h2>
             <div class="user-info">当前用户：<span id="mySuperviseOrdersUserName">-</span></div>
-            <div id="mySuperviseOrdersContent" class="my-orders-page-content" style="margin-top: 14px;"></div>
+            <div style="margin: 12px 0 14px; display: flex; gap: 8px; flex-wrap: wrap; align-items: center;">
+                <input type="text" id="mySuperviseOrdersSearchInput" placeholder="搜索：订单号、项目、学员、状态、备注"
+                    style="flex: 1; min-width: 200px;"
+                    onkeydown="if(event.key==='Enter'){event.preventDefault();searchMySuperviseOrders();}">
+                <button type="button" onclick="searchMySuperviseOrders()">搜索</button>
+                <button type="button" class="ghost" onclick="clearMySuperviseOrdersSearch()">清空</button>
+            </div>
+            <div id="mySuperviseOrdersContent" class="my-orders-page-content"></div>
         </div>
 
         <div id="page_team" class="page">

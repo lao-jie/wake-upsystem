@@ -3512,17 +3512,111 @@ function renderMyOrdersSuperviseListHtml(orders) {
     return html;
 }
 
+let myWakeOrdersCache = [];
+let mySuperviseOrdersCache = [];
+
+function getMyWakeOrdersSearchKeyword() {
+    return String(document.getElementById("myWakeOrdersSearchInput")?.value || "").trim().toLowerCase();
+}
+
+function getMySuperviseOrdersSearchKeyword() {
+    return String(document.getElementById("mySuperviseOrdersSearchInput")?.value || "").trim().toLowerCase();
+}
+
+function filterMyWakeOrders(list, keyword) {
+    const kw = String(keyword || "").trim().toLowerCase();
+    if (!kw) return list || [];
+    return (list || []).filter((item) => {
+        const timeText = typeof formatWakeTimeDisplay === "function"
+            ? formatWakeTimeDisplay(item.waketime)
+            : (item.waketime || "");
+        const typeText = typeof formatWakeTypeDisplay === "function"
+            ? formatWakeTypeDisplay(item)
+            : (item.waketype || item.type || "");
+        const hay = [
+            item.phone,
+            typeText,
+            timeText,
+            item.status,
+            item.note,
+            item.staffname,
+            item.amount,
+            item.money
+        ].map((v) => String(v == null ? "" : v).toLowerCase()).join(" ");
+        return hay.includes(kw);
+    });
+}
+
+function filterMySuperviseOrders(list, keyword) {
+    const kw = String(keyword || "").trim().toLowerCase();
+    if (!kw) return list || [];
+    return (list || []).filter((item) => {
+        const hay = [
+            item.orderno,
+            item.project,
+            item.studentname,
+            item.duration,
+            item.startdate,
+            item.status,
+            item.note,
+            item.supervisor,
+            item.staffname,
+            item.tasktime,
+            item.price,
+            item.amount
+        ].map((v) => String(v == null ? "" : v).toLowerCase()).join(" ");
+        return hay.includes(kw);
+    });
+}
+
+function renderMyWakeOrdersContent() {
+    const container = document.getElementById("myWakeOrdersContent");
+    if (!container) return;
+    const filtered = filterMyWakeOrders(myWakeOrdersCache, getMyWakeOrdersSearchKeyword());
+    container.innerHTML = renderMyOrdersWakeListHtml(filtered);
+    renderLucideIcons();
+}
+
+function renderMySuperviseOrdersContent() {
+    const container = document.getElementById("mySuperviseOrdersContent");
+    if (!container) return;
+    const filtered = filterMySuperviseOrders(mySuperviseOrdersCache, getMySuperviseOrdersSearchKeyword());
+    container.innerHTML = renderMyOrdersSuperviseListHtml(filtered);
+    renderLucideIcons();
+}
+
+function searchMyWakeOrders() {
+    renderMyWakeOrdersContent();
+}
+
+function clearMyWakeOrdersSearch() {
+    const input = document.getElementById("myWakeOrdersSearchInput");
+    if (input) input.value = "";
+    renderMyWakeOrdersContent();
+}
+
+function searchMySuperviseOrders() {
+    renderMySuperviseOrdersContent();
+}
+
+function clearMySuperviseOrdersSearch() {
+    const input = document.getElementById("mySuperviseOrdersSearchInput");
+    if (input) input.value = "";
+    renderMySuperviseOrdersContent();
+}
+
 async function loadMyWakeOrdersPage(container) {
     if (!container) return;
     try {
         const orders = await getOrders();
-        const myWakeOrders = (orders || []).filter((item) => String(item.staffid || "") === String(user.id || ""));
-        container.innerHTML = renderMyOrdersWakeListHtml(myWakeOrders);
+        myWakeOrdersCache = (orders || []).filter((item) => String(item.staffid || "") === String(user.id || ""));
+        renderMyWakeOrdersContent();
     } catch (e) {
         console.error("读取叫醒订单失败：", e);
+        myWakeOrdersCache = [];
         container.innerHTML = `<div class="my-orders-empty">读取失败，请稍后重试</div>`;
+        renderLucideIcons();
     }
-    renderLucideIcons();
 }
 
 async function loadMySuperviseOrdersPage(container) {
@@ -3530,12 +3624,13 @@ async function loadMySuperviseOrdersPage(container) {
     try {
         const { data, error } = await supabaseClient.from("supervise_orders").select("*").eq("staffid", user.id);
         if (error) throw error;
-        const superviseOrders = Array.isArray(data) ? data : [];
-        container.innerHTML = renderMyOrdersSuperviseListHtml(superviseOrders);
+        mySuperviseOrdersCache = Array.isArray(data) ? data : [];
+        renderMySuperviseOrdersContent();
     } catch (e) {
         console.error("读取监督订单失败：", e);
+        mySuperviseOrdersCache = [];
         container.innerHTML = `<div class="my-orders-empty">读取失败，请稍后重试</div>`;
+        renderLucideIcons();
     }
-    renderLucideIcons();
 }
 
