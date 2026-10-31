@@ -4,52 +4,71 @@ let superviseIsStaff = false;
 let pendingTakeTaskId = "";
 
 (function checkLoginStatus() {
-    if (typeof requireLoginOrRedirect === "function") {
-        currentSuperviseUser = requireLoginOrRedirect("index.html");
-    } else {
-        try {
-            currentSuperviseUser = JSON.parse(localStorage.getItem("loginUser"));
-        } catch (_) {
-            currentSuperviseUser = null;
-        }
-    }
-    if (!currentSuperviseUser) return;
-
-    const userNameEl = document.getElementById("superviseUserName");
-    if (userNameEl) {
-        userNameEl.textContent = currentSuperviseUser.name || currentSuperviseUser.id || "未知用户";
-    }
-
-    superviseIsAdmin = currentSuperviseUser.role === "admin";
-    superviseIsStaff = currentSuperviseUser.role === "staff";
-    document.body.classList.toggle("supervise-admin", superviseIsAdmin);
-    document.body.classList.toggle("supervise-staff", superviseIsStaff);
-    const navTeamText = document.getElementById("navTeamText");
-    if (navTeamText) navTeamText.textContent = superviseIsAdmin ? "团队管理" : "个人中心";
-    const noticeNav = document.getElementById("nav-notice-setting");
-    if (noticeNav) noticeNav.style.display = superviseIsAdmin ? "flex" : "none";
-    const priceStrategyNav = document.getElementById("nav-price-strategy");
-    if (priceStrategyNav) priceStrategyNav.style.display = superviseIsAdmin ? "flex" : "none";
-    const performanceNav = document.getElementById("nav-performance-board");
-    if (performanceNav) performanceNav.style.display = superviseIsAdmin ? "flex" : "none";
-
-    if (window.lucide && typeof window.lucide.createIcons === "function") {
-        window.lucide.createIcons();
-    }
-
-    // 检测是否为移动设备
-    const isMobile = window.innerWidth <= 768;
-    document.body.classList.toggle("is-mobile", isMobile);
-
-    // 监听窗口大小变化
-    window.addEventListener("resize", function () {
-        const isMobile = window.innerWidth <= 768;
-        if (isMobile) {
-            document.body.classList.add("is-mobile");
+    try {
+        if (typeof requireLoginOrRedirect === "function") {
+            currentSuperviseUser = requireLoginOrRedirect("index.html");
+        } else if (typeof getLoginUserSafe === "function") {
+            currentSuperviseUser = getLoginUserSafe();
+            if (!currentSuperviseUser) {
+                try { window.location.href = "index.html"; } catch (_) { /* ignore */ }
+            }
         } else {
-            document.body.classList.remove("is-mobile");
+            try {
+                const parsed = JSON.parse(localStorage.getItem("loginUser") || "null");
+                const id = String(parsed?.id || "").trim();
+                currentSuperviseUser = id ? parsed : null;
+            } catch (_) {
+                currentSuperviseUser = null;
+            }
+            if (!currentSuperviseUser) {
+                try { window.location.href = "index.html"; } catch (_) { /* ignore */ }
+            }
         }
-    });
+
+        if (currentSuperviseUser) {
+            const userNameEl = document.getElementById("superviseUserName");
+            if (userNameEl) {
+                userNameEl.textContent = currentSuperviseUser.name || currentSuperviseUser.id || "未知用户";
+            }
+
+            superviseIsAdmin = currentSuperviseUser.role === "admin";
+            superviseIsStaff = currentSuperviseUser.role === "staff";
+            if (document.body) {
+                document.body.classList.toggle("supervise-admin", superviseIsAdmin);
+                document.body.classList.toggle("supervise-staff", superviseIsStaff);
+            }
+            const navTeamText = document.getElementById("navTeamText");
+            if (navTeamText) navTeamText.textContent = superviseIsAdmin ? "团队管理" : "个人中心";
+            const noticeNav = document.getElementById("nav-notice-setting");
+            if (noticeNav) noticeNav.style.display = superviseIsAdmin ? "flex" : "none";
+            const priceStrategyNav = document.getElementById("nav-price-strategy");
+            if (priceStrategyNav) priceStrategyNav.style.display = superviseIsAdmin ? "flex" : "none";
+            const performanceNav = document.getElementById("nav-performance-board");
+            if (performanceNav) performanceNav.style.display = superviseIsAdmin ? "flex" : "none";
+        }
+    } catch (e) {
+        console.error("监督页登录初始化失败：", e);
+    } finally {
+        // 无论登录是否成功，都要画图标；否则侧栏只剩灰底方块且像“点不了”
+        try {
+            if (window.lucide && typeof window.lucide.createIcons === "function") {
+                window.lucide.createIcons();
+            }
+        } catch (iconErr) {
+            console.warn("lucide 图标初始化失败：", iconErr);
+        }
+        try {
+            const isMobile = window.innerWidth <= 768;
+            if (document.body) document.body.classList.toggle("is-mobile", isMobile);
+            window.addEventListener("resize", function () {
+                const mobileNow = window.innerWidth <= 768;
+                if (document.body) {
+                    if (mobileNow) document.body.classList.add("is-mobile");
+                    else document.body.classList.remove("is-mobile");
+                }
+            });
+        } catch (_) { /* ignore */ }
+    }
 })();
 
 function logout() {
@@ -1319,7 +1338,13 @@ async function rollbackSuperviseIncomeIfSettled(row, rollbackTime = new Date()) 
         "订单收入",
         "监督订单删除，回退已结算收入",
         rollbackTime,
-        { settleKey: `supervise_income_rollback:${row.id ?? `${row.orderno || ""}:${row.submittime || ""}`}` }
+        {
+            settleKey: `supervise_income_rollback:${
+                row.id != null && String(row.id).trim() !== ""
+                    ? String(row.id)
+                    : `${row.orderno || ""}:${row.submittime || ""}`
+            }`
+        }
     );
 
     return { rolledBack: true };
@@ -2789,10 +2814,8 @@ async function finishSuperviseTask(id) {
 async function loadSuperviseDashboard(opts = {}) {
     const silent = opts && opts.silent === true;
     const loadingEl = document.getElementById("superviseLoadingIndicator");
+    // 只用页内 loading，不用全屏遮罩：全屏会盖住侧栏，请求挂起时表现为「图标没了/点不了其他页」
     if (!silent && loadingEl) loadingEl.style.display = "flex";
-    if (!silent && typeof showGlobalLoading === "function") {
-        showGlobalLoading("加载监督任务中…");
-    }
     try {
         const allOrders = await getSuperviseOrders();
         let ordered = [...allOrders].sort((a, b) => {
@@ -2818,9 +2841,6 @@ async function loadSuperviseDashboard(opts = {}) {
         }
     } finally {
         if (!silent && loadingEl) loadingEl.style.display = "none";
-        if (!silent && typeof hideGlobalLoading === "function") {
-            hideGlobalLoading();
-        }
     }
 }
 
@@ -2834,12 +2854,79 @@ function resetSuperviseFilters() {
     loadSuperviseDashboard();
 }
 
+function ensureSuperviseIcons() {
+    try {
+        if (window.lucide && typeof window.lucide.createIcons === "function") {
+            window.lucide.createIcons();
+        }
+    } catch (e) {
+        console.warn("监督页图标刷新失败：", e);
+    }
+}
+
+function ensureSuperviseUserFromStorage() {
+    if (currentSuperviseUser) return currentSuperviseUser;
+    try {
+        const user =
+            typeof getLoginUserSafe === "function"
+                ? getLoginUserSafe()
+                : (() => {
+                    try {
+                        const parsed = JSON.parse(localStorage.getItem("loginUser") || "null");
+                        const id = String(parsed?.id || "").trim();
+                        return id ? parsed : null;
+                    } catch (_) {
+                        return null;
+                    }
+                })();
+        if (!user) return null;
+        currentSuperviseUser = user;
+        superviseIsAdmin = user.role === "admin";
+        superviseIsStaff = user.role === "staff";
+        if (document.body) {
+            document.body.classList.toggle("supervise-admin", superviseIsAdmin);
+            document.body.classList.toggle("supervise-staff", superviseIsStaff);
+        }
+        const userNameEl = document.getElementById("superviseUserName");
+        if (userNameEl) {
+            userNameEl.textContent = user.name || user.id || "未知用户";
+        }
+        const navTeamText = document.getElementById("navTeamText");
+        if (navTeamText) navTeamText.textContent = superviseIsAdmin ? "团队管理" : "个人中心";
+        const noticeNav = document.getElementById("nav-notice-setting");
+        if (noticeNav) noticeNav.style.display = superviseIsAdmin ? "flex" : "none";
+        const priceStrategyNav = document.getElementById("nav-price-strategy");
+        if (priceStrategyNav) priceStrategyNav.style.display = superviseIsAdmin ? "flex" : "none";
+        const performanceNav = document.getElementById("nav-performance-board");
+        if (performanceNav) performanceNav.style.display = superviseIsAdmin ? "flex" : "none";
+        return user;
+    } catch (e) {
+        console.warn("监督页补读登录态失败：", e);
+        return null;
+    }
+}
+
 window.addEventListener("DOMContentLoaded", async () => {
+    // 再刷一次登录态与图标（防止 defer/CDN 时序导致灰方块与「当前用户：-」）
+    ensureSuperviseUserFromStorage();
+    ensureSuperviseIcons();
+    // 确保没有残留全屏遮罩挡住侧栏点击
+    try {
+        if (typeof forceHideGlobalLoading === "function") forceHideGlobalLoading();
+        else {
+            const overlay = document.getElementById("globalLoadingOverlay");
+            if (overlay) overlay.classList.remove("show");
+        }
+    } catch (_) { /* ignore */ }
+
     // 加载价格策略，保证监督页新增/编辑/AI 批量使用管理员配置的单价
     try {
         if (typeof getPriceStrategy === "function") {
-            const strategy = await getPriceStrategy();
-            if (typeof setPriceStrategyCache === "function") {
+            const strategy = await Promise.race([
+                getPriceStrategy(),
+                new Promise((resolve) => setTimeout(() => resolve(null), 4000))
+            ]);
+            if (strategy && typeof setPriceStrategyCache === "function") {
                 setPriceStrategyCache(strategy);
             }
         }
@@ -2858,8 +2945,13 @@ window.addEventListener("DOMContentLoaded", async () => {
             }
         });
     }
+    // 窗口缩放只静默刷新，避免反复弹出全屏 Loading 挡住侧栏点击
+    let __superviseResizeTimer = null;
     window.addEventListener("resize", () => {
-        loadSuperviseDashboard();
+        if (__superviseResizeTimer) clearTimeout(__superviseResizeTimer);
+        __superviseResizeTimer = setTimeout(() => {
+            loadSuperviseDashboard({ silent: true });
+        }, 200);
     });
     getStaffList().then((staffList) => {
         const fillFilterSupervisorSelect = (select) => {

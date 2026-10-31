@@ -1118,6 +1118,9 @@ h2 {
     box-shadow: none;
     flex-shrink: 0;
     border-right: 1px solid var(--border);
+    /* 高于全屏 Loading，监督页加载中仍可点侧栏切页 */
+    position: relative;
+    z-index: 10050;
 }
 
 .sidebar-header {

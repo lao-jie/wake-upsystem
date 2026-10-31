@@ -156,6 +156,8 @@ function generateFixedSerial(orders) {
 // ==================== Global Loading Overlay ====================
 let __globalLoadingCount = 0;
 
+let __globalLoadingWatchdog = null;
+
 function showGlobalLoading(message = "加载中…") {
     __globalLoadingCount += 1;
     const overlay = document.getElementById("globalLoadingOverlay");
@@ -163,14 +165,35 @@ function showGlobalLoading(message = "加载中…") {
     const text = overlay.querySelector(".global-loading__text");
     if (text) text.textContent = String(message || "加载中…");
     overlay.classList.add("show");
+    // 防止请求挂起时遮罩永久挡住侧栏/页面点击
+    if (__globalLoadingWatchdog) clearTimeout(__globalLoadingWatchdog);
+    __globalLoadingWatchdog = setTimeout(() => {
+        __globalLoadingCount = 0;
+        const el = document.getElementById("globalLoadingOverlay");
+        if (el) el.classList.remove("show");
+    }, 20000);
 }
 
 function hideGlobalLoading() {
     __globalLoadingCount = Math.max(0, __globalLoadingCount - 1);
     if (__globalLoadingCount !== 0) return;
+    if (__globalLoadingWatchdog) {
+        clearTimeout(__globalLoadingWatchdog);
+        __globalLoadingWatchdog = null;
+    }
     const overlay = document.getElementById("globalLoadingOverlay");
     if (!overlay) return;
     overlay.classList.remove("show");
+}
+
+function forceHideGlobalLoading() {
+    __globalLoadingCount = 0;
+    if (__globalLoadingWatchdog) {
+        clearTimeout(__globalLoadingWatchdog);
+        __globalLoadingWatchdog = null;
+    }
+    const overlay = document.getElementById("globalLoadingOverlay");
+    if (overlay) overlay.classList.remove("show");
 }
 
 // ==================== Keyword Highlight ====================
