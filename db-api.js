@@ -237,7 +237,32 @@ async function runDbAction(body) {
     for (const row of rows) {
       for (const k of keys) params.push(normalizeCell(table, k, row[k]));
     }
-    await db.query(`INSERT INTO ${quoteId(table)} (${cols}) VALUES ${placeholders}`, params);
+    const sql = `INSERT INTO ${quoteId(table)} (${cols}) VALUES ${placeholders}`;
+    try {
+      await db.query(sql, params);
+    } catch (e) {
+      // 唯一键冲突：返回业务错误，勿 500（settle_key 幂等）
+      if (e && (e.errno === 1062 || e.code === 'ER_DUP_ENTRY')) {
+        return {
+          data: null,
+          error: {
+            message: String(e.sqlMessage || e.message || 'Duplicate entry'),
+            code: '23505'
+          }
+        };
+      }
+      // 旧库缺列：当场补齐后重试一次
+      const msg = String(e.sqlMessage || e.message || '');
+      if (
+        table === 'salary_details' &&
+        /Unknown column ['`]?(settle_key|order_id)['`]?/i.test(msg)
+      ) {
+        await ensureSchema();
+        await db.query(sql, params);
+      } else {
+        throw e;
+      }
+    }
     return { data: rows.map((r) => normalizeRowOut(table, r)), error: null };
   }
 

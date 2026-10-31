@@ -131,10 +131,23 @@ app.post('/api/db', async (req, res) => {
     const result = await runDbAction(req.body || {});
     res.json(result);
   } catch (error) {
+    // 唯一冲突按业务错误返回，避免前端误判成 500/缺列
+    if (error && (error.errno === 1062 || error.code === 'ER_DUP_ENTRY')) {
+      return res.status(200).json({
+        data: null,
+        error: {
+          message: String(error.sqlMessage || error.message || 'Duplicate entry'),
+          code: '23505'
+        }
+      });
+    }
     const status = error.status || 500;
     const message = error.sqlMessage || error.message || '数据库请求失败';
     console.error('DB API error:', message, error.code || '');
-    res.status(status).json({ data: null, error: { message: String(message) } });
+    res.status(status).json({
+      data: null,
+      error: { message: String(message), code: error.code || error.errno || undefined }
+    });
   }
 });
 

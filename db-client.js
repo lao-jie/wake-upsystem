@@ -108,15 +108,17 @@
             : typeof rawErr === 'string'
               ? rawErr
               : rawErr.message || rawErr.sqlMessage || JSON.stringify(rawErr);
+        const errCode =
+          rawErr && typeof rawErr === 'object' ? rawErr.code || rawErr.errno : json.code;
         if (!res.ok) {
           return {
             data: null,
-            error: { message: errMsg || ('HTTP ' + res.status) }
+            error: { message: errMsg || ('HTTP ' + res.status), code: errCode }
           };
         }
         return {
           data: json.data !== undefined ? json.data : null,
-          error: errMsg ? { message: String(errMsg) } : null
+          error: errMsg ? { message: String(errMsg), code: errCode } : null
         };
       } catch (e) {
         return { data: null, error: { message: e.message || String(e) } };
