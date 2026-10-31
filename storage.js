@@ -391,8 +391,23 @@ async function getSalaryDetails() {
 // 原先的 saveSalaryDetails 会“全表删除再插入”，会引发并发重复/覆盖问题。
 // 余额明细改为“单条插入”，并支持唯一 settle_key 实现幂等防重。
 
+let __salaryDetailsMissingColumnsLogged = false;
+/** 本页会话内若检测到缺列，后续自动结算直接跳过，避免 /api/db 500 刷屏拖垮页面 */
+let __salaryDetailsSchemaBroken = false;
+
+function isSalaryDetailsSchemaBroken() {
+    return __salaryDetailsSchemaBroken === true;
+}
+
+function markSalaryDetailsSchemaBroken() {
+    __salaryDetailsSchemaBroken = true;
+}
+
 async function insertSalaryDetail(detail) {
     try {
+        if (__salaryDetailsSchemaBroken) {
+            return { inserted: false, reason: "missing_columns" };
+        }
         const payload = {
             id: detail.id,
             staffid: detail.staffid,
@@ -400,7 +415,7 @@ async function insertSalaryDetail(detail) {
             type: detail.type,
             description: detail.description,
             createdat: detail.createdat || new Date().toISOString(),
-            // 以下两列需要你在 Supabase 表结构中添加（允许为空）
+            // 以下两列需在 MySQL/Supabase 表结构中存在（允许为空）
             settle_key: detail.settle_key || null,
             order_id: detail.order_id || null
         };
@@ -408,13 +423,17 @@ async function insertSalaryDetail(detail) {
         let { error } = await supabaseClient.from('salary_details').insert(payload);
         // 兼容旧表结构：若无 settle_key / order_id 字段，可对「非订单自动结算」降级插入。
         // 叫醒/监督「订单收入 + 自动结算」必须带幂等键写入库，禁止降级成无 settle_key 的行（否则会加余额但库中无键）。
-        if (error && /settle_key|order_id|column/i.test(String(error.message || ""))) {
+        if (error && /settle_key|order_id|column|Unknown column/i.test(String(error.message || ""))) {
             const isOrderIncomeAuto =
                 payload.type === "订单收入" && /自动结算/.test(String(payload.description || ""));
             if (isOrderIncomeAuto) {
-                console.error(
-                    "salary_details 表缺少 settle_key/order_id 列或写入被拒；订单自动结算不能降级插入。请在 Supabase 执行 database.sql 中 salary_details 相关迁移。"
-                );
+                markSalaryDetailsSchemaBroken();
+                if (!__salaryDetailsMissingColumnsLogged) {
+                    __salaryDetailsMissingColumnsLogged = true;
+                    console.error(
+                        "salary_details 表缺少 settle_key/order_id 列或写入被拒；订单自动结算已暂停。请在宝塔 MySQL 执行 database.baota.sql / scripts/migrate_salary_details_baota.sql，并重启 Node 服务（启动时会自动补列）。"
+                    );
+                }
                 return { inserted: false, reason: "missing_columns" };
             }
             const fallbackPayload = {

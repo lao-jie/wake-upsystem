@@ -1,7 +1,7 @@
 require('dotenv').config();
 const express = require('express');
 const axios = require('axios');
-const { runDbAction, dbConfigured } = require('./db-api');
+const { runDbAction, dbConfigured, ensureSchema } = require('./db-api');
 const { mountAuthRoutes } = require('./auth-api');
 const { mailConfigured } = require('./mail');
 const app = express();
@@ -143,9 +143,26 @@ app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', db: dbConfigured(), mail: mailConfigured() });
 });
 
-app.listen(port, () => {
-  console.log(`Server running on port ${port}`);
+async function start() {
+  console.log(`Server starting on port ${port}`);
   console.log(dbConfigured() ? 'MySQL: configured' : 'MySQL: NOT configured (check .env DB_*)');
   console.log(mailConfigured() ? 'Mail: configured' : 'Mail: NOT configured (SMTP_USER/SMTP_PASS)');
-  console.log('db-api: datetime-normalize v2');
-});
+  if (dbConfigured()) {
+    try {
+      const schema = await ensureSchema();
+      if (schema?.changes?.length) {
+        console.log('MySQL schema ensured:', schema.changes.join(', '));
+      } else {
+        console.log('MySQL schema: ok');
+      }
+    } catch (e) {
+      console.error('MySQL schema ensure failed:', e.sqlMessage || e.message || e);
+    }
+  }
+  app.listen(port, () => {
+    console.log(`Server running on port ${port}`);
+    console.log('db-api: datetime-normalize v2 + schema-ensure');
+  });
+}
+
+start();

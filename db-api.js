@@ -300,4 +300,75 @@ function dbConfigured() {
   return Boolean(process.env.DB_USER && process.env.DB_NAME);
 }
 
-module.exports = { runDbAction, dbConfigured, getPool };
+async function columnExists(db, table, column) {
+  const [rows] = await db.query(
+    `SELECT COUNT(*) AS c
+     FROM information_schema.COLUMNS
+     WHERE TABLE_SCHEMA = DATABASE()
+       AND TABLE_NAME = ?
+       AND COLUMN_NAME = ?`,
+    [table, column]
+  );
+  return Number(rows?.[0]?.c || 0) > 0;
+}
+
+async function indexExists(db, table, indexName) {
+  const [rows] = await db.query(
+    `SELECT COUNT(*) AS c
+     FROM information_schema.STATISTICS
+     WHERE TABLE_SCHEMA = DATABASE()
+       AND TABLE_NAME = ?
+       AND INDEX_NAME = ?`,
+    [table, indexName]
+  );
+  return Number(rows?.[0]?.c || 0) > 0;
+}
+
+/**
+ * 启动时补齐关键列，避免旧库缺 settle_key/order_id 导致订单自动结算整页 500 刷屏。
+ */
+async function ensureSchema() {
+  const db = getPool();
+  if (!db) return { ok: false, reason: 'db_not_configured' };
+
+  const changes = [];
+
+  if (!(await columnExists(db, 'salary_details', 'settle_key'))) {
+    await db.query(
+      'ALTER TABLE `salary_details` ADD COLUMN `settle_key` varchar(191) DEFAULT NULL'
+    );
+    changes.push('salary_details.settle_key');
+  }
+  if (!(await columnExists(db, 'salary_details', 'order_id'))) {
+    await db.query(
+      'ALTER TABLE `salary_details` ADD COLUMN `order_id` varchar(64) DEFAULT NULL'
+    );
+    changes.push('salary_details.order_id');
+  }
+  if (
+    (await columnExists(db, 'salary_details', 'settle_key')) &&
+    !(await indexExists(db, 'salary_details', 'uq_salary_details_settle_key'))
+  ) {
+    // 空字符串先归一成 NULL，再建唯一索引（MySQL 允许多个 NULL）
+    await db.query(
+      "UPDATE `salary_details` SET `settle_key` = NULL WHERE `settle_key` IS NOT NULL AND TRIM(`settle_key`) = ''"
+    );
+    await db.query(
+      'ALTER TABLE `salary_details` ADD UNIQUE KEY `uq_salary_details_settle_key` (`settle_key`)'
+    );
+    changes.push('uq_salary_details_settle_key');
+  }
+  if (
+    (await columnExists(db, 'salary_details', 'order_id')) &&
+    !(await indexExists(db, 'salary_details', 'idx_salary_details_order_id'))
+  ) {
+    await db.query(
+      'ALTER TABLE `salary_details` ADD KEY `idx_salary_details_order_id` (`order_id`)'
+    );
+    changes.push('idx_salary_details_order_id');
+  }
+
+  return { ok: true, changes };
+}
+
+module.exports = { runDbAction, dbConfigured, getPool, ensureSchema };

@@ -620,6 +620,9 @@ function getOrderSettleKey(order) {
 async function settleOrderIncomeOnce(order, completedTime = new Date()) {
     if (!order) return { settled: false, reason: "no_order" };
     if (!order.staffid) return { settled: false, reason: "no_staff" };
+    if (typeof isSalaryDetailsSchemaBroken === "function" && isSalaryDetailsSchemaBroken()) {
+        return { settled: false, reason: "missing_columns" };
+    }
 
     const amount = parseFloat(order.amount || order.money || 0);
     if (!Number.isFinite(amount) || amount === 0) {

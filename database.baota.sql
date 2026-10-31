@@ -169,4 +169,11 @@ ALTER TABLE `wake_orders` ADD COLUMN `required_times` int NOT NULL DEFAULT 1;
 ALTER TABLE `wake_orders` ADD COLUMN `completed_times` int NOT NULL DEFAULT 0;
 ALTER TABLE `wake_orders` ADD COLUMN `progress_date` varchar(16) DEFAULT '';
 
+-- 已有库升级：salary_details 幂等结算列（已存在会报 Duplicate column/key，可忽略）
+ALTER TABLE `salary_details` ADD COLUMN `settle_key` varchar(191) DEFAULT NULL;
+ALTER TABLE `salary_details` ADD COLUMN `order_id` varchar(64) DEFAULT NULL;
+UPDATE `salary_details` SET `settle_key` = NULL WHERE `settle_key` IS NOT NULL AND TRIM(`settle_key`) = '';
+ALTER TABLE `salary_details` ADD UNIQUE KEY `uq_salary_details_settle_key` (`settle_key`);
+ALTER TABLE `salary_details` ADD KEY `idx_salary_details_order_id` (`order_id`);
+
 SET FOREIGN_KEY_CHECKS = 1;
