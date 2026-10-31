@@ -1195,7 +1195,10 @@ async function loadStaffLeaderboard() {
             if (listAmountEl) listAmountEl.innerHTML = loadingHtml;
         }
     }
-    if (typeof showGlobalLoading === "function") showGlobalLoading("生成排行榜中…");
+    // 排行榜弹窗内已有局部 loading，勿再盖全屏遮罩（会挡住弹窗）
+    if (!modalVisible && typeof showGlobalLoading === "function") {
+        showGlobalLoading("生成排行榜中…");
+    }
 
     try {
         const filterValue = String(filterEl?.value || "all");
@@ -1341,7 +1344,7 @@ async function loadStaffLeaderboard() {
             if (listAmountEl) listAmountEl.innerHTML = errHtml;
         }
     } finally {
-        if (typeof hideGlobalLoading === "function") hideGlobalLoading();
+        if (!modalVisible && typeof hideGlobalLoading === "function") hideGlobalLoading();
     }
 }
 

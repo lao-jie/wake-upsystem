@@ -153,14 +153,16 @@ async function ensureStaffContactAndAlipayBound() {
 }
 
 // 加载订单
-async function loadOrders() {
+/** 叫醒列表刷新：silent 时不闪全屏 Loading（我的订单操作 / 后台定时结单等） */
+async function loadOrders(opts = {}) {
+    const silent = !!(opts && opts.silent);
     const currentToken = ++latestLoadOrdersToken;
     // 显示加载状态
     const loadingElement = document.getElementById('loadingIndicator');
-    if (loadingElement) {
+    if (!silent && loadingElement) {
         loadingElement.style.display = 'block';
     }
-    if (typeof showGlobalLoading === "function") {
+    if (!silent && typeof showGlobalLoading === "function") {
         showGlobalLoading("加载订单中…");
     }
 
@@ -221,13 +223,27 @@ async function loadOrders() {
         console.error('加载订单失败:', error);
     } finally {
         // 隐藏加载状态
-        if (loadingElement && currentToken === latestLoadOrdersToken) {
+        if (!silent && loadingElement && currentToken === latestLoadOrdersToken) {
             loadingElement.style.display = 'none';
         }
-        if (typeof hideGlobalLoading === "function") {
+        if (!silent && typeof hideGlobalLoading === "function") {
             hideGlobalLoading();
         }
     }
+}
+
+/** 接单/完成/编辑后刷新：在「我的订单」页优先刷新该列表，且大厅静默更新避免全屏遮罩 */
+function refreshWakeViewsAfterChange(opts = {}) {
+    const forceSilent = !!(opts && opts.silent);
+    const onMyWake = typeof currentPage !== "undefined" && currentPage === "myWakeOrders";
+    if (onMyWake && typeof loadMyWakeOrdersPage === "function") {
+        const el = document.getElementById("myWakeOrdersContent");
+        if (el) loadMyWakeOrdersPage(el);
+        loadOrders({ silent: true });
+        return;
+    }
+    const onWakeHall = typeof currentPage === "undefined" || currentPage === "wake";
+    loadOrders({ silent: forceSilent || !onWakeHall });
 }
 
 function formatSubmitTimeCompact(timeStr) {
@@ -752,7 +768,7 @@ async function confirmWakeReassignToStaff(newStaffId, newStaffName) {
         } else {
             alert("转派未同步到云端，请刷新后重试。");
         }
-        if (typeof loadOrders === "function") loadOrders();
+        refreshWakeViewsAfterChange();
         return;
     }
 
@@ -785,7 +801,7 @@ async function confirmWakeReassignToStaff(newStaffId, newStaffName) {
         }
     }
 
-    if (typeof loadOrders === "function") loadOrders();
+    refreshWakeViewsAfterChange();
     if (typeof showToast === "function") {
         showToast(`已转派给「${nextName}」。订单完成后，收入将按新叫醒员结算。`, "success");
     } else {
@@ -825,7 +841,7 @@ async function takeOrderByIdentity(identity) {
     targetOrder.wake_staff_since = getChinaTimeISO();
 
     const cloudOk = await saveOrders(allOrders);
-    loadOrders();
+    refreshWakeViewsAfterChange();
     if (!cloudOk) {
         showToast("本机已接单，但云端同步失败，其他设备可能看不到，请刷新后重试。", "warning");
         return;
@@ -874,7 +890,7 @@ async function batchTakeOrders() {
     });
 
     const cloudOk = await saveOrders(allOrders);
-    loadOrders();
+    refreshWakeViewsAfterChange();
     if (!cloudOk) {
         showToast(`本机已接 ${successCount} 单，但云端同步失败，其他设备可能看不到。`, "warning");
         return;
@@ -909,11 +925,7 @@ async function finishOrderByIdentity(identity) {
         targetOrder.required_times = required;
         if (done < required) {
             const cloudOk = await saveOrders(allOrders);
-            loadOrders();
-            if (typeof currentPage !== "undefined" && currentPage === "myWakeOrders" && typeof loadMyWakeOrdersPage === "function") {
-                const el = document.getElementById("myWakeOrdersContent");
-                if (el) loadMyWakeOrdersPage(el);
-            }
+            refreshWakeViewsAfterChange();
             if (!cloudOk) {
                 showToast("进度已记在本机，但云端同步失败，请刷新后核对。", "warning");
                 return;
@@ -931,11 +943,7 @@ async function finishOrderByIdentity(identity) {
     targetOrder.salarysettled = settleRes.settled === true || settleRes.reason === "already_settled";
 
     const cloudOk = await saveOrders(allOrders);
-    loadOrders();
-    if (typeof currentPage !== "undefined" && currentPage === "myWakeOrders" && typeof loadMyWakeOrdersPage === "function") {
-        const el = document.getElementById("myWakeOrdersContent");
-        if (el) loadMyWakeOrdersPage(el);
-    }
+    refreshWakeViewsAfterChange();
     if (!cloudOk) {
         showToast("订单状态已更新到本机，但云端同步失败，请刷新后核对。", "warning");
         return;
@@ -1023,7 +1031,8 @@ async function checkExpiredOrders() {
 
     if (isUpdated) {
         await saveOrders(allOrders);
-        loadOrders();
+        // 定时自动结单：静默刷新，避免每分钟全屏 Loading 打断操作
+        refreshWakeViewsAfterChange({ silent: true });
     }
 }
 
@@ -1232,7 +1241,7 @@ async function saveAddWakeOrder() {
     const cloudOk = await saveOrders(allOrders);
 
     closeAddWakeOrderModal();
-    loadOrders();
+    refreshWakeViewsAfterChange();
     if (!cloudOk) {
         showToast("本机已保存，但云端同步失败，员工端可能暂时看不到，请刷新后重试。", "warning");
         return;
@@ -1347,7 +1356,7 @@ async function deleteSelected() {
     allOrders = allOrders.filter((item) => !dedupeKeys.has(getWakeOrderDisplayDedupeKey(item)));
     await saveOrders(allOrders);
 
-    loadOrders();
+    refreshWakeViewsAfterChange();
     if (typeof showToast === "function") {
         showToast("删除成功。", "success");
     } else {
@@ -1515,7 +1524,7 @@ async function saveEditWakeOrder() {
     allOrders[idx] = row;
     const cloudOk = await saveOrders(allOrders);
     closeEditWakeOrderModal();
-    loadOrders();
+    refreshWakeViewsAfterChange();
     if (!cloudOk) {
         if (typeof showToast === "function") showToast("本机已保存，但云端同步失败，员工端可能暂时看不到。", "warning");
         else alert("本机已保存，但云端同步失败，员工端可能暂时看不到。");
@@ -2125,7 +2134,7 @@ async function uploadBatchOrders() {
     allOrders = [...allOrders, ...parsedBatchOrders];
 
     await saveOrders(allOrders);
-    loadOrders();
+    refreshWakeViewsAfterChange();
 
     document.getElementById("batchText").value = "";
     document.getElementById("parsePreview").innerHTML = "";

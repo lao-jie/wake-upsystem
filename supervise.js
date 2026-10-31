@@ -118,6 +118,8 @@ let lastDurationValue = "1次";
 let currentCalendarTaskId = "";
 let currentCalendarMonthCursor = null;
 let selectedLogDate = "";
+/** 从「我的订单」经 supervise.html?open= 进入日志时为 true，关闭后应回到我的订单 */
+let superviseCalendarOpenedFromMyOrders = false;
 
 const SUPERVISE_SCREENSHOT_AI_SYSTEM = `你是监督「聊天截图」的严格核验助手，只做 OCR 与逻辑判断。必须只输出一个 JSON 对象，不要 markdown 代码块，不要解释性正文。所有布尔值必须是 JSON 的 true/false。若看不清、不确定或截图不符合条件，对应项一律填 false。`;
 
@@ -2253,6 +2255,13 @@ function closeSuperviseCalendarModal() {
     currentCalendarTaskId = "";
     currentCalendarMonthCursor = null;
     selectedLogDate = "";
+    // 员工从「我的订单」进来看日志：关闭后回监督订单列表，避免停在空的接单大厅
+    if (superviseCalendarOpenedFromMyOrders && superviseIsStaff) {
+        superviseCalendarOpenedFromMyOrders = false;
+        window.location.href = "jiaoxing.html?page=mySuperviseOrders";
+        return;
+    }
+    superviseCalendarOpenedFromMyOrders = false;
 }
 
 function fileToDataUrl(file) {
@@ -2500,7 +2509,8 @@ async function submitDailySuperviseWithAI(forcedSlotProject) {
             preview.src = "";
         }
         renderSuperviseCalendar(currentCalendarTaskId, currentCalendarMonthCursor || new Date());
-        loadSuperviseDashboard();
+        // 日志弹窗打开时静默刷新列表，避免全屏 Loading 盖住弹窗造成“跳转感”
+        loadSuperviseDashboard({ silent: true });
     } catch (e) {
         if (result) result.textContent = `识别失败：${e.message}`;
     }
@@ -2547,7 +2557,7 @@ async function markSuperviseDailyByAdmin(passed) {
             : `已人工判定 ${targetDate}：未完成`;
     }
     renderSuperviseCalendar(currentCalendarTaskId, currentCalendarMonthCursor || new Date());
-    loadSuperviseDashboard();
+    loadSuperviseDashboard({ silent: true });
 }
 
 async function markSuperviseSlotByAdmin(type) {
@@ -2626,7 +2636,7 @@ async function markSuperviseSlotByAdmin(type) {
     await saveSuperviseOrders(next);
     if (result) result.textContent = `已人工判定 ${targetDate}：${slotLabel}完成`;
     renderSuperviseCalendar(currentCalendarTaskId, currentCalendarMonthCursor || new Date());
-    loadSuperviseDashboard();
+    loadSuperviseDashboard({ silent: true });
 }
 
 async function markSuperviseLeaveForDate(type) {
@@ -2705,7 +2715,7 @@ async function markSuperviseLeaveForDate(type) {
             }
         });
         renderSuperviseCalendar(currentCalendarTaskId, currentCalendarMonthCursor || new Date());
-        loadSuperviseDashboard();
+        loadSuperviseDashboard({ silent: true });
         const resultMsg = document.getElementById("calendarSuperviseAiResult");
         if (resultMsg) resultMsg.textContent = "请假申请已提交，等待管理员审批。";
         return;
@@ -2758,7 +2768,7 @@ async function markSuperviseLeaveForDate(type) {
     if (reqHint) reqHint.textContent = buildSuperviseDateRequirementHint(row, targetDate);
     const result = document.getElementById("calendarSuperviseAiResult");
     if (result) result.textContent = `已更新请假：${row.dailylogs[targetDate].reason}`;
-    loadSuperviseDashboard();
+    loadSuperviseDashboard({ silent: true });
 }
 
 async function finishSuperviseTask(id) {
@@ -2773,13 +2783,14 @@ async function finishSuperviseTask(id) {
     await settleSuperviseIfCompleted(row, new Date());
     const next = generateFixedSerial(all);
     await saveSuperviseOrders(next);
-    loadSuperviseDashboard();
+    loadSuperviseDashboard({ silent: !!currentCalendarTaskId });
 }
 
-async function loadSuperviseDashboard() {
+async function loadSuperviseDashboard(opts = {}) {
+    const silent = opts && opts.silent === true;
     const loadingEl = document.getElementById("superviseLoadingIndicator");
-    if (loadingEl) loadingEl.style.display = "flex";
-    if (typeof showGlobalLoading === "function") {
+    if (!silent && loadingEl) loadingEl.style.display = "flex";
+    if (!silent && typeof showGlobalLoading === "function") {
         showGlobalLoading("加载监督任务中…");
     }
     try {
@@ -2806,8 +2817,8 @@ async function loadSuperviseDashboard() {
             tbody.innerHTML = `<tr><td colspan="11" class="salary-empty-cell">监督页面加载失败，请稍后重试</td></tr>`;
         }
     } finally {
-        if (loadingEl) loadingEl.style.display = "none";
-        if (typeof hideGlobalLoading === "function") {
+        if (!silent && loadingEl) loadingEl.style.display = "none";
+        if (!silent && typeof hideGlobalLoading === "function") {
             hideGlobalLoading();
         }
     }
@@ -3001,6 +3012,7 @@ window.addEventListener("DOMContentLoaded", async () => {
     }
     updateAutoSupervisePrice();
     const openId = new URLSearchParams(window.location.search).get("open");
+    superviseCalendarOpenedFromMyOrders = !!String(openId || "").trim();
     Promise.resolve(loadSuperviseDashboard()).then(() => {
         if (openId && typeof openSuperviseCalendarModal === "function") {
             openSuperviseCalendarModal(openId);
