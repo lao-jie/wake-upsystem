@@ -886,9 +886,9 @@ async function saveAddSuperviseOrder() {
         : 0;
     const priceRaw = String(document.getElementById("addSvPrice")?.value || "").trim();
     const inputPrice = parseFloat(priceRaw || "0");
-    const assigned = resolveSuperviseStaffFromSelect("addSvSupervisor");
-    const staffid = assigned.staffid;
-    const staffname = assigned.staffname;
+    const assignedStaff = resolveSuperviseStaffFromSelect("addSvSupervisor");
+    const staffid = String(assignedStaff.staffid || "").trim();
+    const staffname = assignedStaff.staffname || "";
     const supervisor = staffname;
     const startDate = document.getElementById("addSvStartDate")?.value.trim() || getLocalDateString();
     const note = document.getElementById("addSvNote")?.value.trim() || "-";
@@ -908,7 +908,7 @@ async function saveAddSuperviseOrder() {
         finalPrice = Number(autoPrice);
     }
     const waketime = `${startDate}T09:00`;
-    const assigned = !!staffid;
+    const isAssigned = !!staffid;
     const newItem = {
         id: `${Date.now()}-${Math.floor(Math.random() * 1000000)}`,
         waketime,
@@ -920,15 +920,15 @@ async function saveAddSuperviseOrder() {
         tasktime,
         dailyhours,
         price: Number.isFinite(finalPrice) ? finalPrice : 0,
-        supervisor: assigned ? supervisor : "",
+        supervisor: isAssigned ? supervisor : "",
         endtime: "",
         startdate: startDate,
         note: note || "-",
         amount: Number.isFinite(finalPrice) ? finalPrice : 0,
-        status: assigned ? "进行中" : "待接单",
+        status: isAssigned ? "进行中" : "待接单",
         serialnumber: null,
-        staffid: assigned ? String(staffid) : "",
-        staffname: assigned ? staffname : "",
+        staffid: isAssigned ? staffid : "",
+        staffname: isAssigned ? staffname : "",
         salarysettled: false,
         submittime: new Date().toISOString()
     };
