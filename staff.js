@@ -142,7 +142,7 @@ async function renderTeamTable() {
         const todayOrders = allOrders.filter((order) =>
             typeof isWakeOrderAssignedToStaffOnLocalCalendarDay === "function"
                 ? isWakeOrderAssignedToStaffOnLocalCalendarDay(order, staff.id, todayStart, todayEnd)
-                : order.staffid === staff.id &&
+                : String(order.staffid || "").trim() === String(staff.id || "").trim() &&
                   new Date(order.submittime) >= todayStart &&
                   new Date(order.submittime) < todayEnd
         );
@@ -442,7 +442,7 @@ async function punishStaff(staffId) {
 // 渲染个人中心
 async function renderProfilePage() {
     const allOrders = await getOrders();
-    const myOrders = allOrders.filter(order => order.staffid === user.id);
+    const myOrders = allOrders.filter((order) => String(order.staffid || "").trim() === String(user?.id || "").trim());
 
     // 设置用户姓名
     const profileUserName = document.getElementById("profileUserName");

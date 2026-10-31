@@ -14,7 +14,7 @@
     <script src="config.js?v=20261026m4" defer></script>
     <script src="utils.js" defer></script>
     <script src="storage.js" defer></script>
-    <script src="supervise.js?v=20261029hall1" defer></script>
+    <script src="supervise.js?v=20261031assign3" defer></script>
 </head>
 
 <body class="supervise-page">
@@ -366,10 +366,11 @@
             </div>
             <div class="modal-form-item" style="display:grid; grid-template-columns:1fr 1fr; gap:10px;">
                 <div>
-                    <label for="addSvSupervisor">监督员</label>
+                    <label for="addSvSupervisor">归属员工</label>
                     <select id="addSvSupervisor">
-                        <option value="">请选择监督员（选填）</option>
+                        <option value="">不指定（进入接单大厅）</option>
                     </select>
+                    <div style="margin-top:6px;font-size:12px;color:#64748b;">指定后直接归该员工，可在「我的订单 → 监督订单」中查看。</div>
                 </div>
                 <div>
                     <label for="addSvStartDate">开始日期</label>
@@ -442,15 +443,13 @@
                     <input type="number" id="editSvPrice" step="0.01" min="0" placeholder="0.00">
                 </div>
             </div>
-            <div class="modal-form-item" style="display:grid; grid-template-columns:1fr 1fr; gap:10px;">
-                <div>
-                    <label for="editSvSupervisor">监督员</label>
-                    <input type="text" id="editSvSupervisor" placeholder="监督员姓名">
-                </div>
-                <div>
-                    <label for="editSvStaffId">员工账号 ID</label>
-                    <input type="text" id="editSvStaffId" placeholder="接单员工账号，可空">
-                </div>
+            <div class="modal-form-item">
+                <label for="editSvStaffId">归属员工</label>
+                <select id="editSvStaffId">
+                    <option value="">不指定（进入接单大厅）</option>
+                </select>
+                <input type="hidden" id="editSvSupervisor" value="">
+                <div style="margin-top:6px;font-size:12px;color:#64748b;">指定后写入员工账号，可在「我的订单 → 监督订单」中查看；仅填姓名不算归属。</div>
             </div>
             <div class="modal-form-item" style="display:grid; grid-template-columns:1fr 1fr; gap:10px;">
                 <div>

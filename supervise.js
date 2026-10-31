@@ -495,26 +495,31 @@ async function getSuperviseOrders() {
 
 async function saveSuperviseOrders(orders) {
     try {
-        const validOrders = (orders || []).map((order, idx) => ({
-            id: order.id || Math.floor(Math.random() * 1000000) + idx,
-            waketime: order.waketime,
-            phone: order.phone || "",
-            note: buildSuperviseNote(order),
-            amount: parseFloat(order.amount || order.money || order.price || 0),
-            status: order.status || "待接单",
-            serialnumber: order.serialnumber || null,
-            staffid: order.staffid || "",
-            staffname: order.staffname || "",
-            salarysettled: Boolean(order.salarysettled || false),
-            submittime: (() => {
-                const raw = order.submittime || new Date().toISOString();
-                const m = String(raw).match(/^(\d{4}-\d{2}-\d{2})[T\s](\d{2}:\d{2}:\d{2})/);
-                if (m) return `${m[1]} ${m[2]}`;
-                const d = new Date(raw);
-                if (!Number.isNaN(d.getTime())) return d.toISOString().slice(0, 19).replace("T", " ");
-                return raw;
-            })()
-        }));
+        const validOrders = (orders || []).map((order, idx) => {
+            if (order && (order.id === undefined || order.id === null || String(order.id).trim() === "")) {
+                order.id = `${Date.now()}-${Math.floor(Math.random() * 1000000) + idx}`;
+            }
+            return {
+                id: String(order.id),
+                waketime: order.waketime,
+                phone: order.phone || "",
+                note: buildSuperviseNote(order),
+                amount: parseFloat(order.amount || order.money || order.price || 0),
+                status: order.status || "待接单",
+                serialnumber: order.serialnumber || null,
+                staffid: String(order.staffid || "").trim(),
+                staffname: order.staffname || "",
+                salarysettled: Boolean(order.salarysettled || false),
+                submittime: (() => {
+                    const raw = order.submittime || new Date().toISOString();
+                    const m = String(raw).match(/^(\d{4}-\d{2}-\d{2})[T\s](\d{2}:\d{2}:\d{2})/);
+                    if (m) return `${m[1]} ${m[2]}`;
+                    const d = new Date(raw);
+                    if (!Number.isNaN(d.getTime())) return d.toISOString().slice(0, 19).replace("T", " ");
+                    return raw;
+                })()
+            };
+        });
 
         if (!supabaseClient && typeof ensureSupabaseClient === "function") {
             supabaseClient = await ensureSupabaseClient();
@@ -772,6 +777,44 @@ function updateEditSuperviseAutoPrice() {
     priceInput.value = Number(autoPrice).toFixed(2);
 }
 
+async function fillSuperviseAssignStaffSelect(selectId, selectedId = "", emptyLabel = "不指定（进入接单大厅）") {
+    const select = document.getElementById(selectId);
+    if (!select) return;
+    const keep = selectedId != null ? String(selectedId).trim() : "";
+    let staffList = [];
+    try {
+        staffList = (await getStaffList()) || [];
+    } catch (e) {
+        console.warn("加载员工列表失败：", e);
+    }
+    select.innerHTML = "";
+    const emptyOp = document.createElement("option");
+    emptyOp.value = "";
+    emptyOp.textContent = emptyLabel;
+    select.appendChild(emptyOp);
+    staffList.forEach((staff) => {
+        const sid = String(staff?.id || "").trim();
+        if (!sid) return;
+        const op = document.createElement("option");
+        op.value = sid;
+        op.textContent = `${staff.name || sid}（${sid}）`;
+        op.dataset.name = String(staff.name || sid);
+        select.appendChild(op);
+    });
+    if (keep) select.value = keep;
+}
+
+function resolveSuperviseStaffFromSelect(selectId) {
+    const select = document.getElementById(selectId);
+    const staffid = String(select?.value || "").trim();
+    if (!staffid) return { staffid: "", staffname: "" };
+    const opt = select.options[select.selectedIndex];
+    const staffname = String(opt?.dataset?.name || opt?.textContent || staffid)
+        .replace(/（[^）]*）\s*$/, "")
+        .trim() || staffid;
+    return { staffid, staffname };
+}
+
 function openAddSuperviseOrderModal() {
     if (!superviseIsAdmin) {
         alert("只有管理员可以新增监督订单");
@@ -791,6 +834,8 @@ function openAddSuperviseOrderModal() {
     setVal("addSvSupervisor", "");
     setVal("addSvStartDate", getLocalDateString());
     setVal("addSvNote", "");
+    const assignSelect = document.getElementById("addSvSupervisor");
+    if (assignSelect) assignSelect.value = "";
     syncSuperviseVideoHoursUi("add");
     updateAddSuperviseAutoPrice();
     updateAddSuperviseEndDateHint();
@@ -820,7 +865,10 @@ async function saveAddSuperviseOrder() {
         : 0;
     const priceRaw = String(document.getElementById("addSvPrice")?.value || "").trim();
     const inputPrice = parseFloat(priceRaw || "0");
-    const supervisor = document.getElementById("addSvSupervisor")?.value || "";
+    const assigned = resolveSuperviseStaffFromSelect("addSvSupervisor");
+    const staffid = assigned.staffid;
+    const staffname = assigned.staffname;
+    const supervisor = staffname;
     const startDate = document.getElementById("addSvStartDate")?.value.trim() || getLocalDateString();
     const note = document.getElementById("addSvNote")?.value.trim() || "-";
     if (!orderno || !project) {
@@ -839,6 +887,7 @@ async function saveAddSuperviseOrder() {
         finalPrice = Number(autoPrice);
     }
     const waketime = `${startDate}T09:00`;
+    const assigned = !!staffid;
     const newItem = {
         id: `${Date.now()}-${Math.floor(Math.random() * 1000000)}`,
         waketime,
@@ -850,23 +899,37 @@ async function saveAddSuperviseOrder() {
         tasktime,
         dailyhours,
         price: Number.isFinite(finalPrice) ? finalPrice : 0,
-        supervisor: supervisor || "",
+        supervisor: assigned ? supervisor : "",
         endtime: "",
         startdate: startDate,
         note: note || "-",
         amount: Number.isFinite(finalPrice) ? finalPrice : 0,
-        status: "待接单",
+        status: assigned ? "进行中" : "待接单",
         serialnumber: null,
-        staffid: "",
-        staffname: "",
+        staffid: assigned ? String(staffid) : "",
+        staffname: assigned ? staffname : "",
         salarysettled: false,
         submittime: new Date().toISOString()
     };
     const existing = await getSuperviseOrders();
     const merged = generateFixedSerial([...existing, newItem]);
-    await saveSuperviseOrders(merged);
+    try {
+        await saveSuperviseOrders(merged);
+    } catch (e) {
+        closeAddSuperviseOrderModal();
+        loadSuperviseDashboard();
+        if (typeof showToast === "function") {
+            showToast("本机已保存，但云端同步失败，员工端可能暂时看不到，请刷新后重试。", "warning");
+        }
+        return;
+    }
     closeAddSuperviseOrderModal();
-    if (typeof showToast === "function") showToast("监督订单已添加", "success");
+    if (typeof showToast === "function") {
+        showToast(
+            assigned ? `已创建并归属「${staffname}」，员工可在「我的订单」中查看。` : "监督订单已添加",
+            "success"
+        );
+    }
     loadSuperviseDashboard();
 }
 
@@ -915,9 +978,9 @@ function getOwnerNameValue(row) {
 
 function getEffectiveSuperviseStatus(row) {
     const raw = normalizeSuperviseStatus(row?.status);
-    const hasOwner = hasMeaningfulValue(getOwnerIdValue(row)) || hasMeaningfulValue(getOwnerNameValue(row));
+    // 必须以 staffid 归属；仅姓名不算已接（否则大厅与「我的订单」都看不见）
     if (raw === "已完成") return "已完成";
-    if (hasOwner) return "进行中";
+    if (hasMeaningfulValue(getOwnerIdValue(row))) return "进行中";
     return "待接单";
 }
 
@@ -1187,9 +1250,7 @@ function updateSuperviseTaskStatusByLogs(row) {
         return;
     }
     const ownerId = getOwnerIdValue(row);
-    const ownerName = getOwnerNameValue(row);
-    const hasOwner = hasMeaningfulValue(ownerId) || hasMeaningfulValue(ownerName);
-    row.status = hasOwner ? "进行中" : "待接单";
+    row.status = hasMeaningfulValue(ownerId) ? "进行中" : "待接单";
 }
 
 function getSuperviseSettleKey(row) {
@@ -1218,9 +1279,11 @@ async function settleSuperviseIncomeOnce(row, completedTime = new Date()) {
         completedTime,
         { settleKey, orderId }
     );
-    if (!detailRes.inserted && detailRes.reason === "duplicate") {
-        row.salarysettled = true;
-        return { settled: false, reason: "already_settled" };
+    if (!detailRes.inserted) {
+        if (detailRes.reason === "duplicate") {
+            return { settled: false, reason: "already_settled" };
+        }
+        return { settled: false, reason: detailRes.reason || "detail_insert_failed" };
     }
     const ok = await addStaffSalary(row.staffid, amount);
     if (!ok) return { settled: false, reason: "balance_update_failed" };
@@ -1230,7 +1293,10 @@ async function settleSuperviseIncomeOnce(row, completedTime = new Date()) {
 
 async function settleSuperviseIfCompleted(row, completedTime = new Date()) {
     if (!row || String(row.status || "").trim() !== "已完成" || row.salarysettled === true) return;
-    await settleSuperviseIncomeOnce(row, completedTime);
+    const res = await settleSuperviseIncomeOnce(row, completedTime);
+    if (res?.settled === true || res?.reason === "already_settled") {
+        row.salarysettled = true;
+    }
 }
 
 async function rollbackSuperviseIncomeIfSettled(row, rollbackTime = new Date()) {
@@ -1410,8 +1476,7 @@ function getSuperviseActionHtml(item, statusText = getEffectiveSuperviseStatus(i
     const taskReady = isSuperviseTaskReady(item);
     const startDateText = getSuperviseTaskStartDateStr(item);
     const ownerId = getOwnerIdValue(item);
-    const ownerName = getOwnerNameValue(item);
-    const hasOwner = hasMeaningfulValue(ownerId) || hasMeaningfulValue(ownerName);
+    const hasOwner = hasMeaningfulValue(ownerId);
     const id = String(item.id || "").replace(/'/g, "\\'");
     const calendarBtn = `<button type="button" onclick="openSuperviseCalendarModal('${id}')">监督日志</button>`;
     const adminOpsBtn = `<span class="svm-admin-actions"><button type="button" onclick="openEditSuperviseOrderModal('${id}')">操作</button><button type="button" class="success" onclick="openSuperviseCalendarModal('${id}')">日志</button></span>`;
@@ -1468,11 +1533,22 @@ async function openEditSuperviseOrderModal(taskId) {
         }
     }
     setVal("editSvPrice", Number(row.price || row.amount || 0).toFixed(2));
-    setVal("editSvSupervisor", row.supervisor || row.staffname || "");
     setVal("editSvStatus", getEffectiveSuperviseStatus(row));
     setVal("editSvStartDate", row.startdate || getDatePartFromDateTime(row.waketime) || "");
     setVal("editSvNote", row.note === "-" ? "" : (row.note || ""));
-    setVal("editSvStaffId", row.staffid || "");
+    await fillSuperviseAssignStaffSelect("editSvStaffId", row.staffid || "", "不指定（进入接单大厅）");
+    const curSid = String(row.staffid || "").trim();
+    const editStaffSelect = document.getElementById("editSvStaffId");
+    if (editStaffSelect && curSid && editStaffSelect.value !== curSid) {
+        const op = document.createElement("option");
+        op.value = curSid;
+        const nm = row.staffname || row.supervisor || curSid;
+        op.textContent = `${nm}（${curSid}）`;
+        op.dataset.name = String(nm);
+        editStaffSelect.appendChild(op);
+        editStaffSelect.value = curSid;
+    }
+    setVal("editSvSupervisor", row.supervisor || row.staffname || "");
     syncSuperviseVideoHoursUi("edit");
     updateEditSuperviseEndDateHint();
     const modal = document.getElementById("editSuperviseOrderModal");
@@ -1506,11 +1582,12 @@ async function saveEditSuperviseOrder() {
     const durationRaw = document.getElementById("editSvDuration")?.value || "1次";
     const duration = getDurationTextForSave(durationRaw);
     const price = parseFloat(document.getElementById("editSvPrice")?.value || "0");
-    const supervisor = document.getElementById("editSvSupervisor")?.value.trim() || "";
-    const status = document.getElementById("editSvStatus")?.value.trim() || "待接单";
+    let status = document.getElementById("editSvStatus")?.value.trim() || "待接单";
     const startdate = document.getElementById("editSvStartDate")?.value.trim() || "";
     const note = document.getElementById("editSvNote")?.value.trim() || "-";
-    const staffid = document.getElementById("editSvStaffId")?.value.trim() || "";
+    const assigned = resolveSuperviseStaffFromSelect("editSvStaffId");
+    const staffid = assigned.staffid;
+    const staffname = assigned.staffname;
     const studentname = document.getElementById("editSvStudentName")?.value.trim() || "";
     const tasktime = normalizeSuperviseTaskTime(document.getElementById("editSvTaskClock")?.value || "");
     const dailyhours = project === "视频监督"
@@ -1530,20 +1607,34 @@ async function saveEditSuperviseOrder() {
     row.duration = duration;
     row.price = Number.isFinite(price) ? price : 0;
     row.amount = row.price;
-    row.supervisor = supervisor;
-    row.staffname = supervisor;
-    row.staffid = staffid;
-    row.status = status;
     row.startdate = startdate || row.startdate || "";
     if (row.startdate) syncSuperviseWakeTimeWithStartDate(row, row.startdate);
     row.note = note;
-    if (status === "待接单" && !staffid && !supervisor) {
+    if (staffid) {
+        row.staffid = staffid;
+        row.staffname = staffname;
+        row.supervisor = staffname;
+        if (status === "待接单") status = "进行中";
+    } else {
         row.staffid = "";
         row.staffname = "";
         row.supervisor = "";
+        if (status === "进行中") status = "待接单";
     }
+    row.status = status;
+    const nameHidden = document.getElementById("editSvSupervisor");
+    if (nameHidden) nameHidden.value = row.supervisor || "";
     all[idx] = row;
-    await saveSuperviseOrders(generateFixedSerial(all));
+    try {
+        await saveSuperviseOrders(generateFixedSerial(all));
+    } catch (e) {
+        closeEditSuperviseOrderModal();
+        loadSuperviseDashboard();
+        if (typeof showToast === "function") {
+            showToast("本机已保存，但云端同步失败，员工端可能暂时看不到。", "warning");
+        }
+        return;
+    }
     closeEditSuperviseOrderModal();
     if (typeof showToast === "function") showToast("订单已保存", "success");
     loadSuperviseDashboard();
@@ -1746,16 +1837,7 @@ async function deleteSelectedSupervise() {
 async function editSelectedSupervise() {
     const checked = Array.from(document.querySelectorAll(".supervise-checkbox:checked")).map((el) => String(el.value));
     if (checked.length !== 1) return alert("请仅勾选一条任务进行修改");
-    const all = await getSuperviseOrders();
-    const idx = all.findIndex((item) => String(item.id) === checked[0]);
-    if (idx < 0) return;
-    const row = all[idx];
-    const newSupervisor = prompt("修改监督员：", row.supervisor || "");
-    if (newSupervisor === null) return;
-    row.supervisor = newSupervisor.trim();
-    const next = generateFixedSerial(all);
-    await saveSuperviseOrders(next);
-    loadSuperviseDashboard();
+    await openEditSuperviseOrderModal(checked[0]);
 }
 
 async function takeSuperviseTask(id) {
@@ -1768,11 +1850,9 @@ async function takeSuperviseTask(id) {
     if (!row) return;
     const statusText = getEffectiveSuperviseStatus(row);
     const ownerId = getOwnerIdValue(row);
-    const ownerName = getOwnerNameValue(row);
-    const hasOwner = hasMeaningfulValue(ownerId) || hasMeaningfulValue(ownerName);
     const myId = String(currentSuperviseUser?.id || "").trim();
-    const hasOtherOwner = hasOwner && ownerId && ownerId !== myId;
-    if (statusText !== "待接单" || hasOtherOwner) {
+    // 仅 staffid 算已归属；仅有姓名的单仍可接
+    if (statusText !== "待接单" || (ownerId && ownerId !== myId)) {
         alert("该任务已被接单");
         return;
     }
@@ -2771,7 +2851,7 @@ window.addEventListener("DOMContentLoaded", async () => {
         loadSuperviseDashboard();
     });
     getStaffList().then((staffList) => {
-        const fillSupervisorSelect = (select) => {
+        const fillFilterSupervisorSelect = (select) => {
             if (!select) return;
             (staffList || []).forEach((staff) => {
                 const op = document.createElement("option");
@@ -2780,8 +2860,9 @@ window.addEventListener("DOMContentLoaded", async () => {
                 select.appendChild(op);
             });
         };
-        fillSupervisorSelect(document.getElementById("svSupervisor"));
-        fillSupervisorSelect(document.getElementById("addSvSupervisor"));
+        fillFilterSupervisorSelect(document.getElementById("svSupervisor"));
+        fillSuperviseAssignStaffSelect("addSvSupervisor", "", "不指定（进入接单大厅）");
+        fillSuperviseAssignStaffSelect("editSvStaffId", "", "不指定（进入接单大厅）");
         const select = document.getElementById("svSupervisor");
         if (select && superviseIsStaff) {
             select.value = currentSuperviseUser?.name || currentSuperviseUser?.id || "";

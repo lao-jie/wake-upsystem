@@ -20,29 +20,35 @@ async function getOrders() {
 }
 
 async function saveOrders(orders) {
+    let cloudOk = true;
     try {
-        // 确保订单数据结构正确，使用数据库字段名
-        const validOrders = orders.map(order => ({
-            id: order.id || Math.floor(Math.random() * 1000000), // 使用6位随机数作为ID，避免超出整数范围
-            waketime: order.waketime,
-            phone: order.phone,
-            waketype: (typeof normalizeWakeType === "function"
-                ? normalizeWakeType(order.waketype || order.wakeType)
-                : (String(order.waketype || order.wakeType || "叫醒").trim() || "叫醒")),
-            required_times: Math.max(1, parseInt(order.required_times ?? order.requiredTimes ?? 1, 10) || 1),
-            completed_times: Math.max(0, parseInt(order.completed_times ?? order.completedTimes ?? 0, 10) || 0),
-            progress_date: String(order.progress_date || order.progressDate || ""),
-            note: order.note || '',
-            amount: parseFloat(order.amount || order.money || 0), // 确保是数值类型
-            status: order.status || '待接单',
-            serialnumber: order.serialnumber || null,
-            staffid: order.staffid || '',
-            staffname: order.staffname || '',
-            salarysettled: Boolean(order.salarysettled || false),
-            submittime: order.submittime || new Date().toISOString(),
-            // 接单/转派时间，用于员工端「今日单」与列表可见日；需在 Supabase wake_orders 表增加列 wake_staff_since (timestamptz)，否则 upsert 可能报错
-            wake_staff_since: order.wake_staff_since || order.wakeStaffSince || null
-        }));
+        // 确保订单数据结构正确；缺 id 时写回原对象，避免下次再生成新 id 造成云端重复行
+        const validOrders = (orders || []).map((order) => {
+            if (order && (order.id === undefined || order.id === null || String(order.id).trim() === "")) {
+                order.id = Math.floor(Math.random() * 900000) + 100000;
+            }
+            return {
+                id: order.id,
+                waketime: order.waketime,
+                phone: order.phone,
+                waketype: (typeof normalizeWakeType === "function"
+                    ? normalizeWakeType(order.waketype || order.wakeType)
+                    : (String(order.waketype || order.wakeType || "叫醒").trim() || "叫醒")),
+                required_times: Math.max(1, parseInt(order.required_times ?? order.requiredTimes ?? 1, 10) || 1),
+                completed_times: Math.max(0, parseInt(order.completed_times ?? order.completedTimes ?? 0, 10) || 0),
+                progress_date: String(order.progress_date || order.progressDate || ""),
+                note: order.note || '',
+                amount: parseFloat(order.amount || order.money || 0),
+                status: order.status || '待接单',
+                serialnumber: order.serialnumber || null,
+                staffid: String(order.staffid || "").trim(),
+                staffname: order.staffname || '',
+                salarysettled: Boolean(order.salarysettled || false),
+                submittime: order.submittime || new Date().toISOString(),
+                // 接单/转派/手动归属时间；需表有 wake_staff_since 列
+                wake_staff_since: order.wake_staff_since || order.wakeStaffSince || null
+            };
+        });
         if (validOrders.length > 0) {
             // 仅做分批 upsert，避免“本地视图不全导致误删云端数据”
             for (let i = 0; i < validOrders.length; i += 100) {
@@ -56,11 +62,13 @@ async function saveOrders(orders) {
             }
         }
     } catch (e) {
+        cloudOk = false;
         console.error("Supabase 保存订单失败，仅保存到本地：", e);
     } finally {
-        // 无论如何都保存到本地存储
-        localStorage.setItem("wakeOrders", JSON.stringify(orders));
+        // 无论如何都保存到本地存储（含已回写的 id / staffid）
+        localStorage.setItem("wakeOrders", JSON.stringify(orders || []));
     }
+    return cloudOk;
 }
 
 /** 从 Supabase 按主键删除叫醒订单行（不涉及员工余额；余额回退仅在 order.js 的 deleteSelected 中单独处理） */

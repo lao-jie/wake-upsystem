@@ -137,7 +137,7 @@ async function ensureStaffContactAndAlipayBound() {
     if (!isStaff) return true;
 
     const staffList = await getStaffList();
-    const me = (staffList || []).find((staff) => staff.id === user.id);
+    const me = (staffList || []).find((staff) => String(staff?.id || "").trim() === String(user?.id || "").trim());
     const phone = String(me?.phone || "").trim();
     const alipay = String(me?.salaryAccount || "").trim();
 
@@ -744,8 +744,17 @@ async function confirmWakeReassignToStaff(newStaffId, newStaffName) {
     order.staffname = nextName;
     order.wake_staff_since = getChinaTimeISO();
 
-    await saveOrders(allOrders);
+    const cloudOk = await saveOrders(allOrders);
     closeWakeReassignModal();
+    if (!cloudOk) {
+        if (typeof showToast === "function") {
+            showToast("转派未同步到云端，请刷新后重试；未对原叫醒员扣款。", "warning");
+        } else {
+            alert("转派未同步到云端，请刷新后重试。");
+        }
+        if (typeof loadOrders === "function") loadOrders();
+        return;
+    }
 
     if (oldStaffId && penaltyAmt > 0) {
         const oid = order.id !== undefined && order.id !== null && String(order.id).trim() !== "" ? String(order.id) : identity;
@@ -815,8 +824,12 @@ async function takeOrderByIdentity(identity) {
     targetOrder.staffname = user.name;
     targetOrder.wake_staff_since = getChinaTimeISO();
 
-    await saveOrders(allOrders);
+    const cloudOk = await saveOrders(allOrders);
     loadOrders();
+    if (!cloudOk) {
+        showToast("本机已接单，但云端同步失败，其他设备可能看不到，请刷新后重试。", "warning");
+        return;
+    }
     showToast("接单成功，已移至「我的订单 → 叫醒订单」。", "success");
 }
 
@@ -860,8 +873,12 @@ async function batchTakeOrders() {
         }
     });
 
-    await saveOrders(allOrders);
+    const cloudOk = await saveOrders(allOrders);
     loadOrders();
+    if (!cloudOk) {
+        showToast(`本机已接 ${successCount} 单，但云端同步失败，其他设备可能看不到。`, "warning");
+        return;
+    }
     showToast(`接单成功 ${successCount} 单，已移至「我的订单 → 叫醒订单」。`, "success");
 }
 
@@ -891,11 +908,15 @@ async function finishOrderByIdentity(identity) {
         targetOrder.completed_times = done;
         targetOrder.required_times = required;
         if (done < required) {
-            await saveOrders(allOrders);
+            const cloudOk = await saveOrders(allOrders);
             loadOrders();
             if (typeof currentPage !== "undefined" && currentPage === "myWakeOrders" && typeof loadMyWakeOrdersPage === "function") {
                 const el = document.getElementById("myWakeOrdersContent");
                 if (el) loadMyWakeOrdersPage(el);
+            }
+            if (!cloudOk) {
+                showToast("进度已记在本机，但云端同步失败，请刷新后核对。", "warning");
+                return;
             }
             showToast(`已记 1 次，进度 ${done}/${required}，达次数后才会完成并结算。`, "success");
             return;
@@ -909,11 +930,15 @@ async function finishOrderByIdentity(identity) {
     const settleRes = await settleOrderIncomeOnce(targetOrder, completedTime);
     targetOrder.salarysettled = settleRes.settled === true || settleRes.reason === "already_settled";
 
-    await saveOrders(allOrders);
+    const cloudOk = await saveOrders(allOrders);
     loadOrders();
     if (typeof currentPage !== "undefined" && currentPage === "myWakeOrders" && typeof loadMyWakeOrdersPage === "function") {
         const el = document.getElementById("myWakeOrdersContent");
         if (el) loadMyWakeOrdersPage(el);
+    }
+    if (!cloudOk) {
+        showToast("订单状态已更新到本机，但云端同步失败，请刷新后核对。", "warning");
+        return;
     }
     if (targetOrder.salarysettled) {
         showToast("订单已完成，薪资已结算。", "success");
@@ -941,14 +966,18 @@ async function checkExpiredOrders() {
             continue;
         }
         if (item.status === "进行中") {
-            const submitDate = new Date(item.submittime);
-            const submitYear = submitDate.getFullYear();
-            const submitMonth = submitDate.getMonth();
-            const submitDay = submitDate.getDate();
+            // 跨日自动完成/记次：按归属日（转派/接单/手动指定的 wake_staff_since），避免旧单被指定后立刻结单发薪
+            const anchor = typeof getWakeStaffDayAnchorDate === "function"
+                ? getWakeStaffDayAnchorDate(item)
+                : new Date(item.submittime);
+            if (Number.isNaN(anchor.getTime())) continue;
+            const anchorYear = anchor.getFullYear();
+            const anchorMonth = anchor.getMonth();
+            const anchorDay = anchor.getDate();
             const currentYear = now.getFullYear();
             const currentMonth = now.getMonth();
             const currentDay = now.getDate();
-            const submitDateObj = new Date(submitYear, submitMonth, submitDay);
+            const anchorDateObj = new Date(anchorYear, anchorMonth, anchorDay);
             const currentDateObj = new Date(currentYear, currentMonth, currentDay);
             const todayKey = `${currentYear}-${String(currentMonth + 1).padStart(2, "0")}-${String(currentDay).padStart(2, "0")}`;
 
@@ -956,7 +985,7 @@ async function checkExpiredOrders() {
             if (isMultiWakeType(item)) {
                 const required = getWakeRequiredTimes(item);
                 item.required_times = required;
-                if (submitDateObj < currentDateObj && String(item.progress_date || "") !== todayKey) {
+                if (anchorDateObj < currentDateObj && String(item.progress_date || "") !== todayKey) {
                     let done = getWakeCompletedTimes(item) + 1;
                     if (done > required) done = required;
                     item.completed_times = done;
@@ -971,16 +1000,16 @@ async function checkExpiredOrders() {
                 continue;
             }
 
-            if (submitDateObj < currentDateObj && !item.salarysettled) {
+            if (anchorDateObj < currentDateObj && !item.salarysettled) {
                 item.required_times = 1;
                 item.completed_times = 1;
                 item.status = "已完成";
                 const settleRes = await settleOrderIncomeOnce(item, now);
                 item.salarysettled = settleRes.settled === true || settleRes.reason === "already_settled";
                 isUpdated = true;
-            } else if (submitDateObj.getTime() === currentDateObj.getTime()) {
-                const submitMidnight = new Date(submitYear, submitMonth, submitDay + 1);
-                if (now >= submitMidnight && !item.salarysettled) {
+            } else if (anchorDateObj.getTime() === currentDateObj.getTime()) {
+                const dayEnd = new Date(anchorYear, anchorMonth, anchorDay + 1);
+                if (now >= dayEnd && !item.salarysettled) {
                     item.required_times = 1;
                     item.completed_times = 1;
                     item.status = "已完成";
@@ -1069,7 +1098,45 @@ function updateAddWakeAutoAmount() {
     amountInput.value = Number.isFinite(amount) ? amount.toFixed(2) : "";
 }
 
-function openAddWakeOrderModal() {
+async function fillWakeStaffSelect(selectId, selectedId = "", emptyLabel = "不指定") {
+    const select = document.getElementById(selectId);
+    if (!select) return;
+    const keep = selectedId != null ? String(selectedId).trim() : "";
+    let staffList = [];
+    try {
+        staffList = (await getStaffList()) || [];
+    } catch (e) {
+        console.warn("加载员工列表失败：", e);
+    }
+    select.innerHTML = "";
+    const emptyOp = document.createElement("option");
+    emptyOp.value = "";
+    emptyOp.textContent = emptyLabel;
+    select.appendChild(emptyOp);
+    staffList.forEach((staff) => {
+        const sid = String(staff?.id || "").trim();
+        if (!sid) return;
+        const op = document.createElement("option");
+        op.value = sid;
+        op.textContent = `${staff.name || sid}（${sid}）`;
+        op.dataset.name = String(staff.name || sid);
+        select.appendChild(op);
+    });
+    if (keep) select.value = keep;
+}
+
+function resolveWakeStaffFromSelect(selectId) {
+    const select = document.getElementById(selectId);
+    const staffid = String(select?.value || "").trim();
+    if (!staffid) return { staffid: "", staffname: "" };
+    const opt = select.options[select.selectedIndex];
+    const staffname = String(opt?.dataset?.name || opt?.textContent || staffid)
+        .replace(/（[^）]*）\s*$/, "")
+        .trim() || staffid;
+    return { staffid, staffname };
+}
+
+async function openAddWakeOrderModal() {
     if (!isAdmin) {
         alert("只有管理员可以新增叫醒订单");
         return;
@@ -1083,6 +1150,7 @@ function openAddWakeOrderModal() {
     setVal("addWakeType", WAKE_TYPE_DEFAULT);
     setVal("addWakeRequiredTimes", "2");
     setVal("addWakeNote", "");
+    await fillWakeStaffSelect("addWakeStaffId", "", "不指定（进入接单大厅）");
     syncAddWakeRequiredTimesUi();
     updateAddWakeAutoAmount();
     const modal = document.getElementById("addWakeOrderModal");
@@ -1113,6 +1181,7 @@ async function saveAddWakeOrder() {
     const note = document.getElementById("addWakeNote")?.value.trim() || "";
     const amountRaw = String(document.getElementById("addWakeAmount")?.value || "").trim();
     const inputAmount = parseFloat(amountRaw);
+    const { staffid, staffname } = resolveWakeStaffFromSelect("addWakeStaffId");
     let requiredTimes = 1;
     if (isMultiWakeType(waketype)) {
         requiredTimes = parseInt(document.getElementById("addWakeRequiredTimes")?.value || "2", 10);
@@ -1137,7 +1206,10 @@ async function saveAddWakeOrder() {
         amount = inputAmount;
     }
 
+    const assigned = !!staffid;
+    const submitIso = getChinaTimeISO();
     const newOrder = {
+        id: Math.floor(Math.random() * 900000) + 100000,
         waketime,
         phone,
         waketype,
@@ -1146,21 +1218,26 @@ async function saveAddWakeOrder() {
         progress_date: "",
         note,
         amount: Number.isFinite(amount) ? amount : 0,
-        status: "待接单",
+        status: assigned ? "进行中" : "待接单",
         serialnumber: null,
-        staffid: "",
-        staffname: "",
+        staffid: assigned ? String(staffid) : "",
+        staffname: assigned ? staffname : "",
+        wake_staff_since: assigned ? submitIso : null,
         salarysettled: false,
-        submittime: getChinaTimeISO()
+        submittime: submitIso
     };
 
     let allOrders = await getOrders();
     allOrders.push(newOrder);
-    await saveOrders(allOrders);
+    const cloudOk = await saveOrders(allOrders);
 
     closeAddWakeOrderModal();
     loadOrders();
-    showToast("上传成功。", "success");
+    if (!cloudOk) {
+        showToast("本机已保存，但云端同步失败，员工端可能暂时看不到，请刷新后重试。", "warning");
+        return;
+    }
+    showToast(assigned ? `已创建并归属「${staffname}」，员工可在「我的订单」中查看。` : "上传成功。", "success");
 }
 
 /** 兼容旧按钮名 */
@@ -1336,9 +1413,20 @@ async function openEditWakeOrderModal(identity) {
     setVal("editWakeCompletedTimes", String(getWakeCompletedTimes(row)));
     setVal("editWakeAmount", Number(row.amount || row.money || 0).toFixed(2));
     setVal("editWakeStatus", row.status || "待接单");
-    setVal("editWakeStaffName", row.staffname || "");
-    setVal("editWakeStaffId", row.staffid || "");
     setVal("editWakeNote", row.note === "-" ? "" : (row.note || ""));
+    await fillWakeStaffSelect("editWakeStaffId", row.staffid || "", "不指定");
+    // 若当前归属员工不在列表中（已离职等），补一条选项以便保留
+    const editStaffSelect = document.getElementById("editWakeStaffId");
+    const curSid = String(row.staffid || "").trim();
+    if (editStaffSelect && curSid && editStaffSelect.value !== curSid) {
+        const op = document.createElement("option");
+        op.value = curSid;
+        op.textContent = `${row.staffname || curSid}（${curSid}）`;
+        op.dataset.name = String(row.staffname || curSid);
+        editStaffSelect.appendChild(op);
+        editStaffSelect.value = curSid;
+    }
+    setVal("editWakeStaffName", row.staffname || "");
     syncEditWakeRequiredTimesUi();
     const modal = document.getElementById("editWakeOrderModal");
     if (modal) modal.style.display = "flex";
@@ -1367,9 +1455,10 @@ async function saveEditWakeOrder() {
     const phone = document.getElementById("editWakePhone")?.value.trim() || "";
     const waketype = normalizeWakeType(document.getElementById("editWakeType")?.value);
     const note = document.getElementById("editWakeNote")?.value.trim() || "";
-    const status = document.getElementById("editWakeStatus")?.value.trim() || "待接单";
-    const staffname = document.getElementById("editWakeStaffName")?.value.trim() || "";
-    const staffid = document.getElementById("editWakeStaffId")?.value.trim() || "";
+    let status = document.getElementById("editWakeStatus")?.value.trim() || "待接单";
+    const assigned = resolveWakeStaffFromSelect("editWakeStaffId");
+    const staffid = assigned.staffid;
+    const staffname = assigned.staffname;
     const amountRaw = String(document.getElementById("editWakeAmount")?.value || "").trim();
     const amount = parseFloat(amountRaw);
 
@@ -1390,30 +1479,48 @@ async function saveEditWakeOrder() {
     }
 
     const row = { ...allOrders[idx] };
+    const prevStaffId = String(row.staffid || "").trim();
     row.waketime = waketime;
     row.phone = phone;
     row.waketype = waketype;
     row.required_times = requiredTimes;
     row.completed_times = completedTimes;
     row.note = note || "-";
-    row.status = status;
-    row.staffname = staffname;
-    row.staffid = staffid;
     row.amount = Number.isFinite(amount) ? amount : Number(calculateAmountByTime(waketime.split("T")[1] || "") || 0);
     row.money = row.amount;
-    if (status === "待接单" && !staffid && !staffname) {
+
+    if (staffid) {
+        // 指定归属员工：写入 staffid，并确保进入「我的订单」（非待接单池）
+        row.staffid = staffid;
+        row.staffname = staffname;
+        if (status === "待接单") status = "进行中";
+        if (prevStaffId !== staffid || !row.wake_staff_since) {
+            row.wake_staff_since = getChinaTimeISO();
+        }
+    } else {
         row.staffid = "";
         row.staffname = "";
+        row.wake_staff_since = null;
+        if (status === "进行中") status = "待接单";
     }
+    row.status = status;
     // 已完成且多次达次数，或普通已完成：允许补结算标记由后续定时任务处理；此处不强制改 salarysettled
     if (status !== "已完成") {
         // 未完成时保持原结算标记，一般未结算
     }
 
+    const nameHidden = document.getElementById("editWakeStaffName");
+    if (nameHidden) nameHidden.value = row.staffname || "";
+
     allOrders[idx] = row;
-    await saveOrders(allOrders);
+    const cloudOk = await saveOrders(allOrders);
     closeEditWakeOrderModal();
     loadOrders();
+    if (!cloudOk) {
+        if (typeof showToast === "function") showToast("本机已保存，但云端同步失败，员工端可能暂时看不到。", "warning");
+        else alert("本机已保存，但云端同步失败，员工端可能暂时看不到。");
+        return;
+    }
     if (typeof showToast === "function") showToast("修改成功。", "success");
     else alert("修改成功！");
 }

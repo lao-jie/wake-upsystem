@@ -14,10 +14,10 @@
     <script src="https://unpkg.com/lucide@latest"></script>
     <script src="config.js?v=20261026m" defer></script>
     <script src="utils.js" defer></script>
-    <script src="storage.js" defer></script>
-    <script src="order.js?v=20261029hall1" defer></script>
-    <script src="staff.js" defer></script>
-    <script src="app.js?v=20261029hall1" defer></script>
+    <script src="storage.js?v=20261031assign3" defer></script>
+    <script src="order.js?v=20261031assign3" defer></script>
+    <script src="staff.js?v=20261031assign3" defer></script>
+    <script src="app.js?v=20261031assign3" defer></script>
 </head>
 
 <body>
@@ -1036,6 +1036,13 @@
                 <div style="margin-top:6px;font-size:12px;color:#64748b;">金额默认按叫醒时段策略计算，可手动修改；多次订单整单达标后一次性结算。</div>
             </div>
             <div class="modal-form-item">
+                <label for="addWakeStaffId">归属员工</label>
+                <select id="addWakeStaffId">
+                    <option value="">不指定（进入接单大厅）</option>
+                </select>
+                <div style="margin-top:6px;font-size:12px;color:#64748b;">指定后订单直接归该员工，状态为「进行中」，可在「我的订单 → 叫醒订单」中查看。</div>
+            </div>
+            <div class="modal-form-item">
                 <label for="addWakeNote">备注</label>
                 <textarea id="addWakeNote" rows="3" placeholder="备注信息（选填）"
                     style="width:100%;box-sizing:border-box;min-height:72px;resize:vertical;"></textarea>
@@ -1102,15 +1109,13 @@
                     </select>
                 </div>
             </div>
-            <div class="modal-form-item" style="display:grid; grid-template-columns:1fr 1fr; gap:10px;">
-                <div>
-                    <label for="editWakeStaffName">叫醒员</label>
-                    <input type="text" id="editWakeStaffName" placeholder="姓名（可空）">
-                </div>
-                <div>
-                    <label for="editWakeStaffId">员工账号 ID</label>
-                    <input type="text" id="editWakeStaffId" placeholder="可空">
-                </div>
+            <div class="modal-form-item">
+                <label for="editWakeStaffId">归属员工</label>
+                <select id="editWakeStaffId">
+                    <option value="">不指定</option>
+                </select>
+                <input type="hidden" id="editWakeStaffName" value="">
+                <div style="margin-top:6px;font-size:12px;color:#64748b;">指定员工后会写入归属时间；若仍为「待接单」将自动改为「进行中」，员工可在「我的订单」中看到。</div>
             </div>
             <div class="modal-form-item">
                 <label for="editWakeNote">备注</label>

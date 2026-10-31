@@ -1368,7 +1368,8 @@ function getDatePartFromDateTime(value) {
 function getSuperviseEffectiveStatusForHome(row) {
     const raw = String(row?.status || "").trim();
     if (raw === "已完成") return "已完成";
-    const hasOwner = String(row?.staffid || "").trim() || String(row?.supervisor || row?.staffname || "").trim();
+    // 与监督页一致：仅 staffid 算已归属
+    const hasOwner = String(row?.staffid || "").trim() !== "";
     return hasOwner ? "进行中" : "待接单";
 }
 
@@ -3015,18 +3016,16 @@ async function renderTodayOrdersDetail(container) {
     const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
     const todayEnd = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
 
+    // 今日接单详情只显示「归属当前员工」的单，不含接单大厅里的待接新单
     const todayOrders = orders.filter((item) => {
-        if (item.status === "待接单") {
-            const orderDate = new Date(item.submittime);
-            return orderDate >= todayStart && orderDate < todayEnd;
-        }
-        if (item.staffid !== user.id) return false;
+        if (String(item.status || "").trim() === "待接单") return false;
         return typeof isWakeOrderAssignedToStaffOnLocalCalendarDay === "function"
             ? isWakeOrderAssignedToStaffOnLocalCalendarDay(item, user.id, todayStart, todayEnd)
-            : (() => {
-                const orderDate = new Date(item.submittime);
-                return orderDate >= todayStart && orderDate < todayEnd;
-            })();
+            : (String(item.staffid || "").trim() === String(user?.id || "").trim()
+                && (() => {
+                    const orderDate = new Date(item.submittime);
+                    return orderDate >= todayStart && orderDate < todayEnd;
+                })());
     });
 
     if (todayOrders.length === 0) {
@@ -3640,16 +3639,34 @@ async function loadMyWakeOrdersPage(container) {
 
 async function loadMySuperviseOrdersPage(container) {
     if (!container) return;
+    const myId = String(user?.id || "").trim();
     try {
-        const { data, error } = await supabaseClient.from("supervise_orders").select("*").eq("staffid", user.id);
+        const { data, error } = await supabaseClient
+            .from("supervise_orders")
+            .select("*")
+            .eq("staffid", myId);
         if (error) throw error;
-        mySuperviseOrdersCache = Array.isArray(data) ? data : [];
+        const list = (Array.isArray(data) ? data : []).map((row) =>
+            typeof parseSuperviseOrderMeta === "function" ? parseSuperviseOrderMeta(row) : row
+        );
+        mySuperviseOrdersCache = list.filter((item) => String(item?.staffid || "").trim() === myId);
         renderMySuperviseOrdersContent();
     } catch (e) {
         console.error("读取监督订单失败：", e);
-        mySuperviseOrdersCache = [];
-        container.innerHTML = `<div class="my-orders-empty">读取失败，请稍后重试</div>`;
-        renderLucideIcons();
+        try {
+            const local = JSON.parse(localStorage.getItem("superviseOrders") || "[]");
+            mySuperviseOrdersCache = (Array.isArray(local) ? local : [])
+                .map((row) => (typeof parseSuperviseOrderMeta === "function" ? parseSuperviseOrderMeta(row) : row))
+                .filter((item) => String(item?.staffid || "").trim() === myId);
+            renderMySuperviseOrdersContent();
+            if (typeof showToast === "function") {
+                showToast("云端读取失败，已显示本机缓存的监督订单。", "warning");
+            }
+        } catch (_) {
+            mySuperviseOrdersCache = [];
+            container.innerHTML = `<div class="my-orders-empty">读取失败，请稍后重试</div>`;
+            renderLucideIcons();
+        }
     }
 }
 
