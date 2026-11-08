@@ -45,6 +45,8 @@ let pendingTakeTaskId = "";
             if (priceStrategyNav) priceStrategyNav.style.display = superviseIsAdmin ? "flex" : "none";
             const performanceNav = document.getElementById("nav-performance-board");
             if (performanceNav) performanceNav.style.display = superviseIsAdmin ? "flex" : "none";
+            const reviewHallNav = document.getElementById("nav-review-hall");
+            if (reviewHallNav) reviewHallNav.style.display = superviseIsAdmin ? "flex" : "none";
         }
     } catch (e) {
         console.error("监督页登录初始化失败：", e);
@@ -2298,6 +2300,99 @@ function fileToDataUrl(file) {
     });
 }
 
+/** 压缩截图，减小上传体积 */
+async function compressImageFileToDataUrl(file, maxSide = 1280, quality = 0.72) {
+    const raw = await fileToDataUrl(file);
+    return new Promise((resolve, reject) => {
+        const img = new Image();
+        img.onload = () => {
+            try {
+                let w = img.width || 0;
+                let h = img.height || 0;
+                if (!w || !h) {
+                    resolve(raw);
+                    return;
+                }
+                const scale = Math.min(1, maxSide / Math.max(w, h));
+                w = Math.max(1, Math.round(w * scale));
+                h = Math.max(1, Math.round(h * scale));
+                const canvas = document.createElement("canvas");
+                canvas.width = w;
+                canvas.height = h;
+                const ctx = canvas.getContext("2d");
+                ctx.drawImage(img, 0, 0, w, h);
+                resolve(canvas.toDataURL("image/jpeg", quality));
+            } catch (e) {
+                resolve(raw);
+            }
+        };
+        img.onerror = () => reject(new Error("图片读取失败"));
+        img.src = raw;
+    });
+}
+
+/** 上传到服务器 uploads，返回可访问的相对 URL */
+async function uploadSuperviseImageDataUrl(dataUrl, kind = "supervise") {
+    const res = await fetch("/api/upload-image", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ dataUrl, kind })
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+        throw new Error(data.error || `上传失败 HTTP ${res.status}`);
+    }
+    const url = String(data.url || "").trim();
+    if (!url) throw new Error("上传成功但未返回图片地址");
+    return url;
+}
+
+/** 压缩图片再上传，减小 note/服务器压力 */
+async function compressImageFileToDataUrl(file, maxSide = 1280, quality = 0.72) {
+    const raw = await fileToDataUrl(file);
+    return new Promise((resolve, reject) => {
+        const img = new Image();
+        img.onload = () => {
+            try {
+                let w = img.naturalWidth || img.width || 0;
+                let h = img.naturalHeight || img.height || 0;
+                if (!w || !h) {
+                    resolve(raw);
+                    return;
+                }
+                const scale = Math.min(1, maxSide / Math.max(w, h));
+                w = Math.max(1, Math.round(w * scale));
+                h = Math.max(1, Math.round(h * scale));
+                const canvas = document.createElement("canvas");
+                canvas.width = w;
+                canvas.height = h;
+                const ctx = canvas.getContext("2d");
+                ctx.drawImage(img, 0, 0, w, h);
+                resolve(canvas.toDataURL("image/jpeg", quality));
+            } catch (e) {
+                resolve(raw);
+            }
+        };
+        img.onerror = () => reject(new Error("图片读取失败"));
+        img.src = raw;
+    });
+}
+
+async function uploadSuperviseImageDataUrl(dataUrl, kind = "supervise") {
+    const res = await fetch("/api/upload-image", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ dataUrl, kind })
+    });
+    const json = await res.json().catch(() => ({}));
+    if (!res.ok) {
+        throw new Error(json.error || `上传失败 HTTP ${res.status}`);
+    }
+    const url = String(json.url || "").trim();
+    if (!url) throw new Error("上传成功但未返回地址");
+    return url;
+}
+
 function extractJsonObjectFromAiContent(raw) {
     const t = String(raw || "").trim();
     const fenced = t.match(/^```(?:json)?\s*([\s\S]*?)\s*```$/i);
@@ -2419,20 +2514,21 @@ async function submitDailySuperviseWithAI(forcedSlotProject) {
     const result = document.getElementById("calendarSuperviseAiResult");
     const file = input?.files?.[0];
     if (!file) {
-        if (result) result.textContent = "请先选择截图";
+        if (result) result.textContent = "请先选择截图（有图即可提交通过）";
         return;
     }
-    if (result) result.textContent = "AI识别中，请稍候...";
+    if (result) result.textContent = "正在上传截图…";
 
     try {
-        const imageDataUrl = await fileToDataUrl(file);
+        const imageDataUrl = await compressImageFileToDataUrl(file);
+        const imageUrl = await uploadSuperviseImageDataUrl(imageDataUrl, "supervise");
         const today = getLocalDateString();
         const targetDate = superviseIsStaff ? today : (selectedLogDate || today);
         const allForRow = await getSuperviseOrders();
         const row = allForRow.find((item) => String(item.id) === currentCalendarTaskId);
         if (!row) throw new Error("任务不存在");
-        if (!String(row.orderno || "").trim()) throw new Error("本单缺少订单号，无法按规范校验截图");
-        if (!String(row.project || "").trim()) throw new Error("本单缺少监督项目，无法按规范校验截图");
+        if (!String(row.orderno || "").trim()) throw new Error("本单缺少订单号");
+        if (!String(row.project || "").trim()) throw new Error("本单缺少监督项目");
 
         row.dailylogs = row.dailylogs && typeof row.dailylogs === "object" ? row.dailylogs : {};
         if (superviseIsStaff) {
@@ -2473,14 +2569,28 @@ async function submitDailySuperviseWithAI(forcedSlotProject) {
         }
 
         const projectForAi = slotLabels[nextIdx];
-        const { passed, reason } = await runSuperviseScreenshotAi(row, targetDate, projectForAi, imageDataUrl);
+        // 规则：只要成功上传图片即通过；AI 仅作备注参考，失败不影响通过
+        let aiNote = "";
+        try {
+            if (result) result.textContent = "截图已上传，辅助识别中…";
+            const ai = await runSuperviseScreenshotAi(row, targetDate, projectForAi, imageDataUrl);
+            aiNote = ai?.reason ? String(ai.reason) : "";
+        } catch (aiErr) {
+            aiNote = `辅助识别跳过：${aiErr?.message || aiErr}`;
+        }
+        const passed = true;
+        const reason = aiNote
+            ? `已上传通过（${aiNote}）`
+            : "已上传通过";
         const uid = String(currentSuperviseUser?.id || "");
         const nowIso = new Date().toISOString();
         slotsWorking[nextIdx] = {
             passed,
             reason,
             submittedat: nowIso,
-            by: uid
+            by: uid,
+            imageUrl,
+            source: "upload_pass"
         };
         const overallPassed = slotsWorking.every((s) => s && s.passed === true);
         const summaryParts = slotLabels.map((label, i) => {
@@ -2495,16 +2605,20 @@ async function submitDailySuperviseWithAI(forcedSlotProject) {
                 reason: s.reason,
                 slotLabel: slotLabels[i],
                 submittedat: s.submittedat,
-                by: s.by
+                by: s.by,
+                imageUrl: s.imageUrl || "",
+                source: s.source || ""
             };
         });
+        const prevLog = row.dailylogs[targetDate] || {};
         row.dailylogs[targetDate] = {
+            ...prevLog,
             slots: storedSlots,
             passed: overallPassed,
             reason: summaryParts.join("；"),
             submittedat: nowIso,
             by: uid,
-            leave: getDailyLeaveFlags(row.dailylogs[targetDate] || {})
+            leave: getDailyLeaveFlags(prevLog)
         };
         updateSuperviseTaskStatusByLogs(row);
         await settleSuperviseIfCompleted(row, new Date());
@@ -2513,18 +2627,11 @@ async function submitDailySuperviseWithAI(forcedSlotProject) {
 
         if (result) {
             if (overallPassed) {
-                result.textContent = `AI判定：${targetDate} 已完成（${row.dailylogs[targetDate].reason}）`;
+                result.textContent = `已提交：${targetDate} 当日完成（有图即通过）`;
             } else if (slotCount > 1) {
-                const tail = passed
-                    ? overallPassed
-                        ? ""
-                        : "请再选择截图并提交下一张（另一监督子项）。"
-                    : "可重新选择截图后再次提交当前项。";
-                result.textContent = `第 ${nextIdx + 1}/${slotCount} 张（${projectForAi}）：${passed ? "通过" : "未通过"} — ${reason}。${tail}`;
+                result.textContent = `第 ${nextIdx + 1}/${slotCount} 张（${projectForAi}）已上传通过。请再选图提交另一子项。`;
             } else {
-                result.textContent = passed
-                    ? `AI判定：${targetDate} 已完成（${reason}）`
-                    : `AI判定：${targetDate} 未完成（${reason}）`;
+                result.textContent = `已提交：${targetDate} 通过（有图即通过）`;
             }
         }
         if (input) input.value = "";
@@ -2534,10 +2641,9 @@ async function submitDailySuperviseWithAI(forcedSlotProject) {
             preview.src = "";
         }
         renderSuperviseCalendar(currentCalendarTaskId, currentCalendarMonthCursor || new Date());
-        // 日志弹窗打开时静默刷新列表，避免全屏 Loading 盖住弹窗造成“跳转感”
         loadSuperviseDashboard({ silent: true });
     } catch (e) {
-        if (result) result.textContent = `识别失败：${e.message}`;
+        if (result) result.textContent = `提交失败：${e.message}`;
     }
 }
 
@@ -2686,7 +2792,31 @@ async function markSuperviseLeaveForDate(type) {
         alert("仅本单监督员或管理员可设置请假");
         return;
     }
+
+    const input = document.getElementById("calendarSuperviseImage");
+    const file = input?.files?.[0];
+    const resultMsg = document.getElementById("calendarSuperviseAiResult");
+
+    async function requireLeaveImageUpload() {
+        if (!file) {
+            alert("请假请先选择并上传证明图片");
+            if (resultMsg) resultMsg.textContent = "请假须上传图片：请先选择图片后再点请假";
+            return "";
+        }
+        try {
+            if (resultMsg) resultMsg.textContent = "正在上传请假图片…";
+            const dataUrl = await compressImageFileToDataUrl(file);
+            return await uploadSuperviseImageDataUrl(dataUrl, "supervise-leave");
+        } catch (e) {
+            alert(`请假图片上传失败：${e.message || e}`);
+            if (resultMsg) resultMsg.textContent = `请假图片上传失败：${e.message || e}`;
+            return "";
+        }
+    }
+
     if (!superviseIsAdmin) {
+        const leaveImageUrl = await requireLeaveImageUpload();
+        if (!leaveImageUrl) return;
         const leaveRequestId = `${String(row.id || "")}_${targetDate}_${type}`;
         const conflict = await hasExistingLeaveRequestConflict(leaveRequestId);
         if (conflict.blocked) {
@@ -2698,9 +2828,14 @@ async function markSuperviseLeaveForDate(type) {
         const leavePending = getDailyLeavePendingFlags(existing);
         if (type === "sleep") leavePending.sleep = true;
         if (type === "wake") leavePending.wake = true;
+        const leaveImages = {
+            ...(existing.leaveImages && typeof existing.leaveImages === "object" ? existing.leaveImages : {}),
+            [type]: leaveImageUrl
+        };
         row.dailylogs[targetDate] = {
             ...existing,
             leavepending: leavePending,
+            leaveImages,
             // 员工提交请假仅进入待审批，不直接改变生效请假
             leave: getDailyLeaveFlags(existing),
             passed: false,
@@ -2720,7 +2855,8 @@ async function markSuperviseLeaveForDate(type) {
             applicantName: row.supervisor || row.staffname || currentSuperviseUser?.name || "",
             operatorId: "",
             operatorName: "",
-            status: "pending"
+            status: "pending",
+            imageUrl: leaveImageUrl
         });
         await upsertHomePendingForSuperviseLeave({
             id: leaveRequestId,
@@ -2736,20 +2872,37 @@ async function markSuperviseLeaveForDate(type) {
                 leaveType: type,
                 project: project,
                 applicantId: String(row.staffid || currentSuperviseUser?.id || ""),
-                applicantName: row.supervisor || row.staffname || currentSuperviseUser?.name || ""
+                applicantName: row.supervisor || row.staffname || currentSuperviseUser?.name || "",
+                imageUrl: leaveImageUrl
             }
         });
+        if (input) input.value = "";
+        const preview = document.getElementById("calendarSupervisePreview");
+        if (preview) {
+            preview.style.display = "none";
+            preview.src = "";
+        }
         renderSuperviseCalendar(currentCalendarTaskId, currentCalendarMonthCursor || new Date());
         loadSuperviseDashboard({ silent: true });
-        const resultMsg = document.getElementById("calendarSuperviseAiResult");
-        if (resultMsg) resultMsg.textContent = "请假申请已提交，等待管理员审批。";
+        if (resultMsg) resultMsg.textContent = "请假申请已提交（已附图片），等待管理员审批。";
         return;
     }
     row.dailylogs = row.dailylogs && typeof row.dailylogs === "object" ? row.dailylogs : {};
     const existing = row.dailylogs[targetDate] && typeof row.dailylogs[targetDate] === "object" ? row.dailylogs[targetDate] : {};
     const leave = getDailyLeaveFlags(existing);
+    const enabling =
+        (type === "sleep" && !leave.sleep) || (type === "wake" && !leave.wake);
+    let leaveImageUrl = "";
+    if (enabling) {
+        leaveImageUrl = await requireLeaveImageUpload();
+        if (!leaveImageUrl) return;
+    }
     if (type === "sleep") leave.sleep = !leave.sleep;
     if (type === "wake") leave.wake = !leave.wake;
+    const leaveImages = {
+        ...(existing.leaveImages && typeof existing.leaveImages === "object" ? existing.leaveImages : {})
+    };
+    if (enabling && leaveImageUrl) leaveImages[type] = leaveImageUrl;
     const tempRow = {
         ...row,
         dailylogs: {
@@ -2763,6 +2916,7 @@ async function markSuperviseLeaveForDate(type) {
     row.dailylogs[targetDate] = {
         ...existing,
         leave,
+        leaveImages,
         leavepending: { sleep: false, wake: false },
         slots,
         passed: allPassed,
@@ -2788,6 +2942,14 @@ async function markSuperviseLeaveForDate(type) {
         operatorName: currentSuperviseUser?.name || currentSuperviseUser?.id || "",
         status: "approved"
     });
+    if (enabling && input) {
+        input.value = "";
+        const preview = document.getElementById("calendarSupervisePreview");
+        if (preview) {
+            preview.style.display = "none";
+            preview.src = "";
+        }
+    }
     renderSuperviseCalendar(currentCalendarTaskId, currentCalendarMonthCursor || new Date());
     const reqHint = document.getElementById("svDailyRequirementHint");
     if (reqHint) reqHint.textContent = buildSuperviseDateRequirementHint(row, targetDate);
@@ -2899,6 +3061,8 @@ function ensureSuperviseUserFromStorage() {
         if (priceStrategyNav) priceStrategyNav.style.display = superviseIsAdmin ? "flex" : "none";
         const performanceNav = document.getElementById("nav-performance-board");
         if (performanceNav) performanceNav.style.display = superviseIsAdmin ? "flex" : "none";
+        const reviewHallNav = document.getElementById("nav-review-hall");
+        if (reviewHallNav) reviewHallNav.style.display = superviseIsAdmin ? "flex" : "none";
         return user;
     } catch (e) {
         console.warn("监督页补读登录态失败：", e);

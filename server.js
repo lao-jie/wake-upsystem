@@ -1,6 +1,8 @@
 require('dotenv').config();
 const express = require('express');
 const axios = require('axios');
+const fs = require('fs');
+const path = require('path');
 const { runDbAction, dbConfigured, ensureSchema } = require('./db-api');
 const { mountAuthRoutes } = require('./auth-api');
 const { mailConfigured } = require('./mail');
@@ -9,6 +11,12 @@ const port = process.env.PORT || 3001;
 
 app.use(express.json({ limit: '20mb' }));
 app.use(express.static('.'));
+// 监督截图等上传目录（公开可读，便于审核大厅展示）
+const UPLOADS_ROOT = path.join(__dirname, 'uploads');
+try {
+  fs.mkdirSync(UPLOADS_ROOT, { recursive: true });
+} catch (_) { /* ignore */ }
+app.use('/uploads', express.static(UPLOADS_ROOT));
 
 // CORS中间件
 app.use((req, res, next) => {
@@ -125,6 +133,42 @@ app.post('/api/parse-orders', async (req, res) => {
 });
 
 mountAuthRoutes(app);
+
+/** 上传监督截图/请假图：接收 dataURL，落盘 uploads/{kind}/YYYY-MM-DD/xxx.jpg */
+app.post('/api/upload-image', (req, res) => {
+  try {
+    const { dataUrl, kind } = req.body || {};
+    if (!dataUrl || typeof dataUrl !== 'string') {
+      return res.status(400).json({ error: '缺少图片 dataUrl' });
+    }
+    const m = dataUrl.match(/^data:(image\/[a-zA-Z0-9.+-]+);base64,([A-Za-z0-9+/=\s]+)$/);
+    if (!m) {
+      return res.status(400).json({ error: '图片格式无效，请重新选择' });
+    }
+    const mime = String(m[1] || '').toLowerCase();
+    const ext = mime.includes('png') ? 'png' : mime.includes('webp') ? 'webp' : 'jpg';
+    const buf = Buffer.from(String(m[2]).replace(/\s+/g, ''), 'base64');
+    if (!buf.length) {
+      return res.status(400).json({ error: '图片内容为空' });
+    }
+    if (buf.length > 10 * 1024 * 1024) {
+      return res.status(400).json({ error: '图片过大（超过 10MB）' });
+    }
+    const safeKind = String(kind || 'supervise')
+      .replace(/[^a-zA-Z0-9_-]/g, '')
+      .slice(0, 32) || 'supervise';
+    const day = new Date().toISOString().slice(0, 10);
+    const dir = path.join(UPLOADS_ROOT, safeKind, day);
+    fs.mkdirSync(dir, { recursive: true });
+    const name = `${Date.now()}-${Math.random().toString(36).slice(2, 9)}.${ext}`;
+    fs.writeFileSync(path.join(dir, name), buf);
+    const url = `/uploads/${safeKind}/${day}/${name}`;
+    res.json({ url });
+  } catch (error) {
+    console.error('upload-image error:', error.message || error);
+    res.status(500).json({ error: error.message || '上传失败' });
+  }
+});
 
 // 宝塔 MySQL 统一数据接口（前端 db-client.js 调用）
 app.post('/api/db', async (req, res) => {

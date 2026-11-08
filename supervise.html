@@ -8,13 +8,13 @@
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="default">
     <title>老街网创 - 监督界面</title>
-    <link rel="stylesheet" href="styles.css?v=20261031i2">
+    <link rel="stylesheet" href="styles.css?v=20261108review1">
     <script src="db-client.js?v=20261026m4"></script>
     <script src="vendor/lucide.min.js?v=20261031i2"></script>
     <script src="config.js?v=20261026m4" defer></script>
     <script src="utils.js?v=20261031i2" defer></script>
     <script src="storage.js?v=20261031i2" defer></script>
-    <script src="supervise.js?v=20261031i3" defer></script>
+    <script src="supervise.js?v=20261108review1" defer></script>
 </head>
 
 <body class="supervise-page">
@@ -95,6 +95,12 @@
                 onclick="window.location.href='jiaoxing.html?page=performanceBoard'">
                 <span class="icon"><i data-lucide="chart-column"></i></span>
                 <span>绩效看板</span>
+            </div>
+
+            <div class="nav-item" id="nav-review-hall" style="display:none;"
+                onclick="window.location.href='jiaoxing.html?page=reviewHall'">
+                <span class="icon"><i data-lucide="images"></i></span>
+                <span>审核大厅</span>
             </div>
 
             <div class="nav-item logout-nav-item" onclick="logout()" title="退出登录">
@@ -216,18 +222,17 @@
                     <img id="calendarSupervisePreview" alt="截图预览"
                         class="sv-cal-preview-img"
                         style="display:none; width:100%; max-height:220px; object-fit:contain; border-radius:8px; border:1px solid rgba(148,163,184,0.35); margin-top:8px;">
-                    <div id="calendarSuperviseAiResult" class="sv-submit-card__status">上传截图后，点击
-                        AI 识别并提交</div>
+                    <div id="calendarSuperviseAiResult" class="sv-submit-card__status">选择图片后点击提交（有图即通过）；请假也须先选图</div>
                     <div id="calendarSuperviseAiActionsSingle" class="modal-footer"
                         style="justify-content:flex-start; margin-top:10px;">
-                        <button type="button" class="success" onclick="submitDailySuperviseWithAI()">AI识别并提交</button>
+                        <button type="button" class="success" onclick="submitDailySuperviseWithAI()">上传并提交</button>
                     </div>
                     <div id="calendarSuperviseAiActionsSleepWake" class="modal-footer"
                         style="display:none; justify-content:flex-start; flex-wrap:wrap; gap:8px; margin-top:10px;">
                         <button type="button" class="sv-cal-ai-btn" id="calendarSuperviseAiBtnSleep"
-                            onclick="submitDailySuperviseWithAI('监督早睡')">识别早睡</button>
+                            onclick="submitDailySuperviseWithAI('监督早睡')">上传早睡截图</button>
                         <button type="button" class="sv-cal-ai-btn" id="calendarSuperviseAiBtnWake"
-                            onclick="submitDailySuperviseWithAI('监督早起')">识别早起</button>
+                            onclick="submitDailySuperviseWithAI('监督早起')">上传早起截图</button>
                     </div>
                     <div class="modal-footer" id="superviseManualActions"
                         style="display:none; justify-content:flex-start; margin-top:8px;">
@@ -239,9 +244,9 @@
                     <div class="modal-footer" id="superviseLeaveActions"
                         style="display:none; justify-content:flex-start; margin-top:8px;">
                         <button type="button" class="sv-cal-leave-btn" id="superviseLeaveBtnSleep"
-                            onclick="markSuperviseLeaveForDate('sleep')">申请请假早睡</button>
+                            onclick="markSuperviseLeaveForDate('sleep')">请假早睡（须上传图）</button>
                         <button type="button" class="sv-cal-leave-btn" id="superviseLeaveBtnWake"
-                            onclick="markSuperviseLeaveForDate('wake')">申请请假早起</button>
+                            onclick="markSuperviseLeaveForDate('wake')">请假早起（须上传图）</button>
                     </div>
                 </div>
             </div>

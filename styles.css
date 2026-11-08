@@ -6061,3 +6061,66 @@ table td {
         overflow: hidden;
     }
 }
+
+/* ==================== 审核大厅轮播 ==================== */
+.review-hall-carousel {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+.review-hall-stage {
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    min-height: 320px;
+    background: #0f172a;
+    border-radius: 14px;
+    overflow: hidden;
+}
+.review-hall-image {
+    max-width: min(100%, 720px);
+    max-height: 62vh;
+    object-fit: contain;
+    display: block;
+}
+.review-hall-nav {
+    position: absolute;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 42px;
+    height: 42px;
+    border-radius: 999px;
+    border: 1px solid rgba(255, 255, 255, 0.25);
+    background: rgba(15, 23, 42, 0.55);
+    color: #fff;
+    font-size: 28px;
+    line-height: 1;
+    cursor: pointer;
+    z-index: 2;
+}
+.review-hall-nav:hover {
+    background: rgba(37, 99, 235, 0.75);
+}
+#reviewHallPrevBtn { left: 10px; }
+#reviewHallNextBtn { right: 10px; }
+.review-hall-meta {
+    padding: 14px 16px;
+    border-radius: 12px;
+    border: 1px solid #e2e8f0;
+    background: #fff;
+    font-size: 14px;
+    line-height: 1.65;
+    color: #334155;
+}
+.review-hall-meta strong {
+    color: #0f172a;
+}
+.review-hall-pager {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 13px;
+    color: #64748b;
+}

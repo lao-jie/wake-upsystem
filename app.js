@@ -154,6 +154,10 @@ if (isAdmin) {
     if (performanceNav) {
         performanceNav.style.display = "flex";
     }
+    const reviewHallNav = document.getElementById("nav-review-hall");
+    if (reviewHallNav) {
+        reviewHallNav.style.display = "flex";
+    }
 }
 
 let parsedBatchOrders = [];
@@ -310,6 +314,12 @@ function showPage(page) {
         const userNameEl = document.getElementById("performanceBoardUserName");
         if (userNameEl) userNameEl.innerText = user.name;
         loadPerformanceBoard();
+    } else if (page === "reviewHall") {
+        const nav = document.getElementById("nav-review-hall");
+        if (nav) nav.classList.add("active");
+        const userNameEl = document.getElementById("reviewHallUserName");
+        if (userNameEl) userNameEl.innerText = user.name;
+        loadReviewHallPage();
     }
 }
 
@@ -2211,6 +2221,10 @@ window.onload = async function () {
         if (priceStrategyNavOnload) {
             priceStrategyNavOnload.style.display = "flex";
         }
+        const reviewHallNavOnload = document.getElementById("nav-review-hall");
+        if (reviewHallNavOnload) {
+            reviewHallNavOnload.style.display = "flex";
+        }
     } else {
         document.getElementById("navTeamText").innerText = "个人中心";
     }
@@ -3701,4 +3715,212 @@ async function loadMySuperviseOrdersPage(container) {
         }
     }
 }
+
+// ==============================
+// 审核大厅：轮播指定日（默认昨天）的监督上传图
+// ==============================
+let reviewHallItems = [];
+let reviewHallIndex = 0;
+let reviewHallDateCursor = null;
+let reviewHallTimer = null;
+
+function getLocalYmd(date = new Date()) {
+    const y = date.getFullYear();
+    const m = String(date.getMonth() + 1).padStart(2, "0");
+    const d = String(date.getDate()).padStart(2, "0");
+    return `${y}-${m}-${d}`;
+}
+
+function shiftLocalYmd(ymd, deltaDays) {
+    const m = String(ymd || "").match(/^(\d{4})-(\d{2})-(\d{2})$/);
+    const base = m
+        ? new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]))
+        : new Date();
+    base.setDate(base.getDate() + Number(deltaDays || 0));
+    return getLocalYmd(base);
+}
+
+function stopReviewHallAutoPlay() {
+    if (reviewHallTimer) {
+        clearInterval(reviewHallTimer);
+        reviewHallTimer = null;
+    }
+}
+
+function startReviewHallAutoPlay() {
+    stopReviewHallAutoPlay();
+    const auto = document.getElementById("reviewHallAutoPlay");
+    if (!auto || !auto.checked) return;
+    if (reviewHallItems.length <= 1) return;
+    reviewHallTimer = setInterval(() => {
+        showReviewHallItem(reviewHallIndex + 1);
+    }, 5000);
+}
+
+function collectReviewHallItemsFromOrders(orders, dateKey) {
+    const items = [];
+    (orders || []).forEach((row) => {
+        const logs = row?.dailylogs && typeof row.dailylogs === "object" ? row.dailylogs : {};
+        const log = logs[dateKey];
+        if (!log || typeof log !== "object") return;
+        const base = {
+            orderId: String(row.id || ""),
+            orderNo: row.orderno || "-",
+            project: row.project || "-",
+            student: row.studentname || "-",
+            staff: row.supervisor || row.staffname || row.staffid || "-",
+            status: row.status || "-",
+            dateKey
+        };
+        const slots = Array.isArray(log.slots) ? log.slots : [];
+        slots.forEach((slot) => {
+            const url = String(slot?.imageUrl || "").trim();
+            if (!url) return;
+            items.push({
+                ...base,
+                kind: "screenshot",
+                kindLabel: "监督截图",
+                slotLabel: slot.slotLabel || "-",
+                reason: slot.reason || "",
+                passed: slot.passed === true,
+                submittedat: slot.submittedat || log.submittedat || "",
+                imageUrl: url
+            });
+        });
+        const leaveImages = log.leaveImages && typeof log.leaveImages === "object" ? log.leaveImages : {};
+        ["sleep", "wake"].forEach((t) => {
+            const url = String(leaveImages[t] || "").trim();
+            if (!url) return;
+            items.push({
+                ...base,
+                kind: "leave",
+                kindLabel: "请假证明",
+                slotLabel: t === "sleep" ? "请假早睡" : "请假早起",
+                reason: log.reason || "",
+                passed: true,
+                submittedat: log.submittedat || "",
+                imageUrl: url
+            });
+        });
+    });
+    items.sort((a, b) => {
+        const ta = new Date(a.submittedat || 0).getTime() || 0;
+        const tb = new Date(b.submittedat || 0).getTime() || 0;
+        return ta - tb;
+    });
+    return items;
+}
+
+function showReviewHallItem(index) {
+    if (!reviewHallItems.length) return;
+    const n = reviewHallItems.length;
+    reviewHallIndex = ((Number(index) % n) + n) % n;
+    const item = reviewHallItems[reviewHallIndex];
+    const img = document.getElementById("reviewHallImage");
+    const meta = document.getElementById("reviewHallMeta");
+    const idxText = document.getElementById("reviewHallIndexText");
+    if (img) {
+        img.src = item.imageUrl;
+        img.alt = `${item.kindLabel}-${item.orderNo}`;
+    }
+    if (idxText) idxText.textContent = `${reviewHallIndex + 1} / ${n}`;
+    if (meta) {
+        const timeText = item.submittedat
+            ? (typeof formatTime === "function" ? formatTime(item.submittedat) : item.submittedat)
+            : "-";
+        meta.innerHTML = `
+            <div><strong>类型：</strong>${item.kindLabel}${item.slotLabel && item.slotLabel !== "-" ? `（${item.slotLabel}）` : ""}</div>
+            <div><strong>日期：</strong>${item.dateKey}</div>
+            <div><strong>订单号：</strong>${item.orderNo}</div>
+            <div><strong>项目：</strong>${item.project}</div>
+            <div><strong>学员：</strong>${item.student}</div>
+            <div><strong>监督员：</strong>${item.staff}</div>
+            <div><strong>订单状态：</strong>${item.status}</div>
+            <div><strong>提交时间：</strong>${timeText}</div>
+            <div><strong>备注：</strong>${item.reason || "-"}</div>
+        `;
+    }
+}
+
+async function loadReviewHallPage(opts = {}) {
+    if (!isAdmin) return;
+    stopReviewHallAutoPlay();
+    if (!reviewHallDateCursor) {
+        reviewHallDateCursor = shiftLocalYmd(getLocalYmd(), -1);
+    }
+    if (opts.dateKey) reviewHallDateCursor = opts.dateKey;
+
+    const dateText = document.getElementById("reviewHallDateText");
+    if (dateText) dateText.textContent = reviewHallDateCursor;
+
+    const empty = document.getElementById("reviewHallEmpty");
+    const carousel = document.getElementById("reviewHallCarousel");
+    if (empty) empty.style.display = "none";
+    if (carousel) carousel.style.display = "none";
+
+    let orders = [];
+    try {
+        const { data, error } = await supabaseClient.from("supervise_orders").select("*");
+        if (error) throw error;
+        orders = (Array.isArray(data) ? data : []).map((row) =>
+            typeof parseSuperviseOrderMeta === "function" ? parseSuperviseOrderMeta(row) : row
+        );
+    } catch (e) {
+        console.warn("审核大厅读取云端失败，改用本地缓存：", e);
+        try {
+            const local = JSON.parse(localStorage.getItem("superviseOrders") || "[]");
+            orders = (Array.isArray(local) ? local : []).map((row) =>
+                typeof parseSuperviseOrderMeta === "function" ? parseSuperviseOrderMeta(row) : row
+            );
+        } catch (_) {
+            orders = [];
+        }
+    }
+
+    reviewHallItems = collectReviewHallItemsFromOrders(orders, reviewHallDateCursor);
+    reviewHallIndex = 0;
+
+    if (!reviewHallItems.length) {
+        if (empty) empty.style.display = "block";
+        return;
+    }
+    if (carousel) carousel.style.display = "flex";
+    showReviewHallItem(0);
+    startReviewHallAutoPlay();
+}
+
+window.addEventListener("DOMContentLoaded", () => {
+    const bind = (id, fn) => {
+        const el = document.getElementById(id);
+        if (el && !el.__reviewHallBound) {
+            el.__reviewHallBound = true;
+            el.addEventListener("click", fn);
+        }
+    };
+    bind("reviewHallPrevBtn", () => {
+        showReviewHallItem(reviewHallIndex - 1);
+        startReviewHallAutoPlay();
+    });
+    bind("reviewHallNextBtn", () => {
+        showReviewHallItem(reviewHallIndex + 1);
+        startReviewHallAutoPlay();
+    });
+    bind("reviewHallReloadBtn", () => loadReviewHallPage());
+    bind("reviewHallPrevDayBtn", () => {
+        reviewHallDateCursor = shiftLocalYmd(reviewHallDateCursor || getLocalYmd(), -1);
+        loadReviewHallPage();
+    });
+    bind("reviewHallNextDayBtn", () => {
+        reviewHallDateCursor = shiftLocalYmd(reviewHallDateCursor || getLocalYmd(), 1);
+        loadReviewHallPage();
+    });
+    const auto = document.getElementById("reviewHallAutoPlay");
+    if (auto && !auto.__reviewHallBound) {
+        auto.__reviewHallBound = true;
+        auto.addEventListener("change", () => {
+            if (auto.checked) startReviewHallAutoPlay();
+            else stopReviewHallAutoPlay();
+        });
+    }
+});
 
