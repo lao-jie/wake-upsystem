@@ -388,6 +388,10 @@ async function hydratePriceStrategyInputs() {
         "psWake_reassign_penalty",
         strategy?.wake?.reassignPenalty ?? strategy?.wake?.reassign_penalty ?? 0.3
     );
+    setInputNumber(
+        "psWake_visit_price",
+        strategy?.wake?.visitPrice ?? strategy?.wake?.visit_price ?? 0.5
+    );
 
     const unit = strategy?.supervise?.unitPricePerDay || {};
     setInputNumber("psSvUnit_sleep", unit["监督早睡"]);
@@ -410,7 +414,8 @@ async function savePriceStrategyPage() {
                 "07:01-08:00": readInputNumber("psWake_0701_0800", 0.6),
                 "08:01-24:00": readInputNumber("psWake_0801_2400", 0.5)
             },
-            reassignPenalty: readInputNumber("psWake_reassign_penalty", 0.3)
+            reassignPenalty: readInputNumber("psWake_reassign_penalty", 0.3),
+            visitPrice: readInputNumber("psWake_visit_price", 0.5)
         },
         supervise: {
             unitPricePerDay: {
@@ -451,12 +456,24 @@ async function applyPriceStrategyToUnsettledOrders() {
             const isTaken = hasStaff || (status && status !== "待接单");
             if (isTaken) return; // 被接走后金额锁定，不再受价格策略影响
             if (o.salarysettled === true) return;
-            const t = String(o?.waketime || "");
-            const m = t.match(/(\d{1,2}):(\d{2})/);
-            if (!m) return;
-            const hh = String(Number(m[1])).padStart(2, "0");
-            const timeStr = `${hh}:${m[2]}`;
-            const newAmount = Number(calculateAmountByTime(timeStr));
+            const waketype = String(o?.waketype || o?.wakeType || "");
+            let newAmount = 0;
+            if (/回访/.test(waketype) && typeof calculateWakeOrderAmount === "function") {
+                const times =
+                    typeof isMultiWakeType === "function" && isMultiWakeType(waketype)
+                        ? typeof getWakeRequiredTimes === "function"
+                            ? getWakeRequiredTimes(o)
+                            : Number(o.required_times || 1)
+                        : 1;
+                newAmount = Number(calculateWakeOrderAmount(waketype, "", times));
+            } else {
+                const t = String(o?.waketime || "");
+                const m = t.match(/(\d{1,2}):(\d{2})/);
+                if (!m) return;
+                const hh = String(Number(m[1])).padStart(2, "0");
+                const timeStr = `${hh}:${m[2]}`;
+                newAmount = Number(calculateAmountByTime(timeStr));
+            }
             const oldAmount = Number(o.amount || o.money || 0);
             if (Number.isFinite(newAmount) && Math.abs(newAmount - oldAmount) > 0.0001) {
                 o.amount = newAmount;

@@ -117,7 +117,9 @@ function getDefaultPriceStrategy() {
         wake: {
             rules: wakeRules,
             /** 管理员将叫醒单转派给其他人时，从原叫醒员扣除的固定处罚金额（元） */
-            reassignPenalty: 0.3
+            reassignPenalty: 0.3,
+            /** 回访 / 多次回访单价（元/单）；多次按「单价 × 需完成次数」 */
+            visitPrice: 0.5
         },
         supervise: {
             unitPricePerDay: {

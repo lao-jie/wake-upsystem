@@ -1103,7 +1103,16 @@ function updateAddWakeAutoAmount() {
         amountInput.value = "";
         return;
     }
-    const amount = Number(calculateAmountByTime(timePart));
+    const waketype = normalizeWakeType(document.getElementById("addWakeType")?.value);
+    let times = 1;
+    if (isMultiWakeType(waketype)) {
+        times = parseInt(document.getElementById("addWakeRequiredTimes")?.value || "2", 10);
+        if (!Number.isFinite(times) || times < 2) times = 2;
+    }
+    const amount =
+        typeof calculateWakeOrderAmount === "function"
+            ? Number(calculateWakeOrderAmount(waketype, timePart, times))
+            : Number(calculateAmountByTime(timePart));
     amountInput.value = Number.isFinite(amount) ? amount.toFixed(2) : "";
 }
 
@@ -1172,6 +1181,7 @@ function syncAddWakeRequiredTimesUi() {
     const type = normalizeWakeType(document.getElementById("addWakeType")?.value);
     const wrap = document.getElementById("addWakeRequiredTimesWrap");
     if (wrap) wrap.style.display = isMultiWakeType(type) ? "" : "none";
+    updateAddWakeAutoAmount();
 }
 
 function closeAddWakeOrderModal() {
@@ -1206,10 +1216,16 @@ async function saveAddWakeOrder() {
         alert("不能选择过去的时间作为叫醒时间！");
         return;
     }
-    if (!/^1[3-9]\d{9}$/.test(phone)) return alert("请输入11位有效手机号！");
+    const normalizedPhone = normalizeWakePhoneInput(phone);
+    if (!normalizedPhone) {
+        return alert("请输入有效手机号或虚拟号（支持 11 位号，以及「170xxxx转1234」）！");
+    }
 
     const time = waketime.split("T")[1];
-    const autoAmount = Number(calculateAmountByTime(time));
+    const autoAmount =
+        typeof calculateWakeOrderAmount === "function"
+            ? Number(calculateWakeOrderAmount(waketype, time, requiredTimes))
+            : Number(calculateAmountByTime(time));
     let amount = autoAmount;
     if (amountRaw !== "" && Number.isFinite(inputAmount)) {
         amount = inputAmount;
@@ -1220,7 +1236,7 @@ async function saveAddWakeOrder() {
     const newOrder = {
         id: Math.floor(Math.random() * 900000) + 100000,
         waketime,
-        phone,
+        phone: normalizedPhone,
         waketype,
         required_times: requiredTimes,
         completed_times: 0,
@@ -1266,6 +1282,12 @@ window.addEventListener("DOMContentLoaded", () => {
         typeSelect.__wakeTimesBound = true;
         typeSelect.addEventListener("change", syncAddWakeRequiredTimesUi);
     }
+    const addReq = document.getElementById("addWakeRequiredTimes");
+    if (addReq && !addReq.__wakeAmountBound) {
+        addReq.__wakeAmountBound = true;
+        addReq.addEventListener("change", updateAddWakeAutoAmount);
+        addReq.addEventListener("input", updateAddWakeAutoAmount);
+    }
     const editTimeInput = document.getElementById("editWakeTime");
     if (editTimeInput && !editTimeInput.__wakeAmountBound) {
         editTimeInput.__wakeAmountBound = true;
@@ -1275,6 +1297,12 @@ window.addEventListener("DOMContentLoaded", () => {
     if (editTypeSelect && !editTypeSelect.__wakeTimesBound) {
         editTypeSelect.__wakeTimesBound = true;
         editTypeSelect.addEventListener("change", syncEditWakeRequiredTimesUi);
+    }
+    const editReq = document.getElementById("editWakeRequiredTimes");
+    if (editReq && !editReq.__wakeAmountBound) {
+        editReq.__wakeAmountBound = true;
+        editReq.addEventListener("change", updateEditWakeAutoAmount);
+        editReq.addEventListener("input", updateEditWakeAutoAmount);
     }
 });
 
@@ -1385,6 +1413,7 @@ function syncEditWakeRequiredTimesUi() {
     const type = normalizeWakeType(document.getElementById("editWakeType")?.value);
     const wrap = document.getElementById("editWakeRequiredTimesWrap");
     if (wrap) wrap.style.display = isMultiWakeType(type) ? "" : "none";
+    updateEditWakeAutoAmount();
 }
 
 function updateEditWakeAutoAmount() {
@@ -1393,7 +1422,16 @@ function updateEditWakeAutoAmount() {
     if (!amountInput) return;
     const timePart = String(waketime).split("T")[1] || "";
     if (!timePart) return;
-    const amount = Number(calculateAmountByTime(timePart));
+    const waketype = normalizeWakeType(document.getElementById("editWakeType")?.value);
+    let times = 1;
+    if (isMultiWakeType(waketype)) {
+        times = parseInt(document.getElementById("editWakeRequiredTimes")?.value || "2", 10);
+        if (!Number.isFinite(times) || times < 2) times = 2;
+    }
+    const amount =
+        typeof calculateWakeOrderAmount === "function"
+            ? Number(calculateWakeOrderAmount(waketype, timePart, times))
+            : Number(calculateAmountByTime(timePart));
     if (Number.isFinite(amount)) amountInput.value = amount.toFixed(2);
 }
 
@@ -1472,7 +1510,10 @@ async function saveEditWakeOrder() {
     const amount = parseFloat(amountRaw);
 
     if (!waketime) return alert("请选择叫醒时间！");
-    if (!/^1[3-9]\d{9}$/.test(phone)) return alert("请输入11位有效手机号！");
+    const normalizedPhone = normalizeWakePhoneInput(phone);
+    if (!normalizedPhone) {
+        return alert("请输入有效手机号或虚拟号（支持 11 位号，以及「170xxxx转1234」）！");
+    }
     if (!["待接单", "进行中", "已完成"].includes(status)) return alert("状态无效");
 
     let requiredTimes = 1;
@@ -1490,12 +1531,16 @@ async function saveEditWakeOrder() {
     const row = { ...allOrders[idx] };
     const prevStaffId = String(row.staffid || "").trim();
     row.waketime = waketime;
-    row.phone = phone;
+    row.phone = normalizedPhone;
     row.waketype = waketype;
     row.required_times = requiredTimes;
     row.completed_times = completedTimes;
     row.note = note || "-";
-    row.amount = Number.isFinite(amount) ? amount : Number(calculateAmountByTime(waketime.split("T")[1] || "") || 0);
+    row.amount = Number.isFinite(amount)
+        ? amount
+        : typeof calculateWakeOrderAmount === "function"
+            ? Number(calculateWakeOrderAmount(waketype, waketime.split("T")[1] || "", requiredTimes) || 0)
+            : Number(calculateAmountByTime(waketime.split("T")[1] || "") || 0);
     row.money = row.amount;
 
     if (staffid) {
@@ -1599,16 +1644,16 @@ const AI_ORDER_PARSE_SYSTEM_PROMPT = `你是叫醒订单识别助手。用户粘
 【输出要求】
 - 仅输出一个 JSON 数组，不要 markdown、不要代码块、不要解释、不要注释。
 - 必须是合法 JSON：键和字符串一律用英文双引号 "；不要尾逗号；note 内若有引号请去掉或改成空格。
-- 每个元素表示「同一行或同一条连续文案里、同一个手机号」的一批叫醒。
+- 每个元素表示「同一行或同一条连续文案里、同一个联系号码」的一批叫醒。
 
 【字段】
-- phone: 字符串，11 位中国大陆手机号，仅数字（去掉空格、短横线、+86 等后剩下的 11 位）。
+- phone: 字符串。优先 11 位中国大陆手机号（仅数字，去掉空格、短横线、+86）。也必须识别虚拟号/隐私号/中间号：含 162/165/167/170/171 等虚拟运营商号段；若带分机写成「11位号转分机」，如 17012345678转1234（原文「转 / - / # / 分机」均可）。不要因标注「虚拟号」「隐私号」就跳过。
 - wakeTime: 可选，单个叫醒时刻，必须是 24 小时制字符串 HH:mm（如 07:20、09:05）。
 - wakeTimes: 可选，字符串数组；同一行同一号码有多个叫醒点时，把所有点都放进这里，每项均为 HH:mm。
 - wakeDate: 可选，字符串 YYYY-MM-DD；仅当原文明确「明天/后天/大后天/具体日期」对应叫醒日时才填，否则不要填（系统会用当天）。
 - waketype: 字符串，订单类型，只能是「叫醒」「回访」「多次叫醒」「多次回访」之一；原文未写则填「叫醒」。同一号码一行多个时刻优先「多次叫醒」；文案含回访且多时刻用「多次回访」；仅回访单次用「回访」。
 - required_times: 整数；多次叫醒/多次回访必填（如文案「两次」「7次」或 wakeTimes 个数）；单次类型填 1。
-- note: 字符串，除电话与时间外的提醒内容；没有则 ""。不要把类型词单独塞进 note（类型放 waketype）。
+- note: 字符串，除电话与时间外的提醒内容；没有则 ""。不要把类型词单独塞进 note（类型放 waketype）；可把「虚拟号」等简短标注放 note。
 
 【识别规则】
 1. 一行里只有一个号码、多个时间（如「13900001111 7:00 7:20 7:40」「10点 10点20 10点40 189xxx」），只输出 1 个对象，多个时刻全部进 wakeTimes，不要拆成多个对象；waketype 用「多次叫醒」（若文案含回访则「多次回访」）。
@@ -1619,6 +1664,7 @@ const AI_ORDER_PARSE_SYSTEM_PROMPT = `你是叫醒订单识别助手。用户粘
 6. 「明天早上7点」：wakeDate 用明天日期，wakeTime 用 07:00；只有「明天」没有钟点则不要臆造时间。
 7. 备注里若包含与叫醒无关的长说明，保留简短可执行信息即可；不要把手机号写进 note。
 8. 原文出现「回访」「多次叫醒」「多次回访」等字样时，正确填入 waketype。
+9. 虚拟号示例必须识别：虚拟号 17012345678 7:20；隐私号 17100001111转8899 早上八点；中间号 16211112222-6688 9:00。
 
 【输出示例 1】
 输入一行：18953772567 10点 10点20 10点40
@@ -1636,7 +1682,11 @@ const AI_ORDER_PARSE_SYSTEM_PROMPT = `你是叫醒订单识别助手。用户粘
 
 【输出示例 4】
 输入：回访 15200001111 9:00
-输出：[{"phone":"15200001111","wakeTime":"09:00","waketype":"回访","note":""}]`;
+输出：[{"phone":"15200001111","wakeTime":"09:00","waketype":"回访","note":""}]
+
+【输出示例 5】
+输入：虚拟号 17012345678转1234 7:20
+输出：[{"phone":"17012345678转1234","wakeTime":"07:20","waketype":"叫醒","note":"虚拟号"}]`;
 
 function repairAiJsonText(text) {
     let t = String(text || "");
@@ -1709,7 +1759,50 @@ function extractJsonArrayFromAiContent(raw) {
     throw new Error("无法解析 JSON：模型返回格式异常，请重试或简化文本");
 }
 
-/** AI 失败时的本地兜底：按行提取手机号 + 时间 */
+/** 全角数字 → 半角 */
+function toHalfWidthDigits(str) {
+    return String(str || "").replace(/[０-９]/g, (ch) =>
+        String.fromCharCode(ch.charCodeAt(0) - 0xfee0)
+    );
+}
+
+/**
+ * 规范化叫醒联系号码：真实号 / 虚拟号 / 隐私中间号（可带分机）
+ * 例：17012345678、17012345678转1234、+86 171-0000-1111 #8899
+ */
+function normalizeWakePhoneInput(phone) {
+    let s = toHalfWidthDigits(phone)
+        .replace(/[\u200b-\u200d\ufeff]/g, "")
+        .trim();
+    if (!s) return "";
+    s = s.replace(
+        /^(?:虚拟号码|虚拟号|隐私号码|隐私号|中间号|手机号码|手机号|电话号码|电话|号码|联系方式)[:：\s]*/i,
+        ""
+    );
+    s = s.replace(/^\+?86[-\s]*/, "");
+    s = s.replace(/[－—–]/g, "-").replace(/[＃]/g, "#");
+
+    let ext = "";
+    const extMatch = s.match(/^(.*?)(?:\s*(?:转接|转|分机)\s*|\s*[-–,，#]\s*)(\d{2,8})\s*$/i);
+    let base = s;
+    if (extMatch) {
+        base = extMatch[1];
+        ext = extMatch[2];
+    }
+
+    const digits = String(base).replace(/\D/g, "");
+    let mobile = "";
+    if (/^1[3-9]\d{9}$/.test(digits)) mobile = digits;
+    else if (/^86(1[3-9]\d{9})$/.test(digits)) mobile = digits.slice(2);
+    else {
+        const m = digits.match(/1[3-9]\d{9}/);
+        if (m) mobile = m[0];
+    }
+    if (!mobile) return "";
+    return ext ? `${mobile}转${ext}` : mobile;
+}
+
+/** AI 失败时的本地兜底：按行提取手机号/虚拟号 + 时间 */
 function parseWakeOrdersLocallyFromText(text) {
     const lines = String(text || "")
         .split(/\r?\n/)
@@ -1717,10 +1810,14 @@ function parseWakeOrdersLocallyFromText(text) {
         .filter(Boolean);
     const out = [];
     lines.forEach((line) => {
-        const phoneMatch = line.match(/(?:\+?86[-\s]?)?(1[3-9]\d{9})/);
+        const rawLine = toHalfWidthDigits(line);
+        const phoneMatch = rawLine.match(
+            /(?:\+?86[-\s]?)?(1[3-9]\d{9})(?:\s*(?:转接|转|分机|[-–#,，])\s*(\d{2,8}))?/i
+        );
         if (!phoneMatch) return;
-        const phone = phoneMatch[1];
-        const withoutPhone = line.replace(phoneMatch[0], " ");
+        const phone = normalizeWakePhoneInput(phoneMatch[0]);
+        if (!phone) return;
+        const withoutPhone = rawLine.replace(phoneMatch[0], " ");
         const times = [];
         const pushTime = (hh, mm) => {
             const h = Number(hh);
@@ -1776,11 +1873,7 @@ function parseWakeOrdersLocallyFromText(text) {
 }
 
 function normalizePhoneForAiBatch(phone) {
-    const digits = String(phone ?? "").replace(/\D/g, "");
-    if (/^1[3-9]\d{9}$/.test(digits)) {
-        return digits;
-    }
-    return "";
+    return normalizeWakePhoneInput(phone);
 }
 
 function collectWakeTimesFromAiObject(o) {
@@ -2054,7 +2147,15 @@ async function parseBatchOrders() {
 
             // 多次：合并为一单，达次数后才结算；单次：仍按每个时刻一单
             if (isMultiWakeType(waketype)) {
-                const amountSum = normalizedTimes.reduce((sum, t) => sum + Number(calculateAmountByTime(t) || 0), 0);
+                let amountSum = 0;
+                if (/回访/.test(waketype) && typeof calculateWakeOrderAmount === "function") {
+                    amountSum = Number(calculateWakeOrderAmount(waketype, normalizedTimes[0], requiredTimes));
+                } else {
+                    amountSum = normalizedTimes.reduce(
+                        (sum, t) => sum + Number(calculateAmountByTime(t) || 0),
+                        0
+                    );
+                }
                 built.push({
                     waketime: `${dateForRow}T${normalizedTimes[0]}`,
                     phone,
@@ -2075,6 +2176,10 @@ async function parseBatchOrders() {
             }
 
             normalizedTimes.forEach((time) => {
+                const amt =
+                    typeof calculateWakeOrderAmount === "function"
+                        ? Number(calculateWakeOrderAmount(waketype, time, 1))
+                        : Number(calculateAmountByTime(time));
                 built.push({
                     waketime: `${dateForRow}T${time}`,
                     phone,
@@ -2083,7 +2188,7 @@ async function parseBatchOrders() {
                     completed_times: 0,
                     progress_date: "",
                     note,
-                    amount: calculateAmountByTime(time),
+                    amount: amt,
                     status: "待接单",
                     serialnumber: null,
                     staffid: "",
