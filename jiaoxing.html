@@ -12,12 +12,12 @@
     <link rel="stylesheet" href="styles.css?v=20261028e2">
     <script src="db-client.js?v=20261031settleKey2"></script>
     <script src="https://unpkg.com/lucide@latest"></script>
-    <script src="config.js?v=20261026m" defer></script>
+    <script src="config.js?v=20261108price2" defer></script>
     <script src="utils.js?v=20261108visit1" defer></script>
-    <script src="storage.js?v=20261108visit1" defer></script>
+    <script src="storage.js?v=20261108price2" defer></script>
     <script src="order.js?v=20261108visit1" defer></script>
     <script src="staff.js?v=20261031settleKey2" defer></script>
-    <script src="app.js?v=20261108visit1" defer></script>
+    <script src="app.js?v=20261108price2" defer></script>
 </head>
 
 <body>
@@ -680,19 +680,19 @@
                         <div class="price-strategy-rows">
                             <div class="price-strategy-row">
                                 <div class="k">06:00-06:30</div>
-                                <input id="psWake_0600_0630" type="number" step="0.01" min="0" placeholder="0.00">
+                                <input id="psWake_0600_0630" type="number" step="0.01" min="0" placeholder="1.30">
                             </div>
                             <div class="price-strategy-row">
-                                <div class="k">06:31-07:00</div>
-                                <input id="psWake_0631_0700" type="number" step="0.01" min="0" placeholder="0.00">
+                                <div class="k">06:30-07:00</div>
+                                <input id="psWake_0631_0700" type="number" step="0.01" min="0" placeholder="1.20">
                             </div>
                             <div class="price-strategy-row">
-                                <div class="k">07:01-08:00</div>
-                                <input id="psWake_0701_0800" type="number" step="0.01" min="0" placeholder="0.00">
+                                <div class="k">07:00-08:00</div>
+                                <input id="psWake_0701_0800" type="number" step="0.01" min="0" placeholder="1.10">
                             </div>
                             <div class="price-strategy-row">
-                                <div class="k">08:01-24:00</div>
-                                <input id="psWake_0801_2400" type="number" step="0.01" min="0" placeholder="0.00">
+                                <div class="k">08:00之后</div>
+                                <input id="psWake_0801_2400" type="number" step="0.01" min="0" placeholder="1.00">
                             </div>
                             <div class="price-strategy-row">
                                 <div class="k">转接处罚（元）</div>

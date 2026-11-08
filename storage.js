@@ -107,10 +107,10 @@ const PRICE_STRATEGY_DB_TABLE = "price_strategy";
 
 function getDefaultPriceStrategy() {
     const wakeRules = (typeof PRICE_RULE === "object" && PRICE_RULE) ? { ...PRICE_RULE } : {
-        "06:00-06:30": 0.8,
-        "06:31-07:00": 0.7,
-        "07:01-08:00": 0.6,
-        "08:01-24:00": 0.5
+        "06:00-06:30": 1.3,
+        "06:31-07:00": 1.2,
+        "07:01-08:00": 1.1,
+        "08:01-24:00": 1.0
     };
     return {
         version: 1,

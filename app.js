@@ -409,10 +409,10 @@ async function savePriceStrategyPage() {
         version: 1,
         wake: {
             rules: {
-                "06:00-06:30": readInputNumber("psWake_0600_0630", 0.8),
-                "06:31-07:00": readInputNumber("psWake_0631_0700", 0.7),
-                "07:01-08:00": readInputNumber("psWake_0701_0800", 0.6),
-                "08:01-24:00": readInputNumber("psWake_0801_2400", 0.5)
+                "06:00-06:30": readInputNumber("psWake_0600_0630", 1.3),
+                "06:31-07:00": readInputNumber("psWake_0631_0700", 1.2),
+                "07:01-08:00": readInputNumber("psWake_0701_0800", 1.1),
+                "08:01-24:00": readInputNumber("psWake_0801_2400", 1.0)
             },
             reassignPenalty: readInputNumber("psWake_reassign_penalty", 0.3),
             visitPrice: readInputNumber("psWake_visit_price", 0.5)
