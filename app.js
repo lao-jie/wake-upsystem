@@ -3811,6 +3811,14 @@ function collectReviewHallItemsFromOrders(orders, dateKey) {
     return items;
 }
 
+function escapeReviewHallHtml(value) {
+    return String(value ?? "")
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;");
+}
+
 function showReviewHallItem(index) {
     if (!reviewHallItems.length) return;
     const n = reviewHallItems.length;
@@ -3819,26 +3827,64 @@ function showReviewHallItem(index) {
     const img = document.getElementById("reviewHallImage");
     const meta = document.getElementById("reviewHallMeta");
     const idxText = document.getElementById("reviewHallIndexText");
+    const kindBadge = document.getElementById("reviewHallKindBadge");
+    const passBadge = document.getElementById("reviewHallPassBadge");
+    const sideTitle = document.getElementById("reviewHallSideTitle");
+    const noteEl = document.getElementById("reviewHallNote");
+    const esc = escapeReviewHallHtml;
+
     if (img) {
         img.src = item.imageUrl;
         img.alt = `${item.kindLabel}-${item.orderNo}`;
     }
     if (idxText) idxText.textContent = `${reviewHallIndex + 1} / ${n}`;
+
+    const slotText = item.slotLabel && item.slotLabel !== "-" ? item.slotLabel : "";
+    const kindText = slotText ? `${item.kindLabel} · ${slotText}` : item.kindLabel;
+    if (kindBadge) {
+        kindBadge.textContent = kindText;
+        kindBadge.classList.toggle("is-leave", item.kind === "leave");
+    }
+    if (passBadge) {
+        if (item.kind === "leave") {
+            passBadge.textContent = "请假证明";
+            passBadge.className = "review-hall-status is-info";
+        } else if (item.passed) {
+            passBadge.textContent = "已上传通过";
+            passBadge.className = "review-hall-status is-pass";
+        } else {
+            passBadge.textContent = "待核实";
+            passBadge.className = "review-hall-status is-fail";
+        }
+    }
+    if (sideTitle) {
+        sideTitle.textContent = slotText || item.kindLabel || "记录详情";
+    }
+
+    const timeText = item.submittedat
+        ? (typeof formatTime === "function" ? formatTime(item.submittedat) : item.submittedat)
+        : "-";
     if (meta) {
-        const timeText = item.submittedat
-            ? (typeof formatTime === "function" ? formatTime(item.submittedat) : item.submittedat)
-            : "-";
-        meta.innerHTML = `
-            <div><strong>类型：</strong>${item.kindLabel}${item.slotLabel && item.slotLabel !== "-" ? `（${item.slotLabel}）` : ""}</div>
-            <div><strong>日期：</strong>${item.dateKey}</div>
-            <div><strong>订单号：</strong>${item.orderNo}</div>
-            <div><strong>项目：</strong>${item.project}</div>
-            <div><strong>学员：</strong>${item.student}</div>
-            <div><strong>监督员：</strong>${item.staff}</div>
-            <div><strong>订单状态：</strong>${item.status}</div>
-            <div><strong>提交时间：</strong>${timeText}</div>
-            <div><strong>备注：</strong>${item.reason || "-"}</div>
-        `;
+        const rows = [
+            ["日期", item.dateKey || "-"],
+            ["订单号", item.orderNo || "-", true],
+            ["项目", item.project || "-"],
+            ["学员", item.student || "-"],
+            ["监督员", item.staff || "-"],
+            ["订单状态", item.status || "-"],
+            ["提交时间", timeText]
+        ];
+        meta.innerHTML = rows
+            .map(([label, value, mono]) => `
+                <div class="rh-row">
+                    <dt>${esc(label)}</dt>
+                    <dd class="${mono ? "mono" : ""}">${esc(value)}</dd>
+                </div>
+            `)
+            .join("");
+    }
+    if (noteEl) {
+        noteEl.textContent = item.reason ? String(item.reason) : "—";
     }
 }
 
@@ -3881,10 +3927,10 @@ async function loadReviewHallPage(opts = {}) {
     reviewHallIndex = 0;
 
     if (!reviewHallItems.length) {
-        if (empty) empty.style.display = "block";
+        if (empty) empty.style.display = "flex";
         return;
     }
-    if (carousel) carousel.style.display = "flex";
+    if (carousel) carousel.style.display = "grid";
     showReviewHallItem(0);
     startReviewHallAutoPlay();
 }

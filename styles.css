@@ -6062,65 +6062,334 @@ table td {
     }
 }
 
-/* ==================== 审核大厅轮播 ==================== */
-.review-hall-carousel {
+/* ==================== 审核大厅 ==================== */
+.review-hall {
     display: flex;
     flex-direction: column;
+    gap: 14px;
+    max-width: 1180px;
+}
+.review-hall-top {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
     gap: 12px;
+    flex-wrap: wrap;
+}
+.review-hall-titleblock h2 {
+    margin-bottom: 4px;
+}
+.review-hall-sub {
+    margin: 0;
+    font-size: 12px;
+    color: var(--text-secondary);
+    line-height: 1.5;
+}
+.review-hall-user {
+    margin: 0;
+    align-self: center;
+}
+.review-hall-toolbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    flex-wrap: wrap;
+    padding: 10px 12px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow);
+}
+.review-hall-datebar {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+.review-hall-daybtn {
+    margin: 0 !important;
+    min-width: 84px;
+}
+.review-hall-datechip {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    min-width: 132px;
+    padding: 6px 14px;
+    border-radius: var(--radius);
+    background: var(--accent-soft);
+    border: 1px solid color-mix(in srgb, var(--accent) 22%, var(--border));
+}
+.review-hall-datechip__label {
+    font-size: 11px;
+    color: var(--text-secondary);
+    letter-spacing: 0.02em;
+}
+.review-hall-datechip strong {
+    font-size: 15px;
+    font-weight: 700;
+    color: var(--text);
+    font-variant-numeric: tabular-nums;
+    letter-spacing: -0.02em;
+}
+.review-hall-toolbar__right {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex-wrap: wrap;
+}
+.review-hall-auto {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 13px;
+    color: var(--text-secondary);
+    cursor: pointer;
+    user-select: none;
+}
+.review-hall-auto input {
+    accent-color: var(--accent);
+}
+.review-hall-empty {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    min-height: 280px;
+    padding: 40px 24px;
+    text-align: center;
+    background: var(--surface);
+    border: 1px dashed var(--border-strong);
+    border-radius: var(--radius-lg);
+}
+.review-hall-empty__icon {
+    font-size: 28px;
+    line-height: 1;
+    opacity: 0.55;
+    margin-bottom: 4px;
+}
+.review-hall-empty__title {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text);
+}
+.review-hall-empty__desc {
+    font-size: 12px;
+    color: var(--text-muted);
+}
+.review-hall-layout {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 300px;
+    gap: 14px;
+    align-items: stretch;
+    min-height: 0;
 }
 .review-hall-stage {
     position: relative;
     display: flex;
     align-items: center;
     justify-content: center;
-    gap: 8px;
-    min-height: 320px;
-    background: #0f172a;
-    border-radius: 14px;
+    min-height: 420px;
+    padding: 18px 52px 48px;
+    background:
+        radial-gradient(120% 80% at 50% 0%, #1e293b 0%, #0f172a 55%, #020617 100%);
+    border: 1px solid #1e293b;
+    border-radius: var(--radius-lg);
     overflow: hidden;
+    box-shadow: var(--shadow);
+}
+.review-hall-frame {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+    height: 100%;
+    max-height: 68vh;
 }
 .review-hall-image {
-    max-width: min(100%, 720px);
-    max-height: 62vh;
+    max-width: 100%;
+    max-height: 68vh;
+    width: auto;
+    height: auto;
     object-fit: contain;
     display: block;
+    border-radius: 4px;
+    box-shadow: 0 12px 40px rgb(0 0 0 / 0.35);
+    background: #fff;
 }
 .review-hall-nav {
     position: absolute;
     top: 50%;
     transform: translateY(-50%);
-    width: 42px;
-    height: 42px;
+    width: 40px;
+    height: 40px;
+    margin: 0 !important;
+    padding: 0;
     border-radius: 999px;
-    border: 1px solid rgba(255, 255, 255, 0.25);
-    background: rgba(15, 23, 42, 0.55);
+    border: 1px solid rgba(255, 255, 255, 0.18);
+    background: rgba(15, 23, 42, 0.72);
     color: #fff;
-    font-size: 28px;
+    font-size: 26px;
     line-height: 1;
     cursor: pointer;
     z-index: 2;
+    backdrop-filter: blur(6px);
+    transition: background 0.15s var(--ease-out), border-color 0.15s var(--ease-out);
 }
 .review-hall-nav:hover {
-    background: rgba(37, 99, 235, 0.75);
+    background: color-mix(in srgb, var(--accent) 78%, #0f172a);
+    border-color: transparent;
 }
 #reviewHallPrevBtn { left: 10px; }
 #reviewHallNextBtn { right: 10px; }
-.review-hall-meta {
-    padding: 14px 16px;
-    border-radius: 12px;
-    border: 1px solid #e2e8f0;
-    background: #fff;
-    font-size: 14px;
-    line-height: 1.65;
-    color: #334155;
-}
-.review-hall-meta strong {
-    color: #0f172a;
-}
-.review-hall-pager {
+.review-hall-stagebar {
+    position: absolute;
+    left: 12px;
+    right: 12px;
+    bottom: 10px;
     display: flex;
     align-items: center;
+    justify-content: space-between;
     gap: 8px;
+    pointer-events: none;
+}
+.review-hall-count {
+    font-size: 12px;
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+    color: rgba(255, 255, 255, 0.88);
+    background: rgba(15, 23, 42, 0.55);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    border-radius: 999px;
+    padding: 3px 10px;
+    backdrop-filter: blur(6px);
+}
+.review-hall-badge {
+    font-size: 11px;
+    font-weight: 600;
+    color: #eff6ff;
+    background: color-mix(in srgb, var(--accent) 70%, #0f172a);
+    border-radius: 999px;
+    padding: 3px 10px;
+}
+.review-hall-badge.is-leave {
+    background: color-mix(in srgb, var(--warning) 72%, #0f172a);
+    color: #fffbeb;
+}
+.review-hall-side {
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow);
+    overflow: hidden;
+    min-height: 420px;
+}
+.review-hall-side__head {
+    padding: 14px 16px 12px;
+    border-bottom: 1px solid var(--border);
+    background: linear-gradient(180deg, #f8fafc 0%, #fff 100%);
+}
+.review-hall-status {
+    display: inline-flex;
+    align-items: center;
+    font-size: 11px;
+    font-weight: 600;
+    padding: 2px 8px;
+    border-radius: 999px;
+    margin-bottom: 8px;
+}
+.review-hall-status.is-pass {
+    color: var(--success);
+    background: var(--success-soft);
+}
+.review-hall-status.is-fail {
+    color: var(--danger);
+    background: var(--danger-soft);
+}
+.review-hall-status.is-info {
+    color: var(--info);
+    background: var(--info-soft);
+}
+.review-hall-side__title {
+    font-size: 14px;
+    font-weight: 700;
+    color: var(--text);
+    letter-spacing: -0.01em;
+    line-height: 1.35;
+}
+.review-hall-fields {
+    margin: 0;
+    padding: 6px 0;
+    flex: 1;
+}
+.review-hall-fields .rh-row {
+    display: grid;
+    grid-template-columns: 72px 1fr;
+    gap: 8px;
+    padding: 9px 16px;
+    border-bottom: 1px solid #f1f5f9;
+}
+.review-hall-fields .rh-row:last-child {
+    border-bottom: none;
+}
+.review-hall-fields dt {
+    margin: 0;
+    font-size: 12px;
+    color: var(--text-muted);
+    line-height: 1.45;
+}
+.review-hall-fields dd {
+    margin: 0;
     font-size: 13px;
-    color: #64748b;
+    color: var(--text);
+    font-weight: 500;
+    line-height: 1.45;
+    word-break: break-all;
+}
+.review-hall-fields dd.mono {
+    font-family: var(--mono);
+    font-size: 12px;
+    font-weight: 500;
+}
+.review-hall-note {
+    margin-top: auto;
+    padding: 12px 16px 14px;
+    border-top: 1px solid var(--border);
+    background: #f8fafc;
+}
+.review-hall-note__label {
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--text-muted);
+    margin-bottom: 4px;
+    letter-spacing: 0.02em;
+}
+.review-hall-note__body {
+    font-size: 12px;
+    color: var(--text-secondary);
+    line-height: 1.55;
+    word-break: break-word;
+    max-height: 96px;
+    overflow: auto;
+}
+@media (max-width: 960px) {
+    .review-hall-layout {
+        grid-template-columns: 1fr;
+    }
+    .review-hall-side {
+        min-height: 0;
+    }
+    .review-hall-stage {
+        min-height: 320px;
+        padding: 14px 48px 44px;
+    }
+    .review-hall-image {
+        max-height: 52vh;
+    }
 }

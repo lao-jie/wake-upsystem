@@ -9,7 +9,7 @@
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="default">
     <title>老街网创 - 叫醒订单管理</title>
-    <link rel="stylesheet" href="styles.css?v=20261108review1">
+    <link rel="stylesheet" href="styles.css?v=20261108reviewui2">
     <script src="db-client.js?v=20261031settleKey2"></script>
     <script src="https://unpkg.com/lucide@latest"></script>
     <script src="config.js?v=20261108visitSlot1" defer></script>
@@ -17,7 +17,7 @@
     <script src="storage.js?v=20261108visitSlot1" defer></script>
     <script src="order.js?v=20261108visitSlot1" defer></script>
     <script src="staff.js?v=20261031settleKey2" defer></script>
-    <script src="app.js?v=20261108review1" defer></script>
+    <script src="app.js?v=20261108reviewui2" defer></script>
 </head>
 
 <body>
@@ -776,37 +776,62 @@
 
         <!-- 审核大厅（仅管理员）：昨日监督上传图片轮播核实 -->
         <div id="page_reviewHall" class="page">
-            <h2>审核大厅</h2>
-            <div class="user-info">当前用户：<span id="reviewHallUserName"></span></div>
-            <div class="admin-form" style="margin-top:14px; flex-direction:column; gap:12px;">
-                <div style="display:flex; justify-content:space-between; align-items:center; gap:10px; flex-wrap:wrap;">
-                    <div style="font-size:14px; color:#334155;">
-                        展示日期：
-                        <strong id="reviewHallDateText">--</strong>
-                        <span style="color:#64748b; margin-left:8px;">（默认前一天员工上传的监督截图 / 请假图）</span>
+            <div class="review-hall">
+                <div class="review-hall-top">
+                    <div class="review-hall-titleblock">
+                        <h2>审核大厅</h2>
+                        <p class="review-hall-sub">核对员工上传的监督截图与请假证明 · 默认展示前一天</p>
                     </div>
-                    <div style="display:flex; gap:8px; flex-wrap:wrap;">
-                        <button type="button" class="ghost" id="reviewHallPrevDayBtn">前一天</button>
-                        <button type="button" class="ghost" id="reviewHallNextDayBtn">后一天</button>
+                    <div class="user-info review-hall-user">当前用户：<span id="reviewHallUserName"></span></div>
+                </div>
+
+                <div class="review-hall-toolbar">
+                    <div class="review-hall-datebar">
+                        <button type="button" class="ghost review-hall-daybtn" id="reviewHallPrevDayBtn" title="前一天">‹ 前一天</button>
+                        <div class="review-hall-datechip">
+                            <span class="review-hall-datechip__label">展示日期</span>
+                            <strong id="reviewHallDateText">--</strong>
+                        </div>
+                        <button type="button" class="ghost review-hall-daybtn" id="reviewHallNextDayBtn" title="后一天">后一天 ›</button>
+                    </div>
+                    <div class="review-hall-toolbar__right">
+                        <label class="review-hall-auto">
+                            <input type="checkbox" id="reviewHallAutoPlay" checked>
+                            <span>自动轮播</span>
+                        </label>
                         <button type="button" class="success" id="reviewHallReloadBtn">刷新</button>
                     </div>
                 </div>
-                <div id="reviewHallEmpty" style="display:none; padding:28px; text-align:center; color:#64748b; background:#f8fafc; border-radius:12px; border:1px dashed #cbd5e1;">
-                    该日暂无已上传图片
+
+                <div id="reviewHallEmpty" class="review-hall-empty" style="display:none;">
+                    <div class="review-hall-empty__icon" aria-hidden="true">🖼</div>
+                    <div class="review-hall-empty__title">该日暂无已上传图片</div>
+                    <div class="review-hall-empty__desc">可切换日期查看其它天的监督截图 / 请假证明</div>
                 </div>
-                <div id="reviewHallCarousel" class="review-hall-carousel" style="display:none;">
+
+                <div id="reviewHallCarousel" class="review-hall-layout" style="display:none;">
                     <div class="review-hall-stage">
                         <button type="button" class="review-hall-nav" id="reviewHallPrevBtn" aria-label="上一张">‹</button>
-                        <img id="reviewHallImage" class="review-hall-image" alt="审核图片">
+                        <div class="review-hall-frame">
+                            <img id="reviewHallImage" class="review-hall-image" alt="审核图片">
+                        </div>
                         <button type="button" class="review-hall-nav" id="reviewHallNextBtn" aria-label="下一张">›</button>
+                        <div class="review-hall-stagebar">
+                            <span id="reviewHallIndexText" class="review-hall-count">0 / 0</span>
+                            <span id="reviewHallKindBadge" class="review-hall-badge">—</span>
+                        </div>
                     </div>
-                    <div class="review-hall-meta" id="reviewHallMeta"></div>
-                    <div class="review-hall-pager">
-                        <span id="reviewHallIndexText">0 / 0</span>
-                        <label style="margin-left:12px; font-size:13px; color:#64748b;">
-                            <input type="checkbox" id="reviewHallAutoPlay" checked> 自动轮播
-                        </label>
-                    </div>
+                    <aside class="review-hall-side">
+                        <div class="review-hall-side__head">
+                            <span id="reviewHallPassBadge" class="review-hall-status">—</span>
+                            <div id="reviewHallSideTitle" class="review-hall-side__title">记录详情</div>
+                        </div>
+                        <dl class="review-hall-fields" id="reviewHallMeta"></dl>
+                        <div class="review-hall-note">
+                            <div class="review-hall-note__label">备注</div>
+                            <div id="reviewHallNote" class="review-hall-note__body">—</div>
+                        </div>
+                    </aside>
                 </div>
             </div>
         </div>
