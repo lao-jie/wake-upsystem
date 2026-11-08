@@ -3763,26 +3763,32 @@ function collectReviewHallItemsFromOrders(orders, dateKey) {
         const logs = row?.dailylogs && typeof row.dailylogs === "object" ? row.dailylogs : {};
         const log = logs[dateKey];
         if (!log || typeof log !== "object") return;
+        const leaveAbnormal =
+            log.leaveAbnormal && typeof log.leaveAbnormal === "object" ? log.leaveAbnormal : {};
         const base = {
             orderId: String(row.id || ""),
             orderNo: row.orderno || "-",
             project: row.project || "-",
             student: row.studentname || "-",
             staff: row.supervisor || row.staffname || row.staffid || "-",
+            staffId: String(row.staffid || "").trim(),
             status: row.status || "-",
             dateKey
         };
         const slots = Array.isArray(log.slots) ? log.slots : [];
-        slots.forEach((slot) => {
+        slots.forEach((slot, slotIndex) => {
             const url = String(slot?.imageUrl || "").trim();
             if (!url) return;
+            const abnormal = slot?.abnormal === true || String(slot?.source || "") === "admin_review_abnormal";
             items.push({
                 ...base,
                 kind: "screenshot",
                 kindLabel: "监督截图",
                 slotLabel: slot.slotLabel || "-",
+                slotIndex,
                 reason: slot.reason || "",
                 passed: slot.passed === true,
+                abnormal,
                 submittedat: slot.submittedat || log.submittedat || "",
                 imageUrl: url
             });
@@ -3791,13 +3797,16 @@ function collectReviewHallItemsFromOrders(orders, dateKey) {
         ["sleep", "wake"].forEach((t) => {
             const url = String(leaveImages[t] || "").trim();
             if (!url) return;
+            const abnormal = leaveAbnormal[t] === true;
             items.push({
                 ...base,
                 kind: "leave",
                 kindLabel: "请假证明",
                 slotLabel: t === "sleep" ? "请假早睡" : "请假早起",
+                leaveType: t,
                 reason: log.reason || "",
-                passed: true,
+                passed: !abnormal,
+                abnormal,
                 submittedat: log.submittedat || "",
                 imageUrl: url
             });
@@ -3846,7 +3855,10 @@ function showReviewHallItem(index) {
         kindBadge.classList.toggle("is-leave", item.kind === "leave");
     }
     if (passBadge) {
-        if (item.kind === "leave") {
+        if (item.abnormal) {
+            passBadge.textContent = "已标异常";
+            passBadge.className = "review-hall-status is-abnormal";
+        } else if (item.kind === "leave") {
             passBadge.textContent = "请假证明";
             passBadge.className = "review-hall-status is-info";
         } else if (item.passed) {
@@ -3886,6 +3898,280 @@ function showReviewHallItem(index) {
     if (noteEl) {
         noteEl.textContent = item.reason ? String(item.reason) : "—";
     }
+
+    const abnormalBtn = document.getElementById("reviewHallAbnormalBtn");
+    if (abnormalBtn) {
+        abnormalBtn.disabled = item.abnormal === true;
+        abnormalBtn.textContent = item.abnormal ? "已异常" : "异常";
+    }
+}
+
+function reviewHallParseDurationDays(duration) {
+    const m = String(duration || "").match(/(\d+)/);
+    const n = m ? Number(m[1]) : 1;
+    return Number.isFinite(n) && n > 0 ? n : 1;
+}
+
+function reviewHallCountPassedSlotLabel(row, label) {
+    const logs = row?.dailylogs && typeof row.dailylogs === "object" ? row.dailylogs : {};
+    let n = 0;
+    Object.keys(logs).forEach((dateKey) => {
+        const log = logs[dateKey];
+        if (!log || typeof log !== "object") return;
+        const slots = Array.isArray(log.slots) ? log.slots : [];
+        const hit = slots.find((s) => s && String(s.slotLabel || "").trim() === label);
+        if (hit && hit.passed === true && hit.abnormal !== true) n += 1;
+    });
+    return n;
+}
+
+function reviewHallCountCompletedDays(row) {
+    const logs = row?.dailylogs && typeof row.dailylogs === "object" ? row.dailylogs : {};
+    let n = 0;
+    Object.keys(logs).forEach((dateKey) => {
+        const log = logs[dateKey];
+        if (!log || typeof log !== "object") return;
+        const leave = log.leave && typeof log.leave === "object" ? log.leave : {};
+        if (leave.sleep === true || leave.wake === true) return;
+        if (log.passed === true) n += 1;
+    });
+    return n;
+}
+
+function reviewHallUpdateOrderStatusByLogs(row) {
+    const N = reviewHallParseDurationDays(row?.duration || "1次");
+    const completedDays = reviewHallCountCompletedDays(row);
+    const project = String(row?.project || "").trim();
+    let done = completedDays >= N;
+    if (project === "监督早睡早起") {
+        const sd = reviewHallCountPassedSlotLabel(row, "监督早睡");
+        const wd = reviewHallCountPassedSlotLabel(row, "监督早起");
+        done = completedDays >= N && sd >= N && wd >= N;
+    }
+    if (done) {
+        row.status = "已完成";
+        return;
+    }
+    row.status = String(row.staffid || "").trim() ? "进行中" : "待接单";
+}
+
+async function reviewHallRollbackIncomeIfSettled(row) {
+    if (!row || row.salarysettled !== true) return { rolledBack: false };
+    const staffId = String(row.staffid || "").trim();
+    const amount = parseFloat(row.price || row.amount || row.money || 0);
+    if (!staffId || !Number.isFinite(amount) || amount === 0) {
+        row.salarysettled = false;
+        return { rolledBack: false, reason: "no_amount" };
+    }
+    if (typeof addStaffSalary !== "function" || typeof addSalaryDetail !== "function") {
+        throw new Error("余额接口不可用");
+    }
+    const ok = await addStaffSalary(staffId, -Math.abs(amount));
+    if (!ok) throw new Error("回退余额失败");
+    await addSalaryDetail(
+        staffId,
+        -Math.abs(amount),
+        "订单收入",
+        `审核大厅标记异常，回退监督收入（订单 ${row.orderno || row.id}）`,
+        new Date(),
+        {
+            settleKey: `supervise_income_rollback_abnormal:${row.id}:${Date.now()}`,
+            orderId: row.id ?? null
+        }
+    );
+    row.salarysettled = false;
+    return { rolledBack: true };
+}
+
+async function reviewHallPersistSuperviseRow(row) {
+    if (!row?.id) throw new Error("缺少订单 ID");
+    if (typeof buildSuperviseOrderNote !== "function") throw new Error("缺少订单序列化函数");
+    const patchedNote = buildSuperviseOrderNote(row);
+    const payload = {
+        note: patchedNote,
+        status: row.status || "进行中",
+        salarysettled: row.salarysettled === true
+    };
+    const { error } = await supabaseClient
+        .from("supervise_orders")
+        .update(payload)
+        .eq("id", row.id);
+    if (error) throw error;
+
+    try {
+        const local = JSON.parse(localStorage.getItem("superviseOrders") || "[]");
+        if (Array.isArray(local)) {
+            const idx = local.findIndex((x) => String(x.id) === String(row.id));
+            if (idx >= 0) {
+                local[idx] = {
+                    ...local[idx],
+                    ...row,
+                    note: patchedNote,
+                    status: payload.status,
+                    salarysettled: payload.salarysettled
+                };
+                localStorage.setItem("superviseOrders", JSON.stringify(local));
+            }
+        }
+    } catch (_) {
+        /* ignore local cache errors */
+    }
+}
+
+async function markReviewHallItemAbnormal() {
+    if (!isAdmin) return;
+    const item = reviewHallItems[reviewHallIndex];
+    if (!item?.orderId) {
+        alert("当前没有可操作的记录");
+        return;
+    }
+    if (item.abnormal) {
+        alert("该记录已标记异常");
+        return;
+    }
+    const ok = confirm(
+        `确认将本条标记为异常？\n订单 ${item.orderNo}\n${item.slotLabel || item.kindLabel}\n\n效果：该次不算完成次数；若订单因此未完成将取消结算（不计费）。`
+    );
+    if (!ok) return;
+
+    stopReviewHallAutoPlay();
+    const btn = document.getElementById("reviewHallAbnormalBtn");
+    if (btn) {
+        btn.disabled = true;
+        btn.textContent = "处理中…";
+    }
+
+    try {
+        const { data, error } = await supabaseClient
+            .from("supervise_orders")
+            .select("*")
+            .eq("id", item.orderId)
+            .single();
+        if (error || !data) throw new Error("读取监督订单失败");
+
+        const row = parseSuperviseOrderMeta(data);
+        row.dailylogs = row.dailylogs && typeof row.dailylogs === "object" ? row.dailylogs : {};
+        const dateKey = item.dateKey;
+        const existing =
+            row.dailylogs[dateKey] && typeof row.dailylogs[dateKey] === "object"
+                ? { ...row.dailylogs[dateKey] }
+                : {};
+        const nowIso = new Date().toISOString();
+        const adminId = String(user?.id || "admin");
+        const abnormalReason = "管理员审核异常：不算次数、不计费";
+
+        if (item.kind === "leave") {
+            const leaveType = item.leaveType === "wake" ? "wake" : "sleep";
+            const leave = existing.leave && typeof existing.leave === "object" ? { ...existing.leave } : {};
+            const leaveAbnormal =
+                existing.leaveAbnormal && typeof existing.leaveAbnormal === "object"
+                    ? { ...existing.leaveAbnormal }
+                    : {};
+            leave[leaveType] = false;
+            leaveAbnormal[leaveType] = true;
+            row.dailylogs[dateKey] = {
+                ...existing,
+                leave,
+                leaveAbnormal,
+                reason: abnormalReason,
+                reviewedat: nowIso,
+                reviewedby: adminId,
+                reviewSource: "admin_review_abnormal"
+            };
+        } else {
+            const slots = Array.isArray(existing.slots) ? existing.slots.map((s) => (s ? { ...s } : null)) : [];
+            let idx = Number.isInteger(item.slotIndex) ? item.slotIndex : -1;
+            if (idx < 0 || !slots[idx]) {
+                idx = slots.findIndex(
+                    (s) =>
+                        s &&
+                        String(s.imageUrl || "").trim() === String(item.imageUrl || "").trim() &&
+                        String(s.slotLabel || "") === String(item.slotLabel || "")
+                );
+            }
+            if (idx < 0 || !slots[idx]) throw new Error("未找到对应截图记录");
+            slots[idx] = {
+                ...slots[idx],
+                passed: false,
+                abnormal: true,
+                source: "admin_review_abnormal",
+                reason: abnormalReason,
+                reviewedat: nowIso,
+                reviewedby: adminId
+            };
+            const activeSlots = slots.filter((s) => s);
+            const overallPassed =
+                activeSlots.length > 0 && activeSlots.every((s) => s.passed === true && s.abnormal !== true);
+            row.dailylogs[dateKey] = {
+                ...existing,
+                slots,
+                passed: overallPassed,
+                reason: abnormalReason,
+                reviewedat: nowIso,
+                reviewedby: adminId,
+                reviewSource: "admin_review_abnormal"
+            };
+        }
+
+        reviewHallUpdateOrderStatusByLogs(row);
+        if (String(row.status || "").trim() !== "已完成") {
+            await reviewHallRollbackIncomeIfSettled(row);
+        }
+        await reviewHallPersistSuperviseRow(row);
+
+        if (typeof showToast === "function") showToast("已标记异常：该次不计次、不计费", "success");
+        else alert("已标记异常");
+
+        await loadReviewHallPage({ keepIndex: reviewHallIndex });
+    } catch (e) {
+        console.error(e);
+        if (typeof showToast === "function") showToast(`标记异常失败：${e.message || e}`, "danger");
+        else alert(`标记异常失败：${e.message || e}`);
+        if (btn) {
+            btn.disabled = false;
+            btn.textContent = "异常";
+        }
+    }
+}
+
+async function deductReviewHallBalance() {
+    if (!isAdmin) return;
+    const item = reviewHallItems[reviewHallIndex];
+    if (!item) {
+        alert("当前没有可操作的记录");
+        return;
+    }
+    let staffId = String(item.staffId || "").trim();
+    if (!staffId) {
+        try {
+            const { data } = await supabaseClient
+                .from("supervise_orders")
+                .select("staffid")
+                .eq("id", item.orderId)
+                .single();
+            staffId = String(data?.staffid || "").trim();
+        } catch (_) {
+            /* ignore */
+        }
+    }
+    if (!staffId) {
+        alert("该订单未绑定监督员账号，无法扣余额");
+        return;
+    }
+    if (typeof openTeamSalaryActionModal !== "function") {
+        alert("扣余额功能不可用");
+        return;
+    }
+    stopReviewHallAutoPlay();
+    await openTeamSalaryActionModal({
+        mode: "punish_single",
+        staffId,
+        staffName: item.staff
+    });
+    const reasonEl = document.getElementById("teamSalaryActionReason");
+    if (reasonEl && !String(reasonEl.value || "").trim()) {
+        reasonEl.value = `审核大厅处罚 · 订单 ${item.orderNo} · ${item.dateKey} · ${item.slotLabel || item.kindLabel}`;
+    }
 }
 
 async function loadReviewHallPage(opts = {}) {
@@ -3924,6 +4210,7 @@ async function loadReviewHallPage(opts = {}) {
     }
 
     reviewHallItems = collectReviewHallItemsFromOrders(orders, reviewHallDateCursor);
+    const preferIndex = Number.isFinite(Number(opts.keepIndex)) ? Number(opts.keepIndex) : 0;
     reviewHallIndex = 0;
 
     if (!reviewHallItems.length) {
@@ -3931,7 +4218,7 @@ async function loadReviewHallPage(opts = {}) {
         return;
     }
     if (carousel) carousel.style.display = "grid";
-    showReviewHallItem(0);
+    showReviewHallItem(Math.min(Math.max(0, preferIndex), reviewHallItems.length - 1));
     startReviewHallAutoPlay();
 }
 
@@ -3959,6 +4246,12 @@ window.addEventListener("DOMContentLoaded", () => {
     bind("reviewHallNextDayBtn", () => {
         reviewHallDateCursor = shiftLocalYmd(reviewHallDateCursor || getLocalYmd(), 1);
         loadReviewHallPage();
+    });
+    bind("reviewHallAbnormalBtn", () => {
+        markReviewHallItemAbnormal();
+    });
+    bind("reviewHallDeductBtn", () => {
+        deductReviewHallBalance();
     });
     const auto = document.getElementById("reviewHallAutoPlay");
     if (auto && !auto.__reviewHallBound) {

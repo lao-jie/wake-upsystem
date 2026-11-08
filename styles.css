@@ -6378,6 +6378,35 @@ table td {
     max-height: 96px;
     overflow: auto;
 }
+.review-hall-actions {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+    padding: 12px 16px 14px;
+    border-top: 1px solid var(--border);
+    background: var(--surface);
+}
+.review-hall-actions button {
+    margin: 0 !important;
+    width: 100%;
+}
+.review-hall-btn-abnormal {
+    border-color: color-mix(in srgb, var(--warning) 45%, var(--border)) !important;
+    color: var(--warning) !important;
+    background: var(--warning-soft) !important;
+}
+.review-hall-btn-abnormal:hover:not(:disabled) {
+    background: #fef3c7 !important;
+    border-color: var(--warning) !important;
+}
+.review-hall-btn-abnormal:disabled {
+    opacity: 0.55;
+    cursor: not-allowed;
+}
+.review-hall-status.is-abnormal {
+    color: var(--warning);
+    background: var(--warning-soft);
+}
 @media (max-width: 960px) {
     .review-hall-layout {
         grid-template-columns: 1fr;

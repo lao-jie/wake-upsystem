@@ -9,7 +9,7 @@
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="default">
     <title>老街网创 - 叫醒订单管理</title>
-    <link rel="stylesheet" href="styles.css?v=20261108reviewui2">
+    <link rel="stylesheet" href="styles.css?v=20261108reviewact1">
     <script src="db-client.js?v=20261031settleKey2"></script>
     <script src="https://unpkg.com/lucide@latest"></script>
     <script src="config.js?v=20261108visitSlot1" defer></script>
@@ -17,7 +17,7 @@
     <script src="storage.js?v=20261108visitSlot1" defer></script>
     <script src="order.js?v=20261108visitSlot1" defer></script>
     <script src="staff.js?v=20261031settleKey2" defer></script>
-    <script src="app.js?v=20261108reviewui2" defer></script>
+    <script src="app.js?v=20261108reviewact1" defer></script>
 </head>
 
 <body>
@@ -830,6 +830,10 @@
                         <div class="review-hall-note">
                             <div class="review-hall-note__label">备注</div>
                             <div id="reviewHallNote" class="review-hall-note__body">—</div>
+                        </div>
+                        <div class="review-hall-actions">
+                            <button type="button" class="ghost review-hall-btn-abnormal" id="reviewHallAbnormalBtn" title="标记异常：该次不算次数、不计费">异常</button>
+                            <button type="button" class="danger review-hall-btn-deduct" id="reviewHallDeductBtn" title="从监督员余额中扣除处罚金额">扣余额</button>
                         </div>
                     </aside>
                 </div>
