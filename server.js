@@ -9,16 +9,14 @@ const { mailConfigured } = require('./mail');
 const app = express();
 const port = process.env.PORT || 3001;
 
-app.use(express.json({ limit: '20mb' }));
-app.use(express.static('.'));
-// 监督截图等上传目录（公开可读，便于审核大厅展示）
 const UPLOADS_ROOT = path.join(__dirname, 'uploads');
 try {
   fs.mkdirSync(UPLOADS_ROOT, { recursive: true });
 } catch (_) { /* ignore */ }
-app.use('/uploads', express.static(UPLOADS_ROOT));
 
-// CORS中间件
+app.use(express.json({ limit: '20mb' }));
+
+// CORS（API 前）
 app.use((req, res, next) => {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
@@ -51,7 +49,8 @@ async function callZhipuChat(payload) {
   return response.data;
 }
 
-// 通用智谱转发（解决浏览器 CORS）
+// ========== API 路由必须在 static 之前 ==========
+
 app.post('/api/ai-chat', async (req, res) => {
   try {
     const data = await callZhipuChat(req.body || {});
@@ -67,7 +66,6 @@ app.post('/api/ai-chat', async (req, res) => {
   }
 });
 
-// AI批量识别接口（叫醒订单）
 app.post('/api/parse-orders', async (req, res) => {
   try {
     const { text } = req.body;
@@ -90,28 +88,10 @@ app.post('/api/parse-orders', async (req, res) => {
 - note: 字符串，除电话与时间外的提醒内容；没有则 ""。
 
 【识别规则】
-1. 一行里只有一个号码、多个时间（如「13900001111 7:00 7:20 7:40」「10点 10点20 10点40 189xxx」），只输出 1 个对象，多个时刻全部进 wakeTimes，不要拆成多个对象。
-2. 原文换行后再次出现同一号码，视为另一批订单，单独输出对象（各自时间与备注）。
-3. 若同时有 wakeTime 与 wakeTimes，合并所有时刻并去重，不要丢 wakeTime。
-4. 电话与时间顺序可互换；可带圆圈序号①、破折号、逗号、中文逗号，一律忽略。
-5. 中文时间必须换算为 HH:mm：早上七点半→07:30、早9点30/早9:30→09:30、上午8点→08:00、中午12点→12:00、下午2点→14:00、下午2点半→14:30、晚上8点15→20:15、今晚9点→21:00、零点/凌晨0点30→00:30、凌晨3点→03:00、8點整→08:00。
-6. 「明天早上7点」：wakeDate 用明天日期，wakeTime 用 07:00；只有「明天」没有钟点则不要臆造时间。
-7. 备注里若包含与叫醒无关的长说明，保留简短可执行信息即可；不要把手机号写进 note。
-8. 标注「虚拟号/隐私号」的号码不要跳过；示例：虚拟号 17012345678转1234 7:20 → phone 为 17012345678转1234。
-
-【输出示例 1】
-输入一行：18953772567 10点 10点20 10点40
-输出：[{"phone":"18953772567","wakeTimes":["10:00","10:20","10:40"],"note":""}]
-
-【输出示例 2】
-输入：今天9:45，17371992416
-输出：[{"phone":"17371992416","wakeTime":"09:45","note":""}]
-
-【输出示例 3】
-输入两行同一号码不同时间：
-18900001111 7:00 第一条
-18900001111 8:30 第二条
-输出：[{"phone":"18900001111","wakeTime":"07:00","note":"第一条"},{"phone":"18900001111","wakeTime":"08:30","note":"第二条"}]`
+1. 一行里只有一个号码、多个时间，只输出 1 个对象，多个时刻全部进 wakeTimes。
+2. 原文换行后再次出现同一号码，视为另一批订单。
+3. 中文时间必须换算为 HH:mm。
+4. 标注「虚拟号/隐私号」的号码不要跳过。`
         },
         {
           role: 'user',
@@ -134,7 +114,7 @@ app.post('/api/parse-orders', async (req, res) => {
 
 mountAuthRoutes(app);
 
-/** 上传监督截图/请假图：接收 dataURL，落盘 uploads/{kind}/YYYY-MM-DD/xxx.jpg */
+/** 上传监督截图/请假图 */
 app.post('/api/upload-image', (req, res) => {
   try {
     const { dataUrl, kind } = req.body || {};
@@ -163,20 +143,18 @@ app.post('/api/upload-image', (req, res) => {
     const name = `${Date.now()}-${Math.random().toString(36).slice(2, 9)}.${ext}`;
     fs.writeFileSync(path.join(dir, name), buf);
     const url = `/uploads/${safeKind}/${day}/${name}`;
-    res.json({ url });
+    res.json({ ok: true, url });
   } catch (error) {
     console.error('upload-image error:', error.message || error);
     res.status(500).json({ error: error.message || '上传失败' });
   }
 });
 
-// 宝塔 MySQL 统一数据接口（前端 db-client.js 调用）
 app.post('/api/db', async (req, res) => {
   try {
     const result = await runDbAction(req.body || {});
     res.json(result);
   } catch (error) {
-    // 唯一冲突按业务错误返回，避免前端误判成 500/缺列
     if (error && (error.errno === 1062 || error.code === 'ER_DUP_ENTRY')) {
       return res.status(200).json({
         data: null,
@@ -196,15 +174,25 @@ app.post('/api/db', async (req, res) => {
   }
 });
 
-// 健康检查
 app.get('/api/health', (req, res) => {
-  res.json({ status: 'ok', db: dbConfigured(), mail: mailConfigured() });
+  res.json({
+    status: 'ok',
+    db: dbConfigured(),
+    mail: mailConfigured(),
+    upload: true,
+    uploadDir: UPLOADS_ROOT
+  });
 });
+
+// 静态资源放最后，避免挡住 /api/*
+app.use('/uploads', express.static(UPLOADS_ROOT));
+app.use(express.static('.'));
 
 async function start() {
   console.log(`Server starting on port ${port}`);
   console.log(dbConfigured() ? 'MySQL: configured' : 'MySQL: NOT configured (check .env DB_*)');
   console.log(mailConfigured() ? 'Mail: configured' : 'Mail: NOT configured (SMTP_USER/SMTP_PASS)');
+  console.log('Upload API: POST /api/upload-image →', UPLOADS_ROOT);
   if (dbConfigured()) {
     try {
       const schema = await ensureSchema();
@@ -219,7 +207,7 @@ async function start() {
   }
   app.listen(port, () => {
     console.log(`Server running on port ${port}`);
-    console.log('db-api: datetime-normalize v2 + schema-ensure');
+    console.log('db-api: datetime-normalize v2 + schema-ensure + upload-image');
   });
 }
 

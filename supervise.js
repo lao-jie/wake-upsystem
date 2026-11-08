@@ -2307,53 +2307,6 @@ async function compressImageFileToDataUrl(file, maxSide = 1280, quality = 0.72) 
         const img = new Image();
         img.onload = () => {
             try {
-                let w = img.width || 0;
-                let h = img.height || 0;
-                if (!w || !h) {
-                    resolve(raw);
-                    return;
-                }
-                const scale = Math.min(1, maxSide / Math.max(w, h));
-                w = Math.max(1, Math.round(w * scale));
-                h = Math.max(1, Math.round(h * scale));
-                const canvas = document.createElement("canvas");
-                canvas.width = w;
-                canvas.height = h;
-                const ctx = canvas.getContext("2d");
-                ctx.drawImage(img, 0, 0, w, h);
-                resolve(canvas.toDataURL("image/jpeg", quality));
-            } catch (e) {
-                resolve(raw);
-            }
-        };
-        img.onerror = () => reject(new Error("图片读取失败"));
-        img.src = raw;
-    });
-}
-
-/** 上传到服务器 uploads，返回可访问的相对 URL */
-async function uploadSuperviseImageDataUrl(dataUrl, kind = "supervise") {
-    const res = await fetch("/api/upload-image", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ dataUrl, kind })
-    });
-    const data = await res.json().catch(() => ({}));
-    if (!res.ok) {
-        throw new Error(data.error || `上传失败 HTTP ${res.status}`);
-    }
-    const url = String(data.url || "").trim();
-    if (!url) throw new Error("上传成功但未返回图片地址");
-    return url;
-}
-
-/** 压缩图片再上传，减小 note/服务器压力 */
-async function compressImageFileToDataUrl(file, maxSide = 1280, quality = 0.72) {
-    const raw = await fileToDataUrl(file);
-    return new Promise((resolve, reject) => {
-        const img = new Image();
-        img.onload = () => {
-            try {
                 let w = img.naturalWidth || img.width || 0;
                 let h = img.naturalHeight || img.height || 0;
                 if (!w || !h) {
@@ -2378,19 +2331,72 @@ async function compressImageFileToDataUrl(file, maxSide = 1280, quality = 0.72) 
     });
 }
 
-async function uploadSuperviseImageDataUrl(dataUrl, kind = "supervise") {
-    const res = await fetch("/api/upload-image", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ dataUrl, kind })
+/** 接口不可用时，把图压到更小后以内嵌 dataURL 保存（审核大厅仍可看） */
+async function shrinkDataUrlForInline(dataUrl, maxSide = 720, quality = 0.55) {
+    return new Promise((resolve) => {
+        const img = new Image();
+        img.onload = () => {
+            try {
+                let w = img.naturalWidth || img.width || 0;
+                let h = img.naturalHeight || img.height || 0;
+                if (!w || !h) {
+                    resolve(dataUrl);
+                    return;
+                }
+                const scale = Math.min(1, maxSide / Math.max(w, h));
+                w = Math.max(1, Math.round(w * scale));
+                h = Math.max(1, Math.round(h * scale));
+                const canvas = document.createElement("canvas");
+                canvas.width = w;
+                canvas.height = h;
+                canvas.getContext("2d").drawImage(img, 0, 0, w, h);
+                let q = quality;
+                let out = canvas.toDataURL("image/jpeg", q);
+                // 控制大约 < 220KB，避免 note 过大
+                while (out.length > 300000 && q > 0.35) {
+                    q -= 0.08;
+                    out = canvas.toDataURL("image/jpeg", q);
+                }
+                resolve(out);
+            } catch (_) {
+                resolve(dataUrl);
+            }
+        };
+        img.onerror = () => resolve(dataUrl);
+        img.src = dataUrl;
     });
-    const json = await res.json().catch(() => ({}));
-    if (!res.ok) {
-        throw new Error(json.error || `上传失败 HTTP ${res.status}`);
+}
+
+/**
+ * 上传到服务器 uploads；若 /api/upload-image 404（未重启 Node / 未反代），
+ * 回退为内嵌 dataURL，保证提交不中断。
+ */
+async function uploadSuperviseImageDataUrl(dataUrl, kind = "supervise") {
+    try {
+        const res = await fetch("/api/upload-image", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ dataUrl, kind })
+        });
+        if (res.status === 404) {
+            console.warn("upload-image 接口 404，改用内嵌图片回退。请 git pull 后重启 Node，并确认 Nginx 反代 /api/");
+            return await shrinkDataUrlForInline(dataUrl);
+        }
+        const json = await res.json().catch(() => ({}));
+        if (!res.ok) {
+            throw new Error(json.error || `上传失败 HTTP ${res.status}`);
+        }
+        const url = String(json.url || "").trim();
+        if (!url) throw new Error("上传成功但未返回地址");
+        return url;
+    } catch (e) {
+        const msg = String(e?.message || e || "");
+        if (/404|Failed to fetch|NetworkError|upload-image/i.test(msg)) {
+            console.warn("上传接口不可用，改用内嵌图片回退：", msg);
+            return await shrinkDataUrlForInline(dataUrl);
+        }
+        throw e;
     }
-    const url = String(json.url || "").trim();
-    if (!url) throw new Error("上传成功但未返回地址");
-    return url;
 }
 
 function extractJsonObjectFromAiContent(raw) {
