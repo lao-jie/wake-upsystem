@@ -388,10 +388,12 @@ async function hydratePriceStrategyInputs() {
         "psWake_reassign_penalty",
         strategy?.wake?.reassignPenalty ?? strategy?.wake?.reassign_penalty ?? 0.3
     );
-    setInputNumber(
-        "psWake_visit_price",
-        strategy?.wake?.visitPrice ?? strategy?.wake?.visit_price ?? 0.5
-    );
+
+    const visitRules = strategy?.wake?.visitRules || strategy?.wake?.visit_rules || {};
+    setInputNumber("psVisit_0600_0630", visitRules["06:00-06:30"] ?? 1.3);
+    setInputNumber("psVisit_0631_0700", visitRules["06:31-07:00"] ?? 1.2);
+    setInputNumber("psVisit_0701_0800", visitRules["07:01-08:00"] ?? 1.1);
+    setInputNumber("psVisit_0801_2400", visitRules["08:01-24:00"] ?? 1.0);
 
     const unit = strategy?.supervise?.unitPricePerDay || {};
     setInputNumber("psSvUnit_sleep", unit["监督早睡"]);
@@ -409,13 +411,18 @@ async function savePriceStrategyPage() {
         version: 1,
         wake: {
             rules: {
-                "06:00-06:30": readInputNumber("psWake_0600_0630", 1.3),
-                "06:31-07:00": readInputNumber("psWake_0631_0700", 1.2),
-                "07:01-08:00": readInputNumber("psWake_0701_0800", 1.1),
-                "08:01-24:00": readInputNumber("psWake_0801_2400", 1.0)
+                "06:00-06:30": readInputNumber("psWake_0600_0630", 0.8),
+                "06:31-07:00": readInputNumber("psWake_0631_0700", 0.7),
+                "07:01-08:00": readInputNumber("psWake_0701_0800", 0.6),
+                "08:01-24:00": readInputNumber("psWake_0801_2400", 0.5)
             },
             reassignPenalty: readInputNumber("psWake_reassign_penalty", 0.3),
-            visitPrice: readInputNumber("psWake_visit_price", 0.5)
+            visitRules: {
+                "06:00-06:30": readInputNumber("psVisit_0600_0630", 1.3),
+                "06:31-07:00": readInputNumber("psVisit_0631_0700", 1.2),
+                "07:01-08:00": readInputNumber("psVisit_0701_0800", 1.1),
+                "08:01-24:00": readInputNumber("psVisit_0801_2400", 1.0)
+            }
         },
         supervise: {
             unitPricePerDay: {
@@ -458,20 +465,25 @@ async function applyPriceStrategyToUnsettledOrders() {
             if (o.salarysettled === true) return;
             const waketype = String(o?.waketype || o?.wakeType || "");
             let newAmount = 0;
-            if (/回访/.test(waketype) && typeof calculateWakeOrderAmount === "function") {
+            const t = String(o?.waketime || "");
+            const m = t.match(/(\d{1,2}):(\d{2})/);
+            if (!m) return;
+            const hh = String(Number(m[1])).padStart(2, "0");
+            const timeStr = `${hh}:${m[2]}`;
+            if (/回访/.test(waketype)) {
                 const times =
                     typeof isMultiWakeType === "function" && isMultiWakeType(waketype)
                         ? typeof getWakeRequiredTimes === "function"
                             ? getWakeRequiredTimes(o)
                             : Number(o.required_times || 1)
                         : 1;
-                newAmount = Number(calculateWakeOrderAmount(waketype, "", times));
+                newAmount =
+                    typeof calculateWakeOrderAmount === "function"
+                        ? Number(calculateWakeOrderAmount(waketype, timeStr, times))
+                        : typeof calculateVisitAmountByTime === "function"
+                            ? Number(calculateVisitAmountByTime(timeStr))
+                            : Number(calculateAmountByTime(timeStr));
             } else {
-                const t = String(o?.waketime || "");
-                const m = t.match(/(\d{1,2}):(\d{2})/);
-                if (!m) return;
-                const hh = String(Number(m[1])).padStart(2, "0");
-                const timeStr = `${hh}:${m[2]}`;
                 newAmount = Number(calculateAmountByTime(timeStr));
             }
             const oldAmount = Number(o.amount || o.money || 0);

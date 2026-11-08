@@ -107,19 +107,28 @@ const PRICE_STRATEGY_DB_TABLE = "price_strategy";
 
 function getDefaultPriceStrategy() {
     const wakeRules = (typeof PRICE_RULE === "object" && PRICE_RULE) ? { ...PRICE_RULE } : {
-        "06:00-06:30": 1.3,
-        "06:31-07:00": 1.2,
-        "07:01-08:00": 1.1,
-        "08:01-24:00": 1.0
+        "06:00-06:30": 0.8,
+        "06:31-07:00": 0.7,
+        "07:01-08:00": 0.6,
+        "08:01-24:00": 0.5
     };
+    const visitRules =
+        typeof VISIT_PRICE_RULE === "object" && VISIT_PRICE_RULE
+            ? { ...VISIT_PRICE_RULE }
+            : {
+                "06:00-06:30": 1.3,
+                "06:31-07:00": 1.2,
+                "07:01-08:00": 1.1,
+                "08:01-24:00": 1.0
+            };
     return {
         version: 1,
         wake: {
             rules: wakeRules,
             /** 管理员将叫醒单转派给其他人时，从原叫醒员扣除的固定处罚金额（元） */
             reassignPenalty: 0.3,
-            /** 回访 / 多次回访单价（元/单）；多次按「单价 × 需完成次数」 */
-            visitPrice: 0.5
+            /** 回访 / 多次回访：按叫醒相同时间段的独立单价 */
+            visitRules
         },
         supervise: {
             unitPricePerDay: {

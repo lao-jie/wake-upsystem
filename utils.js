@@ -22,52 +22,72 @@ function formatTime(timeStr) {
     });
 }
 
-// 根据时间计算金额
-function calculateAmountByTime(timeStr) {
+function pickAmountFromTimeSlotRules(timeStr, rules) {
     const [hour, minute] = String(timeStr || "").split(":").map(Number);
     if (!Number.isFinite(hour) || !Number.isFinite(minute)) return 0;
     const totalMin = hour * 60 + minute;
+    const r = rules && typeof rules === "object" ? rules : {};
 
+    if (totalMin >= 6 * 60 && totalMin <= 6 * 60 + 30) return Number(r["06:00-06:30"] || 0);
+    if (totalMin >= 6 * 60 + 31 && totalMin <= 7 * 60) return Number(r["06:31-07:00"] || 0);
+    if (totalMin >= 7 * 60 + 1 && totalMin <= 8 * 60) return Number(r["07:01-08:00"] || 0);
+    return Number(r["08:01-24:00"] || 0);
+}
+
+function getDefaultVisitPriceRules() {
+    if (typeof VISIT_PRICE_RULE === "object" && VISIT_PRICE_RULE) return { ...VISIT_PRICE_RULE };
+    return {
+        "06:00-06:30": 1.3,
+        "06:31-07:00": 1.2,
+        "07:01-08:00": 1.1,
+        "08:01-24:00": 1.0
+    };
+}
+
+// 叫醒：按时间段计算金额
+function calculateAmountByTime(timeStr) {
     const strategy = (typeof getPriceStrategyCache === "function" ? getPriceStrategyCache() : null) || {};
     const wakeRules = strategy?.wake?.rules && typeof strategy.wake.rules === "object" ? strategy.wake.rules : null;
     const rules = wakeRules || (typeof PRICE_RULE === "object" ? PRICE_RULE : {});
-
-    if (totalMin >= 6 * 60 && totalMin <= 6 * 60 + 30) return Number(rules["06:00-06:30"] || 0);
-    if (totalMin >= 6 * 60 + 31 && totalMin <= 7 * 60) return Number(rules["06:31-07:00"] || 0);
-    if (totalMin >= 7 * 60 + 1 && totalMin <= 8 * 60) return Number(rules["07:01-08:00"] || 0);
-    return Number(rules["08:01-24:00"] || 0);
+    return pickAmountFromTimeSlotRules(timeStr, rules);
 }
 
-const WAKE_VISIT_PRICE_DEFAULT = 0.5;
-
-/** 回访单价（元/单），来自价格策略；多次回访按「单价 × 次数」 */
-function getWakeVisitUnitPriceFromStrategy(strategy) {
-    const s =
-        strategy && typeof strategy === "object"
-            ? strategy
-            : (typeof getPriceStrategyCache === "function" ? getPriceStrategyCache() : null) || {};
-    const raw = s.wake?.visitPrice ?? s.wake?.visit_price;
-    const n = Number(raw);
-    return Number.isFinite(n) && n >= 0 ? n : WAKE_VISIT_PRICE_DEFAULT;
+/** 回访：按时间段计算金额（与叫醒分段相同，价格独立配置） */
+function calculateVisitAmountByTime(timeStr) {
+    const strategy = (typeof getPriceStrategyCache === "function" ? getPriceStrategyCache() : null) || {};
+    const visitRules =
+        strategy?.wake?.visitRules && typeof strategy.wake.visitRules === "object"
+            ? strategy.wake.visitRules
+            : strategy?.wake?.visit_rules && typeof strategy.wake.visit_rules === "object"
+                ? strategy.wake.visit_rules
+                : null;
+    const rules = visitRules || getDefaultVisitPriceRules();
+    return pickAmountFromTimeSlotRules(timeStr, rules);
 }
 
 /**
  * 按订单类型算金额：
- * - 叫醒 / 多次叫醒：沿用时段价（多次可传 timesCount 累加，或调用方自行 sum）
- * - 回访 / 多次回访：回访单价 × timesCount
+ * - 叫醒 / 多次叫醒：叫醒时段价
+ * - 回访 / 多次回访：回访时段价（多次可传 times 数组求和，或单价×timesCount）
  */
 function calculateWakeOrderAmount(waketype, timeStr, timesCount = 1) {
     const type = String(waketype || "");
     const n = Math.max(1, Number(timesCount) || 1);
-    if (/回访/.test(type)) {
-        const unit = getWakeVisitUnitPriceFromStrategy();
-        return Number((unit * n).toFixed(2));
-    }
-    if (n > 1 && Array.isArray(timeStr)) {
-        const sum = timeStr.reduce((acc, t) => acc + Number(calculateAmountByTime(t) || 0), 0);
+    const isVisit = /回访/.test(type);
+    const calcOne = (t) =>
+        isVisit ? Number(calculateVisitAmountByTime(t) || 0) : Number(calculateAmountByTime(t) || 0);
+
+    if (Array.isArray(timeStr)) {
+        const sum = timeStr.reduce((acc, t) => acc + calcOne(t), 0);
         return Number(sum.toFixed(2));
     }
-    return Number(calculateAmountByTime(timeStr) || 0);
+    if (isVisit) {
+        return Number((calcOne(timeStr) * n).toFixed(2));
+    }
+    if (n > 1) {
+        return Number((calcOne(timeStr) * n).toFixed(2));
+    }
+    return Number(calcOne(timeStr).toFixed(2));
 }
 
 // 价格策略：全局缓存（用于同步计算金额，避免到处 await）

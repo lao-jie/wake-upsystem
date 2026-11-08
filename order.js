@@ -2149,7 +2149,11 @@ async function parseBatchOrders() {
             if (isMultiWakeType(waketype)) {
                 let amountSum = 0;
                 if (/回访/.test(waketype) && typeof calculateWakeOrderAmount === "function") {
-                    amountSum = Number(calculateWakeOrderAmount(waketype, normalizedTimes[0], requiredTimes));
+                    // 多次回访：各时刻按回访时段价合计；若只有一个时刻则 × 需完成次数
+                    amountSum =
+                        normalizedTimes.length > 1
+                            ? Number(calculateWakeOrderAmount(waketype, normalizedTimes, 1))
+                            : Number(calculateWakeOrderAmount(waketype, normalizedTimes[0], requiredTimes));
                 } else {
                     amountSum = normalizedTimes.reduce(
                         (sum, t) => sum + Number(calculateAmountByTime(t) || 0),
