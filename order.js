@@ -1036,44 +1036,10 @@ async function checkExpiredOrders() {
     }
 }
 
-// 清理过期订单（按 submittime 保留最近 7 天；须同步删除 Supabase 行，否则下次拉取仍会带回旧数据）
-//
-// 重要：此处只做「归档删行」，绝不调用 rollbackWakeOrderIncomeIfSettled。
-// 与管理员「删除选中」不同——过期清理不扣员工余额，已结算工资保持不动。
+// 已停用：不再按 7 天自动删除叫醒订单（保留全部历史）。
+// 管理员「删除选中」仍可用；自动清理不得删行、不得回退工资。
 async function cleanExpiredOrders() {
-    let allOrders = await getOrders();
-    const now = new Date();
-    const sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
-
-    const recentOrders = allOrders.filter(order => {
-        const orderDate = new Date(order.submittime);
-        // JavaScript会自动将ISO字符串转换为本地时间
-        return orderDate >= sevenDaysAgo;
-    });
-
-    if (recentOrders.length === allOrders.length) {
-        return false;
-    }
-
-    const expiredOrders = allOrders.filter((order) => new Date(order.submittime) < sevenDaysAgo);
-    const idsToDelete = [
-        ...new Set(
-            expiredOrders
-                .map((o) => o.id)
-                .filter((id) => id !== undefined && id !== null && String(id).trim() !== "")
-        )
-    ];
-
-    if (typeof deleteWakeOrdersFromSupabase === "function" && idsToDelete.length > 0) {
-        const delRes = await deleteWakeOrdersFromSupabase(idsToDelete);
-        if (!delRes.ok) {
-            console.warn("清理超期叫醒订单：云端删除失败，已跳过本次清理以免数据不一致。", delRes.error);
-            return false;
-        }
-    }
-
-    await saveOrders(recentOrders);
-    return true;
+    return false;
 }
 
 // 获取当前时间（本地时间，中国电脑就是UTC+8）

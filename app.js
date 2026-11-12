@@ -2191,8 +2191,7 @@ window.onload = async function () {
     await checkExpiredOrders();
     setInterval(checkExpiredOrders, 60000);
 
-    await cleanExpiredOrders();
-    setInterval(cleanExpiredOrders, 3600000); // 每小时清理一次过期订单
+    // 已取消「7 天自动删除叫醒订单」；保留 cleanExpiredOrders 空实现以免旧引用报错
 
     await initStaffData();
 
